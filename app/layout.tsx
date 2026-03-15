@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase"
 import { useRouter, usePathname } from "next/navigation"
 import HeaderLoja from "./components/HeaderLoja"
 import UserProfile from "./components/UserProfile"
+import ThemeToggle from "./components/ThemeToggle"
 
 const menuItems = [
   { href: "/", label: "Início", icon: "🏠" },
@@ -79,7 +80,10 @@ export default function RootLayout({
                   </p>
                 </div>
 
-                <UserProfile />
+                <div className="top-bar-actions">
+                  <ThemeToggle />
+                  <UserProfile />
+                </div>
               </div>
             </header>
 
