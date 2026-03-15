@@ -284,45 +284,54 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h2>Dashboard</h2>
-      <p>Resumo geral da operação da sua loja.</p>
+      <h2 className="page-title">Dashboard</h2>
+      <p className="page-subtitle">Resumo geral da operação da sua loja.</p>
 
       {mensagem && <p>{mensagem}</p>}
 
-      <div className="grid-3">
-        <div className="section-card">
-          <h3>Faturamento hoje</h3>
-          <p>R$ {faturamentoHoje.toFixed(2)}</p>
+      <div className="grid-3" style={{ marginTop: "24px", marginBottom: "24px" }}>
+        <div className="metric-card">
+          <p className="metric-label">Faturamento hoje</p>
+          <p className="metric-value">R$ {faturamentoHoje.toFixed(2)}</p>
+          <div className="metric-helper">Resultado do dia atual</div>
         </div>
 
-        <div className="section-card">
-          <h3>Faturamento do mês</h3>
-          <p>R$ {faturamentoMes.toFixed(2)}</p>
+        <div className="metric-card">
+          <p className="metric-label">Faturamento do mês</p>
+          <p className="metric-value">R$ {faturamentoMes.toFixed(2)}</p>
+          <div className="metric-helper">Acumulado mensal</div>
         </div>
 
-        <div className="section-card">
-          <h3>Produtos vendidos hoje</h3>
-          <p>{produtosVendidosHoje}</p>
+        <div className="metric-card">
+          <p className="metric-label">Produtos vendidos hoje</p>
+          <p className="metric-value">{produtosVendidosHoje}</p>
+          <div className="metric-helper">Itens vendidos no dia</div>
         </div>
 
-        <div className="section-card">
-          <h3>Estoque baixo</h3>
-          <p>{estoqueBaixo}</p>
+        <div className="metric-card">
+          <p className="metric-label">Estoque baixo</p>
+          <p className="metric-value">{estoqueBaixo}</p>
+          <div className="metric-helper">Produtos abaixo do limite</div>
         </div>
 
-        <div className="section-card">
-          <h3>Pedidos pendentes</h3>
-          <p>{pedidosPendentes}</p>
+        <div className="metric-card">
+          <p className="metric-label">Pedidos pendentes</p>
+          <p className="metric-value">{pedidosPendentes}</p>
+          <div className="metric-helper">Aguardando conclusão</div>
         </div>
 
-        <div className="section-card">
-          <h3>Pedidos recebidos</h3>
-          <p>{pedidosRecebidos}</p>
+        <div className="metric-card">
+          <p className="metric-label">Pedidos recebidos</p>
+          <p className="metric-value">{pedidosRecebidos}</p>
+          <div className="metric-helper">Reposições concluídas</div>
         </div>
       </div>
 
-      <div className="section-card" style={graficoBox}>
-        <h3 style={{ marginTop: 0 }}>Faturamento dos últimos 7 dias</h3>
+      <div className="chart-shell" style={{ marginBottom: "24px" }}>
+        <h3 className="dashboard-block-title">Faturamento dos últimos 7 dias</h3>
+        <p className="dashboard-block-subtitle">
+          Visão rápida da evolução recente das vendas
+        </p>
 
         <div style={graficoArea}>
           {graficoVendas.map((item) => {
@@ -348,102 +357,89 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={duasColunas}>
-        <div className="section-card" style={blocoTabela}>
-          <h3>Últimas vendas</h3>
+      <div className="dashboard-two-columns">
+        <div className="section-card">
+          <h3 className="dashboard-block-title">Últimas vendas</h3>
+          <p className="dashboard-block-subtitle">
+            As 5 movimentações mais recentes
+          </p>
 
-          <table style={tabela}>
-            <thead>
-              <tr>
-                <th style={th}>Cliente</th>
-                <th style={th}>Produto</th>
-                <th style={th}>Qtd.</th>
-                <th style={th}>Valor</th>
-                <th style={th}>Data</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {ultimasVendas.map((venda) => (
-                <tr key={venda.id}>
-                  <td style={td}>{venda.nomeCliente}</td>
-                  <td style={td}>{venda.nomeProduto}</td>
-                  <td style={td}>{venda.quantidade}</td>
-                  <td style={td}>R$ {venda.valorTotal.toFixed(2)}</td>
-                  <td style={td}>{formatarData(venda.created_at)}</td>
-                </tr>
-              ))}
-
-              {ultimasVendas.length === 0 && (
+          <div className="data-table-wrap" style={{ marginTop: "16px" }}>
+            <table className="premium-table" style={tabela}>
+              <thead>
                 <tr>
-                  <td style={tdVazio} colSpan={5}>
-                    Nenhuma venda recente encontrada.
-                  </td>
+                  <th style={th}>Cliente</th>
+                  <th style={th}>Produto</th>
+                  <th style={th}>Qtd.</th>
+                  <th style={th}>Valor</th>
+                  <th style={th}>Data</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {ultimasVendas.map((venda) => (
+                  <tr key={venda.id}>
+                    <td style={td}>{venda.nomeCliente}</td>
+                    <td style={td}>{venda.nomeProduto}</td>
+                    <td style={td}>{venda.quantidade}</td>
+                    <td style={td}>R$ {venda.valorTotal.toFixed(2)}</td>
+                    <td style={td}>{formatarData(venda.created_at)}</td>
+                  </tr>
+                ))}
+
+                {ultimasVendas.length === 0 && (
+                  <tr>
+                    <td style={tdVazio} colSpan={5}>
+                      Nenhuma venda recente encontrada.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <div style={blocoTabela}>
-          <h3>Produtos mais vendidos</h3>
+        <div className="section-card">
+          <h3 className="dashboard-block-title">Produtos mais vendidos</h3>
+          <p className="dashboard-block-subtitle">
+            Ranking dos itens com maior saída
+          </p>
 
-          <table style={tabela}>
-            <thead>
-              <tr>
-                <th style={th}>Produto</th>
-                <th style={th}>SKU</th>
-                <th style={th}>Qtd. vendida</th>
-                <th style={th}>Faturado</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {produtosMaisVendidos.map((produto) => (
-                <tr key={produto.productId}>
-                  <td style={td}>{produto.nomeProduto}</td>
-                  <td style={td}>{produto.skuProduto}</td>
-                  <td style={td}>{produto.totalQuantidade}</td>
-                  <td style={td}>R$ {produto.totalFaturado.toFixed(2)}</td>
-                </tr>
-              ))}
-
-              {produtosMaisVendidos.length === 0 && (
+          <div className="data-table-wrap" style={{ marginTop: "16px" }}>
+            <table className="premium-table" style={tabela}>
+              <thead>
                 <tr>
-                  <td style={tdVazio} colSpan={4}>
-                    Nenhum produto vendido ainda.
-                  </td>
+                  <th style={th}>Produto</th>
+                  <th style={th}>SKU</th>
+                  <th style={th}>Qtd. vendida</th>
+                  <th style={th}>Faturado</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {produtosMaisVendidos.map((produto) => (
+                  <tr key={produto.productId}>
+                    <td style={td}>{produto.nomeProduto}</td>
+                    <td style={td}>{produto.skuProduto}</td>
+                    <td style={td}>{produto.totalQuantidade}</td>
+                    <td style={td}>R$ {produto.totalFaturado.toFixed(2)}</td>
+                  </tr>
+                ))}
+
+                {produtosMaisVendidos.length === 0 && (
+                  <tr>
+                    <td style={tdVazio} colSpan={4}>
+                      Nenhum produto vendido ainda.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
   )
-}
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
-  gap: "16px",
-  marginTop: "24px",
-  marginBottom: "24px",
-}
-
-const card = {
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
-  borderRadius: "12px",
-  padding: "20px",
-}
-
-const graficoBox = {
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  borderRadius: "12px",
-  padding: "20px",
-  marginBottom: "24px",
 }
 
 const graficoArea = {
@@ -493,23 +489,9 @@ const rotulo = {
   textAlign: "center" as const,
 }
 
-const duasColunas = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: "24px",
-}
-
-const blocoTabela = {
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  borderRadius: "12px",
-  padding: "20px",
-}
-
 const tabela = {
   width: "100%",
   borderCollapse: "collapse" as const,
-  marginTop: "12px",
 }
 
 const th = {
