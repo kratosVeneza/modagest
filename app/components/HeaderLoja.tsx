@@ -30,5 +30,5 @@ export default function HeaderLoja() {
     }
   }
 
-  return <h1 style={{ margin: 0, fontSize: "24px" }}>{nomeLoja}</h1>
+  return <h1 className="page-title">{nomeLoja}</h1>
 }

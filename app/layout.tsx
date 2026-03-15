@@ -5,6 +5,7 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useRouter, usePathname } from "next/navigation"
 import HeaderLoja from "./components/HeaderLoja"
+import UserProfile from "./components/UserProfile"
 
 const menuItems = [
   { href: "/", label: "Início", icon: "🏠" },
@@ -70,14 +71,15 @@ export default function RootLayout({
 
           <main className="main-area">
             <header className="soft-card top-bar">
-              <div>
-                <HeaderLoja />
-                <p className="top-bar-subtitle">Painel de gestão da sua operação</p>
-              </div>
+              <div className="top-bar-content">
+                <div className="top-bar-left">
+                  <HeaderLoja />
+                  <p className="top-bar-subtitle">
+                    Painel de gestão da sua operação
+                  </p>
+                </div>
 
-              <div className="top-bar-right">
-                <div className="online-dot" />
-                <span className="online-text">Sistema online</span>
+                <UserProfile />
               </div>
             </header>
 
