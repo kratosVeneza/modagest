@@ -7,16 +7,16 @@ import { useRouter, usePathname } from "next/navigation"
 import HeaderLoja from "./components/HeaderLoja"
 
 const menuItems = [
-  { href: "/", label: "Início" },
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/produtos", label: "Produtos" },
-  { href: "/vendas", label: "Vendas" },
-  { href: "/pedidos", label: "Pedidos" },
-  { href: "/historico-vendas", label: "Histórico de Vendas" },
-  { href: "/clientes", label: "Clientes" },
-  { href: "/financeiro", label: "Financeiro" },
-  { href: "/loja", label: "Minha Loja" },
-  { href: "/login", label: "Login" },
+  { href: "/", label: "Início", icon: "🏠" },
+  { href: "/dashboard", label: "Dashboard", icon: "📊" },
+  { href: "/produtos", label: "Produtos", icon: "📦" },
+  { href: "/vendas", label: "Vendas", icon: "💰" },
+  { href: "/pedidos", label: "Pedidos", icon: "🛒" },
+  { href: "/historico-vendas", label: "Histórico de Vendas", icon: "🧾" },
+  { href: "/clientes", label: "Clientes", icon: "👥" },
+  { href: "/financeiro", label: "Financeiro", icon: "💳" },
+  { href: "/loja", label: "Minha Loja", icon: "🏪" },
+  { href: "/login", label: "Login", icon: "🔐" },
 ]
 
 export default function RootLayout({
@@ -58,13 +58,15 @@ export default function RootLayout({
                       ...(ativo ? linkStyleAtivo : {}),
                     }}
                   >
-                    {item.label}
+                    <span style={menuIcon}>{item.icon}</span>
+                    <span>{item.label}</span>
                   </Link>
                 )
               })}
 
               <button onClick={sair} style={botaoSair}>
-                Sair
+                <span style={menuIcon}>🚪</span>
+                <span>Sair</span>
               </button>
             </nav>
           </aside>
@@ -154,12 +156,21 @@ const linkStyle = {
   border: "1px solid rgba(255,255,255,0.04)",
   fontSize: "14px",
   fontWeight: 600,
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
 } as const
 
 const linkStyleAtivo = {
   background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)",
   color: "white",
   boxShadow: "0 10px 20px rgba(37,99,235,0.22)",
+} as const
+
+const menuIcon = {
+  fontSize: "16px",
+  width: "20px",
+  textAlign: "center" as const,
 } as const
 
 const botaoSair = {
@@ -171,6 +182,9 @@ const botaoSair = {
   border: "none",
   cursor: "pointer",
   fontWeight: 700,
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
 } as const
 
 const mainArea = {
