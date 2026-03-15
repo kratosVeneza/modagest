@@ -289,13 +289,13 @@ export default function Dashboard() {
 
       {mensagem && <p>{mensagem}</p>}
 
-      <div style={grid}>
+      <div className="grid-3">
         <div style={card}>
           <h3>Faturamento hoje</h3>
           <p>R$ {faturamentoHoje.toFixed(2)}</p>
         </div>
 
-        <div style={card}>
+        <div className="section-card">
           <h3>Faturamento do mês</h3>
           <p>R$ {faturamentoMes.toFixed(2)}</p>
         </div>

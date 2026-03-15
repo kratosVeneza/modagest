@@ -3,81 +3,214 @@
 import "./globals.css"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import HeaderLoja from "./components/HeaderLoja"
+
+const menuItems = [
+  { href: "/", label: "Início" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/produtos", label: "Produtos" },
+  { href: "/vendas", label: "Vendas" },
+  { href: "/pedidos", label: "Pedidos" },
+  { href: "/historico-vendas", label: "Histórico de Vendas" },
+  { href: "/clientes", label: "Clientes" },
+  { href: "/financeiro", label: "Financeiro" },
+  { href: "/loja", label: "Minha Loja" },
+  { href: "/login", label: "Login" },
+]
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
+  const router = useRouter()
+  const pathname = usePathname()
+
+  async function sair() {
+    await supabase.auth.signOut()
+    router.push("/login")
+  }
+
   return (
     <html lang="pt-BR">
-      <body style={{ margin: 0, fontFamily: "Arial, sans-serif", background: "#f5f6fa" }}>
-        <div style={{ display: "flex", minHeight: "100vh" }}>
-          <aside
-            style={{
-              width: "250px",
-              background: "#111827",
-              color: "white",
-              padding: "24px",
-              boxSizing: "border-box",
-            }}
-          >
-            <h2 style={{ marginTop: 0 }}>ModaGest</h2>
-            <p style={{ fontSize: "14px", color: "#cbd5e1" }}>
-              Gestão para lojas
-            </p>
+      <body>
+        <div style={appShell}>
+          <aside style={sidebar}>
+            <div style={logoBox}>
+              <div style={logoBadge}>M</div>
+              <div>
+                <h2 style={logoTitle}>ModaGest</h2>
+                <p style={logoSubtitle}>Gestão para lojas</p>
+              </div>
+            </div>
 
-            <nav style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "32px" }}>
-              <Link href="/" style={linkStyle}>Início</Link>
-              <Link href="/dashboard" style={linkStyle}>Dashboard</Link>
-              <Link href="/produtos" style={linkStyle}>Produtos</Link>
-              <Link href="/vendas" style={linkStyle}>Vendas</Link>
-              <Link href="/pedidos" style={linkStyle}>Pedidos</Link>
-              <Link href="/loja" style={linkStyle}>Minha Loja</Link>
-              <Link href="/financeiro" style={linkStyle}>Financeiro</Link>
-              <Link href="/historico-vendas" style={linkStyle}>Histórico de Vendas</Link>
-              <Link href="/clientes" style={linkStyle}>Clientes</Link>
-              <Link href="/login" style={linkStyle}>Login</Link>
+            <nav style={nav}>
+              {menuItems.map((item) => {
+                const ativo = pathname === item.href
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    style={{
+                      ...linkStyle,
+                      ...(ativo ? linkStyleAtivo : {}),
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                )
+              })}
+
+              <button onClick={sair} style={botaoSair}>
+                Sair
+              </button>
             </nav>
           </aside>
 
-          <main style={{ flex: 1, padding: "32px" }}>
-            <header
-              style={{
-                background: "white",
-                padding: "16px 24px",
-                borderRadius: "12px",
-                marginBottom: "24px",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-              }}
-            >
-              <HeaderLoja />
+          <main style={mainArea}>
+            <header className="soft-card" style={topBar}>
+              <div>
+                <HeaderLoja />
+                <p style={topBarSubtitle}>Painel de gestão da sua operação</p>
+              </div>
+
+              <div style={topBarRight}>
+                <div style={onlineDot} />
+                <span style={onlineText}>Sistema online</span>
+              </div>
             </header>
 
-            <section
-              style={{
-                background: "white",
-                padding: "24px",
-                borderRadius: "12px",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-                minHeight: "300px",
-              }}
-            >
-              {children}
-            </section>
+            <section>{children}</section>
           </main>
         </div>
       </body>
     </html>
-  );
+  )
 }
 
-const linkStyle = {
+const appShell = {
+  display: "grid",
+  gridTemplateColumns: "270px 1fr",
+  minHeight: "100vh",
+  background: "#f3f4f6",
+} as const
+
+const sidebar = {
+  background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
   color: "white",
+  padding: "24px 18px",
+  borderRight: "1px solid rgba(255,255,255,0.06)",
+  position: "sticky",
+  top: 0,
+  height: "100vh",
+} as const
+
+const logoBox = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  marginBottom: "28px",
+  padding: "6px 4px 16px 4px",
+  borderBottom: "1px solid rgba(255,255,255,0.08)",
+} as const
+
+const logoBadge = {
+  width: "42px",
+  height: "42px",
+  borderRadius: "12px",
+  background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontWeight: 700,
+  fontSize: "18px",
+} as const
+
+const logoTitle = {
+  margin: 0,
+  fontSize: "22px",
+} as const
+
+const logoSubtitle = {
+  margin: "4px 0 0 0",
+  fontSize: "13px",
+  color: "#cbd5e1",
+} as const
+
+const nav = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "10px",
+} as const
+
+const linkStyle = {
+  color: "#e5e7eb",
   textDecoration: "none",
-  padding: "10px 12px",
-  borderRadius: "8px",
-  background: "#1f2937",
-};
+  padding: "12px 14px",
+  borderRadius: "12px",
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.04)",
+  fontSize: "14px",
+  fontWeight: 600,
+} as const
+
+const linkStyleAtivo = {
+  background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)",
+  color: "white",
+  boxShadow: "0 10px 20px rgba(37,99,235,0.22)",
+} as const
+
+const botaoSair = {
+  marginTop: "10px",
+  color: "white",
+  padding: "12px 14px",
+  borderRadius: "12px",
+  background: "linear-gradient(135deg, #991b1b 0%, #dc2626 100%)",
+  border: "none",
+  cursor: "pointer",
+  fontWeight: 700,
+} as const
+
+const mainArea = {
+  padding: "24px",
+} as const
+
+const topBar = {
+  padding: "20px 24px",
+  marginBottom: "24px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "16px",
+} as const
+
+const topBarSubtitle = {
+  margin: "6px 0 0 0",
+  color: "#6b7280",
+  fontSize: "14px",
+} as const
+
+const topBarRight = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  borderRadius: "999px",
+  padding: "8px 12px",
+} as const
+
+const onlineDot = {
+  width: "10px",
+  height: "10px",
+  borderRadius: "999px",
+  background: "#22c55e",
+} as const
+
+const onlineText = {
+  fontSize: "13px",
+  color: "#374151",
+  fontWeight: 600,
+} as const
