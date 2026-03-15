@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 
 type Produto = {
@@ -24,6 +24,7 @@ export default function Vendas() {
   const [clienteId, setClienteId] = useState("")
   const [quantidade, setQuantidade] = useState("")
   const [mensagem, setMensagem] = useState("")
+  const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
     carregarProdutos()
@@ -72,6 +73,23 @@ export default function Vendas() {
     }
   }
 
+  const produtoSelecionado = useMemo(() => {
+    return produtos.find((p) => p.id === Number(produtoId)) || null
+  }, [produtos, produtoId])
+
+  const clienteSelecionado = useMemo(() => {
+    return clientes.find((c) => c.id === Number(clienteId)) || null
+  }, [clientes, clienteId])
+
+  const quantidadeNumero = Number(quantidade || 0)
+
+  const valorUnitario = produtoSelecionado ? Number(produtoSelecionado.preco) : 0
+  const valorTotal = valorUnitario * (quantidadeNumero > 0 ? quantidadeNumero : 0)
+  const estoqueRestante =
+    produtoSelecionado && quantidadeNumero > 0
+      ? produtoSelecionado.estoque - quantidadeNumero
+      : produtoSelecionado?.estoque ?? 0
+
   async function registrarVenda() {
     setMensagem("")
 
@@ -89,9 +107,9 @@ export default function Vendas() {
       return
     }
 
-    const produtoSelecionado = produtos.find((p) => p.id === Number(produtoId))
+    const produto = produtos.find((p) => p.id === Number(produtoId))
 
-    if (!produtoSelecionado) {
+    if (!produto) {
       setMensagem("Produto não encontrado.")
       return
     }
@@ -103,14 +121,14 @@ export default function Vendas() {
       return
     }
 
-    if (qtd > produtoSelecionado.estoque) {
+    if (qtd > produto.estoque) {
       setMensagem("Estoque insuficiente para essa venda.")
       return
     }
 
-    const valorUnitario = Number(produtoSelecionado.preco)
-    const valorTotal = valorUnitario * qtd
-    const novoEstoque = produtoSelecionado.estoque - qtd
+    setSalvando(true)
+
+    const novoEstoque = produto.estoque - qtd
 
     const payload: {
       product_id: number
@@ -120,10 +138,10 @@ export default function Vendas() {
       user_id: string
       customer_id?: number | null
     } = {
-      product_id: produtoSelecionado.id,
+      product_id: produto.id,
       quantidade: qtd,
-      valor_unitario: valorUnitario,
-      valor_total: valorTotal,
+      valor_unitario: Number(produto.preco),
+      valor_total: Number(produto.preco) * qtd,
       user_id: user.id,
       customer_id: clienteId ? Number(clienteId) : null,
     }
@@ -131,6 +149,7 @@ export default function Vendas() {
     const { error: erroVenda } = await supabase.from("sales").insert([payload])
 
     if (erroVenda) {
+      setSalvando(false)
       setMensagem("Erro ao registrar venda.")
       return
     }
@@ -138,104 +157,151 @@ export default function Vendas() {
     const { error: erroEstoque } = await supabase
       .from("products")
       .update({ estoque: novoEstoque })
-      .eq("id", produtoSelecionado.id)
+      .eq("id", produto.id)
       .eq("user_id", user.id)
 
     if (erroEstoque) {
+      setSalvando(false)
       setMensagem("Venda salva, mas houve erro ao atualizar o estoque.")
       return
     }
 
-    setMensagem("Venda registrada com sucesso.")
     setProdutoId("")
     setClienteId("")
     setQuantidade("")
+    setSalvando(false)
+    setMensagem("Venda registrada com sucesso.")
     carregarProdutos()
   }
 
   return (
     <div>
-      <h2>Vendas</h2>
-      <p>Registre vendas e baixe o estoque automaticamente.</p>
+      <h2 className="page-title">Vendas</h2>
+      <p className="page-subtitle">
+        Registre vendas e baixe o estoque automaticamente.
+      </p>
 
-      <div style={formBox}>
-        <h3 style={{ marginTop: 0 }}>Nova venda</h3>
+      {mensagem && <p style={{ marginTop: "16px" }}>{mensagem}</p>}
 
-        <div style={grid}>
-          <select
-            style={input}
-            value={produtoId}
-            onChange={(e) => setProdutoId(e.target.value)}
-          >
-            <option value="">Selecione um produto</option>
-            {produtos.map((produto) => (
-              <option key={produto.id} value={produto.id}>
-                {produto.nome} - {produto.sku} - Estoque: {produto.estoque}
-              </option>
-            ))}
-          </select>
+      <div className="grid-2" style={{ marginTop: "20px", alignItems: "start" }}>
+        <div className="section-card">
+          <h3 style={{ marginTop: 0 }}>Nova venda</h3>
 
-          <select
-            style={input}
-            value={clienteId}
-            onChange={(e) => setClienteId(e.target.value)}
-          >
-            <option value="">Cliente (opcional)</option>
-            {clientes.map((cliente) => (
-              <option key={cliente.id} value={cliente.id}>
-                {cliente.nome}
-              </option>
-            ))}
-          </select>
+          <div className="grid-2">
+            <select
+              value={produtoId}
+              onChange={(e) => setProdutoId(e.target.value)}
+            >
+              <option value="">Selecione um produto</option>
+              {produtos.map((produto) => (
+                <option key={produto.id} value={produto.id}>
+                  {produto.nome} - {produto.sku}
+                </option>
+              ))}
+            </select>
 
-          <input
-            style={input}
-            type="number"
-            placeholder="Quantidade"
-            value={quantidade}
-            onChange={(e) => setQuantidade(e.target.value)}
-          />
+            <select
+              value={clienteId}
+              onChange={(e) => setClienteId(e.target.value)}
+            >
+              <option value="">Cliente (opcional)</option>
+              {clientes.map((cliente) => (
+                <option key={cliente.id} value={cliente.id}>
+                  {cliente.nome}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="number"
+              placeholder="Quantidade"
+              value={quantidade}
+              onChange={(e) => setQuantidade(e.target.value)}
+            />
+          </div>
+
+          <div style={{ marginTop: "18px" }}>
+            <button
+              onClick={registrarVenda}
+              className="btn btn-primary"
+              disabled={salvando}
+            >
+              {salvando ? "Salvando..." : "Registrar venda"}
+            </button>
+          </div>
         </div>
 
-        <button onClick={registrarVenda} style={botao}>
-          Registrar venda
-        </button>
+        <div className="section-card">
+          <h3 style={{ marginTop: 0 }}>Resumo da venda</h3>
 
-        {mensagem && <p style={{ marginTop: "12px" }}>{mensagem}</p>}
+          <div style={resumoLinha}>
+            <span className="info-muted">Produto</span>
+            <strong>{produtoSelecionado?.nome || "-"}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">SKU</span>
+            <strong>{produtoSelecionado?.sku || "-"}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Cliente</span>
+            <strong>{clienteSelecionado?.nome || "Sem cliente"}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Preço unitário</span>
+            <strong>R$ {valorUnitario.toFixed(2)}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Quantidade</span>
+            <strong>{quantidadeNumero > 0 ? quantidadeNumero : 0}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Estoque atual</span>
+            <strong>{produtoSelecionado?.estoque ?? 0}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Estoque após venda</span>
+            <strong
+              style={{
+                color:
+                  produtoSelecionado && estoqueRestante < 0 ? "#991b1b" : "#111827",
+              }}
+            >
+              {produtoSelecionado ? estoqueRestante : 0}
+            </strong>
+          </div>
+
+          <div style={totalBox}>
+            <span>Total da venda</span>
+            <strong style={{ fontSize: "22px" }}>
+              R$ {valorTotal.toFixed(2)}
+            </strong>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-const formBox = {
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
-  borderRadius: "12px",
-  padding: "20px",
-  marginTop: "20px",
-  marginBottom: "24px",
-}
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
+const resumoLinha = {
+  display: "flex",
+  justifyContent: "space-between",
   gap: "12px",
-  marginBottom: "16px",
+  padding: "10px 0",
+  borderBottom: "1px solid #e5e7eb",
 }
 
-const input = {
-  padding: "10px",
-  border: "1px solid #d1d5db",
-  borderRadius: "8px",
-  fontSize: "14px",
-  width: "100%",
-}
-
-const botao = {
-  padding: "10px 16px",
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  borderRadius: "8px",
-  cursor: "pointer",
+const totalBox = {
+  marginTop: "18px",
+  padding: "16px",
+  borderRadius: "14px",
+  background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
 }
