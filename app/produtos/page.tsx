@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import AnimatedModal from "../components/AnimatedModal"
+import TableSkeleton from "../components/TableSkeleton"
 
 type Produto = {
   id: number
@@ -17,6 +18,7 @@ type Produto = {
 
 export default function Produtos() {
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const [carregando, setCarregando] = useState(true)
   const [nome, setNome] = useState("")
   const [cor, setCor] = useState("")
   const [tamanho, setTamanho] = useState("")
@@ -31,6 +33,7 @@ export default function Produtos() {
   }, [])
 
   async function carregarProdutos() {
+    setCarregando(true)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -53,6 +56,7 @@ export default function Produtos() {
 
     setProdutos(data || [])
   }
+  setCarregando(false)
 
   function gerarSku(nomeProduto: string, corProduto: string, tamanhoProduto: string) {
     const nomeParte = nomeProduto.trim().slice(0, 3).toUpperCase() || "PRO"
@@ -231,35 +235,39 @@ export default function Produtos() {
           </thead>
 
           <tbody>
-            {produtosFiltrados.map((p) => (
-              <tr key={p.id}>
-                <td style={td}>{p.sku}</td>
-                <td style={td}>{p.nome}</td>
-                <td style={td}>{p.cor}</td>
-                <td style={td}>{p.tamanho}</td>
-                <td style={td}>{p.estoque}</td>
-                <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
-                <td style={td}>
-                  <div style={acoesTabela}>
-                    <button onClick={() => editarProduto(p)} className="btn btn-success btn-sm">
-                      Editar
-                    </button>
-                    <button onClick={() => excluirProduto(p.id)} className="btn btn-danger btn-sm">
-                      Excluir
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
 
-            {produtosFiltrados.length === 0 && (
-              <tr>
-                <td style={tdVazio} colSpan={7}>
-                  Nenhum produto encontrado.
-                </td>
-              </tr>
-            )}
-          </tbody>
+  {carregando ? (
+
+    <TableSkeleton rows={6} />
+
+  ) : (
+
+    produtosFiltrados.map((p) => (
+      <tr key={p.id}>
+        <td style={td}>{p.sku}</td>
+        <td style={td}>{p.nome}</td>
+        <td style={td}>{p.cor}</td>
+        <td style={td}>{p.tamanho}</td>
+        <td style={td}>{p.estoque}</td>
+        <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
+
+        <td style={td}>
+          <div style={acoesTabela}>
+            <button onClick={() => editarProduto(p)}>
+              Editar
+            </button>
+
+            <button onClick={() => excluirProduto(p.id)}>
+              Excluir
+            </button>
+          </div>
+        </td>
+      </tr>
+    ))
+
+  )}
+
+</tbody>
         </table>
       </div>
 
