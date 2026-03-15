@@ -755,3 +755,144 @@ body.dark .theme-toggle {
     justify-content: space-between;
   }
 }
+/* ===== Correções extras do modo escuro ===== */
+
+body.dark {
+  background: #0b1220;
+  color: #e5e7eb;
+}
+
+body.dark section,
+body.dark div,
+body.dark p,
+body.dark span,
+body.dark h1,
+body.dark h2,
+body.dark h3,
+body.dark h4,
+body.dark h5,
+body.dark h6,
+body.dark label,
+body.dark strong {
+  color: inherit;
+}
+
+body.dark .page-title,
+body.dark .page-subtitle,
+body.dark .dashboard-block-title,
+body.dark .dashboard-block-subtitle,
+body.dark .metric-label,
+body.dark .metric-value,
+body.dark .metric-helper,
+body.dark .info-muted,
+body.dark .empty-state,
+body.dark .top-bar-subtitle,
+body.dark .user-greeting,
+body.dark .user-email,
+body.dark .modal-title {
+  color: #e5e7eb !important;
+}
+
+body.dark .page-subtitle,
+body.dark .dashboard-block-subtitle,
+body.dark .metric-helper,
+body.dark .info-muted,
+body.dark .top-bar-subtitle,
+body.dark .user-greeting,
+body.dark .empty-state {
+  color: #94a3b8 !important;
+}
+
+body.dark .section-card,
+body.dark .form-card,
+body.dark .data-table-wrap,
+body.dark .chart-shell,
+body.dark .metric-card,
+body.dark .soft-card,
+body.dark .user-profile,
+body.dark .top-bar-right,
+body.dark .modal-box {
+  background: #111827 !important;
+  color: #e5e7eb !important;
+  border-color: #1f2937 !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+body.dark table {
+  background: transparent;
+}
+
+body.dark th {
+  background: #0f172a !important;
+  color: #cbd5e1 !important;
+}
+
+body.dark td {
+  color: #e5e7eb !important;
+}
+
+body.dark th,
+body.dark td {
+  border-bottom-color: #1f2937 !important;
+}
+
+body.dark input,
+body.dark select,
+body.dark textarea {
+  background: #0f172a !important;
+  color: #e5e7eb !important;
+  border-color: #334155 !important;
+}
+
+body.dark input::placeholder,
+body.dark textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+body.dark input[type="date"] {
+  color-scheme: dark;
+}
+
+body.dark .theme-toggle {
+  background: #1f2937;
+  color: #f8fafc;
+}
+
+body.dark .icon-btn {
+  background: #1f2937;
+  color: #f8fafc;
+}
+
+body.dark .premium-table th {
+  background: #0f172a !important;
+  color: #cbd5e1 !important;
+}
+
+body.dark .premium-table td {
+  color: #e5e7eb !important;
+}
+
+body.dark .status-pill.status-green {
+  background: #14532d;
+  color: #dcfce7;
+}
+
+body.dark .status-pill.status-red {
+  background: #7f1d1d;
+  color: #fee2e2;
+}
+
+body.dark .status-pill.status-yellow {
+  background: #78350f;
+  color: #fef3c7;
+}
+
+body.dark .status-pill.status-blue {
+  background: #1e3a8a;
+  color: #dbeafe;
+}
+
+body.dark .status-pill.status-gray {
+  background: #374151;
+  color: #e5e7eb;
+}
