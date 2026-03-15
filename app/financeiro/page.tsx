@@ -146,29 +146,29 @@ export default function Financeiro() {
       {mensagem && <p>{mensagem}</p>}
 
       <div style={acoesTopo}>
-        <button onClick={exportarCSV} style={botaoExportar}>
+        <button onClick={exportarCSV} className="btn btn-primary">
           Exportar CSV
         </button>
       </div>
 
-      <div style={grid}>
-        <div style={card}>
+      <div className="grid-3">
+        <div className="section-card">
           <h3>Faturamento total</h3>
           <p>R$ {faturamentoTotal.toFixed(2)}</p>
         </div>
 
-        <div style={card}>
+        <div className="section-card">
           <h3>Quantidade vendida</h3>
           <p>{quantidadeVendida}</p>
         </div>
 
-        <div style={card}>
+        <div className="section-card">
           <h3>Ticket médio</h3>
           <p>R$ {ticketMedio.toFixed(2)}</p>
         </div>
       </div>
 
-      <div style={blocoTabela}>
+      <div className="section-card" style={blocoTabela}>
         <h3>Últimas vendas</h3>
 
         <table style={tabela}>

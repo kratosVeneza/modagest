@@ -186,12 +186,12 @@ export default function Produtos() {
       <h2>Produtos</h2>
       <p>Cadastro e controle de estoque da loja.</p>
 
-      <div style={formBox}>
+      <div className="form-card">
         <h3 style={{ marginTop: 0 }}>
           {idEmEdicao ? "Editar produto" : "Cadastrar produto"}
         </h3>
 
-        <div style={grid}>
+        <div className="grid-2">
           <input
             style={input}
             placeholder="Nome do produto"
@@ -228,12 +228,12 @@ export default function Produtos() {
         </div>
 
         <div style={acoesFormulario}>
-          <button onClick={salvarProduto} style={botao}>
+          <button onClick={salvarProduto} className="btn btn-primary">
             {idEmEdicao ? "Salvar alterações" : "+ Salvar produto"}
           </button>
 
           {idEmEdicao && (
-            <button onClick={limparFormulario} style={botaoCancelar}>
+            <button onClick={limparFormulario} className="btn btn-secondary">
               Cancelar edição
             </button>
           )}
@@ -251,6 +251,8 @@ export default function Produtos() {
           {produtosFiltrados.length} produto(s)
         </span>
       </div>
+
+      <div className="data-table-wrap"></div>
 
       <table style={tabela}>
         <thead>
@@ -276,10 +278,10 @@ export default function Produtos() {
               <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
               <td style={td}>
                 <div style={acoesTabela}>
-                  <button onClick={() => editarProduto(p)} style={botaoEditar}>
+                  <button onClick={() => editarProduto(p)} className="btn btn-success btn-sm">
                     Editar
                   </button>
-                  <button onClick={() => excluirProduto(p.id)} style={botaoExcluir}>
+                  <button onClick={() => excluirProduto(p.id)} className="btn btn-danger btn-sm">
                     Excluir
                   </button>
                 </div>

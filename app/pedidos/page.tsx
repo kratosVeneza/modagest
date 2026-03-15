@@ -264,12 +264,12 @@ export default function Pedidos() {
       <h2>Pedidos</h2>
       <p>Controle de reposição e pedidos ao fornecedor.</p>
 
-      <div style={formBox}>
+      <div className="form-card">
         <h3 style={{ marginTop: 0 }}>
           {idEmEdicao ? "Editar pedido" : "Novo pedido"}
         </h3>
 
-        <div style={grid}>
+        <div className="grid-2">
           <input
             style={input}
             placeholder="Produto"
@@ -306,12 +306,12 @@ export default function Pedidos() {
         </div>
 
         <div style={acoesFormulario}>
-          <button onClick={salvarPedido} style={botao}>
+          <button onClick={salvarPedido} className="btn btn-primary">
             {idEmEdicao ? "Salvar alterações" : "Cadastrar pedido"}
           </button>
 
           {idEmEdicao && (
-            <button onClick={limparFormulario} style={botaoCancelar}>
+            <button onClick={limparFormulario} className="btn btn-secondary">
               Cancelar edição
             </button>
           )}
@@ -346,6 +346,7 @@ export default function Pedidos() {
         </span>
       </div>
 
+      <div className="data-table-wrap">
       <table style={tabela}>
         <thead>
           <tr>
@@ -365,15 +366,31 @@ export default function Pedidos() {
               <td style={td}>{pedido.produto}</td>
               <td style={td}>{pedido.fornecedor || "-"}</td>
               <td style={td}>{pedido.quantidade}</td>
-              <td style={td}>{pedido.status}</td>
+              <td style={td}>
+  <span
+    className={
+      pedido.status === "Recebido"
+        ? "status-pill status-green"
+        : pedido.status === "Cancelado"
+        ? "status-pill status-red"
+        : pedido.status === "Enviado"
+        ? "status-pill status-blue"
+        : pedido.status === "Encomendado"
+        ? "status-pill status-yellow"
+        : "status-pill status-gray"
+    }
+  >
+    {pedido.status}
+  </span>
+</td>
               <td style={td}>{pedido.estoque_lancado ? "Sim" : "Não"}</td>
               <td style={td}>{formatarData(pedido.created_at)}</td>
               <td style={td}>
                 <div style={acoesTabela}>
-                  <button onClick={() => editarPedido(pedido)} style={botaoEditar}>
+                  <button onClick={() => editarPedido(pedido)} className="btn btn-success btn-sm">
                     Editar
                   </button>
-                  <button onClick={() => excluirPedido(pedido.id)} style={botaoExcluir}>
+                  <button onClick={() => excluirPedido(pedido.id)} className="btn btn-danger btn-sm">
                     Excluir
                   </button>
                 </div>
@@ -390,6 +407,7 @@ export default function Pedidos() {
           )}
         </tbody>
       </table>
+    </div>
     </div>
   )
 }

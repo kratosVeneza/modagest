@@ -290,7 +290,7 @@ export default function Dashboard() {
       {mensagem && <p>{mensagem}</p>}
 
       <div className="grid-3">
-        <div style={card}>
+        <div className="section-card">
           <h3>Faturamento hoje</h3>
           <p>R$ {faturamentoHoje.toFixed(2)}</p>
         </div>
@@ -300,28 +300,28 @@ export default function Dashboard() {
           <p>R$ {faturamentoMes.toFixed(2)}</p>
         </div>
 
-        <div style={card}>
+        <div className="section-card">
           <h3>Produtos vendidos hoje</h3>
           <p>{produtosVendidosHoje}</p>
         </div>
 
-        <div style={card}>
+        <div className="section-card">
           <h3>Estoque baixo</h3>
           <p>{estoqueBaixo}</p>
         </div>
 
-        <div style={card}>
+        <div className="section-card">
           <h3>Pedidos pendentes</h3>
           <p>{pedidosPendentes}</p>
         </div>
 
-        <div style={card}>
+        <div className="section-card">
           <h3>Pedidos recebidos</h3>
           <p>{pedidosRecebidos}</p>
         </div>
       </div>
 
-      <div style={graficoBox}>
+      <div className="section-card" style={graficoBox}>
         <h3 style={{ marginTop: 0 }}>Faturamento dos últimos 7 dias</h3>
 
         <div style={graficoArea}>
@@ -349,7 +349,7 @@ export default function Dashboard() {
       </div>
 
       <div style={duasColunas}>
-        <div style={blocoTabela}>
+        <div className="section-card" style={blocoTabela}>
           <h3>Últimas vendas</h3>
 
           <table style={tabela}>

@@ -41,7 +41,7 @@ td {
 
 th,
 td {
-  padding: 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid #e5e7eb;
 }
 
@@ -67,7 +67,7 @@ button {
 }
 
 button:hover {
-  opacity: 0.95;
+  opacity: 0.96;
 }
 
 .page-title {
@@ -82,13 +82,6 @@ button:hover {
   font-size: 14px;
 }
 
-.soft-card {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.06);
-}
-
 .section-card {
   background: white;
   border: 1px solid #e5e7eb;
@@ -97,8 +90,73 @@ button:hover {
   padding: 20px;
 }
 
+.form-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.06);
+  padding: 20px;
+  margin-top: 20px;
+  margin-bottom: 24px;
+}
+
+.data-table-wrap {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.06);
+  padding: 10px 0 0 0;
+  overflow: hidden;
+}
+
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: white;
+}
+
+.btn-secondary {
+  background: #6b7280;
+  color: white;
+}
+
+.btn-success {
+  background: #059669;
+  color: white;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: white;
+}
+
+.btn-sm {
+  padding: 7px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
 .status-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 5px 10px;
   border-radius: 999px;
   font-size: 12px;
@@ -120,6 +178,16 @@ button:hover {
   color: #92400e;
 }
 
+.status-blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.status-gray {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -136,6 +204,17 @@ button:hover {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
+}
+
+.info-muted {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  color: #6b7280;
 }
 
 @media (max-width: 1100px) {

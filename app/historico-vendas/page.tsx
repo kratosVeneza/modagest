@@ -299,7 +299,7 @@ export default function HistoricoVendas() {
           onChange={(e) => setDataFim(e.target.value)}
         />
 
-        <button onClick={exportarCSV} style={botaoExportar}>
+       <button onClick={exportarCSV} className="btn btn-primary">
           Exportar CSV
         </button>
       </div>
@@ -340,23 +340,21 @@ export default function HistoricoVendas() {
               <td style={td}>R$ {venda.valor_total.toFixed(2)}</td>
               <td style={td}>
                 <span
-                  style={{
-                    ...statusBadge,
-                    background:
-                      venda.status === "Cancelada" ? "#fee2e2" : "#dcfce7",
-                    color:
-                      venda.status === "Cancelada" ? "#991b1b" : "#166534",
-                  }}
-                >
-                  {venda.status}
-                </span>
+                  className={
+                  venda.status === "Cancelada"
+                  ? "status-pill status-red"
+                  : "status-pill status-green"
+                 }
+               >
+               {venda.status}
+              </span>
               </td>
               <td style={td}>{formatarData(venda.created_at)}</td>
               <td style={td}>
                 {venda.status !== "Cancelada" ? (
                   <button
-                    onClick={() => cancelarVenda(venda)}
-                    style={botaoCancelarVenda}
+                   onClick={() => cancelarVenda(venda)}
+                   className="btn btn-danger btn-sm"
                   >
                     Cancelar venda
                   </button>
