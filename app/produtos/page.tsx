@@ -23,6 +23,7 @@ export default function Produtos() {
   const [preco, setPreco] = useState("")
   const [idEmEdicao, setIdEmEdicao] = useState<number | null>(null)
   const [busca, setBusca] = useState("")
+  const [modalAberto, setModalAberto] = useState(false)
 
   useEffect(() => {
     carregarProdutos()
@@ -70,6 +71,16 @@ export default function Produtos() {
     setIdEmEdicao(null)
   }
 
+  function abrirNovoModal() {
+    limparFormulario()
+    setModalAberto(true)
+  }
+
+  function fecharModal() {
+    limparFormulario()
+    setModalAberto(false)
+  }
+
   async function salvarProduto() {
     const {
       data: { user },
@@ -103,7 +114,7 @@ export default function Produtos() {
         return
       }
 
-      limparFormulario()
+      fecharModal()
       carregarProdutos()
       return
     }
@@ -125,7 +136,7 @@ export default function Produtos() {
       return
     }
 
-    limparFormulario()
+    fecharModal()
     carregarProdutos()
   }
 
@@ -136,6 +147,7 @@ export default function Produtos() {
     setTamanho(produto.tamanho)
     setEstoque(String(produto.estoque))
     setPreco(String(produto.preco))
+    setModalAberto(true)
   }
 
   async function excluirProduto(id: number) {
@@ -183,214 +195,137 @@ export default function Produtos() {
 
   return (
     <div>
-      <h2>Produtos</h2>
-      <p>Cadastro e controle de estoque da loja.</p>
+      <h2 className="page-title">Produtos</h2>
+      <p className="page-subtitle">Cadastro e controle de estoque da loja.</p>
 
-      <div className="form-card">
-        <h3 style={{ marginTop: 0 }}>
-          {idEmEdicao ? "Editar produto" : "Cadastrar produto"}
-        </h3>
-
-        <div className="grid-2">
-          <input
-            style={input}
-            placeholder="Nome do produto"
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-          />
-          <input
-            style={input}
-            placeholder="Cor"
-            value={cor}
-            onChange={(e) => setCor(e.target.value)}
-          />
-          <input
-            style={input}
-            placeholder="Tamanho"
-            value={tamanho}
-            onChange={(e) => setTamanho(e.target.value)}
-          />
-          <input
-            style={input}
-            placeholder="Estoque"
-            type="number"
-            value={estoque}
-            onChange={(e) => setEstoque(e.target.value)}
-          />
-          <input
-            style={input}
-            placeholder="Preço"
-            type="number"
-            step="0.01"
-            value={preco}
-            onChange={(e) => setPreco(e.target.value)}
-          />
-        </div>
-
-        <div style={acoesFormulario}>
-          <button onClick={salvarProduto} className="btn btn-primary">
-            {idEmEdicao ? "Salvar alterações" : "+ Salvar produto"}
-          </button>
-
-          {idEmEdicao && (
-            <button onClick={limparFormulario} className="btn btn-secondary">
-              Cancelar edição
-            </button>
-          )}
-        </div>
+      <div className="page-actions">
+        <button onClick={abrirNovoModal} className="btn btn-primary">
+          + Novo produto
+        </button>
       </div>
 
-      <div style={buscaBox}>
+      <div className="table-toolbar">
         <input
-          style={inputBusca}
+          className="inputBusca"
           placeholder="Buscar por nome, SKU, cor ou tamanho"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
+          style={{ maxWidth: "420px" }}
         />
-        <span style={contadorResultados}>
-          {produtosFiltrados.length} produto(s)
-        </span>
+        <span className="info-muted">{produtosFiltrados.length} produto(s)</span>
       </div>
 
-      <div className="data-table-wrap"></div>
-
-      <table style={tabela}>
-        <thead>
-          <tr>
-            <th style={th}>SKU</th>
-            <th style={th}>Produto</th>
-            <th style={th}>Cor</th>
-            <th style={th}>Tamanho</th>
-            <th style={th}>Estoque</th>
-            <th style={th}>Preço</th>
-            <th style={th}>Ações</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {produtosFiltrados.map((p) => (
-            <tr key={p.id}>
-              <td style={td}>{p.sku}</td>
-              <td style={td}>{p.nome}</td>
-              <td style={td}>{p.cor}</td>
-              <td style={td}>{p.tamanho}</td>
-              <td style={td}>{p.estoque}</td>
-              <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
-              <td style={td}>
-                <div style={acoesTabela}>
-                  <button onClick={() => editarProduto(p)} className="btn btn-success btn-sm">
-                    Editar
-                  </button>
-                  <button onClick={() => excluirProduto(p.id)} className="btn btn-danger btn-sm">
-                    Excluir
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-
-          {produtosFiltrados.length === 0 && (
+      <div className="data-table-wrap">
+        <table style={tabela}>
+          <thead>
             <tr>
-              <td style={tdVazio} colSpan={7}>
-                Nenhum produto encontrado.
-              </td>
+              <th style={th}>SKU</th>
+              <th style={th}>Produto</th>
+              <th style={th}>Cor</th>
+              <th style={th}>Tamanho</th>
+              <th style={th}>Estoque</th>
+              <th style={th}>Preço</th>
+              <th style={th}>Ações</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {produtosFiltrados.map((p) => (
+              <tr key={p.id}>
+                <td style={td}>{p.sku}</td>
+                <td style={td}>{p.nome}</td>
+                <td style={td}>{p.cor}</td>
+                <td style={td}>{p.tamanho}</td>
+                <td style={td}>{p.estoque}</td>
+                <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
+                <td style={td}>
+                  <div style={acoesTabela}>
+                    <button onClick={() => editarProduto(p)} className="btn btn-success btn-sm">
+                      Editar
+                    </button>
+                    <button onClick={() => excluirProduto(p.id)} className="btn btn-danger btn-sm">
+                      Excluir
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+
+            {produtosFiltrados.length === 0 && (
+              <tr>
+                <td style={tdVazio} colSpan={7}>
+                  Nenhum produto encontrado.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modalAberto && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3 className="modal-title">
+                {idEmEdicao ? "Editar produto" : "Novo produto"}
+              </h3>
+
+              <button onClick={fecharModal} className="icon-btn">
+                ×
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="grid-2">
+                <input
+                  placeholder="Nome do produto"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                />
+                <input
+                  placeholder="Cor"
+                  value={cor}
+                  onChange={(e) => setCor(e.target.value)}
+                />
+                <input
+                  placeholder="Tamanho"
+                  value={tamanho}
+                  onChange={(e) => setTamanho(e.target.value)}
+                />
+                <input
+                  placeholder="Estoque"
+                  type="number"
+                  value={estoque}
+                  onChange={(e) => setEstoque(e.target.value)}
+                />
+                <input
+                  placeholder="Preço"
+                  type="number"
+                  step="0.01"
+                  value={preco}
+                  onChange={(e) => setPreco(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button onClick={fecharModal} className="btn btn-secondary">
+                Cancelar
+              </button>
+              <button onClick={salvarProduto} className="btn btn-primary">
+                {idEmEdicao ? "Salvar alterações" : "Cadastrar produto"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
-}
-
-const formBox = {
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
-  borderRadius: "12px",
-  padding: "20px",
-  marginTop: "20px",
-  marginBottom: "24px",
-}
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
-  gap: "12px",
-  marginBottom: "16px",
-}
-
-const input = {
-  padding: "10px",
-  border: "1px solid #d1d5db",
-  borderRadius: "8px",
-  fontSize: "14px",
-}
-
-const acoesFormulario = {
-  display: "flex",
-  gap: "10px",
 }
 
 const acoesTabela = {
   display: "flex",
   gap: "8px",
-}
-
-const botao = {
-  padding: "10px 16px",
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  borderRadius: "8px",
-  cursor: "pointer",
-}
-
-const botaoCancelar = {
-  padding: "10px 16px",
-  background: "#6b7280",
-  color: "white",
-  border: "none",
-  borderRadius: "8px",
-  cursor: "pointer",
-}
-
-const botaoEditar = {
-  background: "#059669",
-  color: "white",
-  border: "none",
-  padding: "6px 10px",
-  borderRadius: "6px",
-  cursor: "pointer",
-}
-
-const botaoExcluir = {
-  background: "#dc2626",
-  color: "white",
-  border: "none",
-  padding: "6px 10px",
-  borderRadius: "6px",
-  cursor: "pointer",
-}
-
-const buscaBox = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "12px",
-  marginBottom: "16px",
-}
-
-const inputBusca = {
-  flex: 1,
-  padding: "10px",
-  border: "1px solid #d1d5db",
-  borderRadius: "8px",
-  fontSize: "14px",
-}
-
-const contadorResultados = {
-  fontSize: "14px",
-  color: "#6b7280",
-  whiteSpace: "nowrap" as const,
 }
 
 const tabela = {
