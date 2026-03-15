@@ -7,18 +7,31 @@ import { useRouter, usePathname } from "next/navigation"
 import HeaderLoja from "./components/HeaderLoja"
 import UserProfile from "./components/UserProfile"
 import ThemeToggle from "./components/ThemeToggle"
+import {
+  House,
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  ClipboardList,
+  ReceiptText,
+  Users,
+  Wallet,
+  Store,
+  LogIn,
+  LogOut,
+} from "lucide-react"
 
 const menuItems = [
-  { href: "/", label: "Início", icon: "🏠" },
-  { href: "/dashboard", label: "Dashboard", icon: "📊" },
-  { href: "/produtos", label: "Produtos", icon: "📦" },
-  { href: "/vendas", label: "Vendas", icon: "💰" },
-  { href: "/pedidos", label: "Pedidos", icon: "🛒" },
-  { href: "/historico-vendas", label: "Histórico de Vendas", icon: "🧾" },
-  { href: "/clientes", label: "Clientes", icon: "👥" },
-  { href: "/financeiro", label: "Financeiro", icon: "💳" },
-  { href: "/loja", label: "Minha Loja", icon: "🏪" },
-  { href: "/login", label: "Login", icon: "🔐" },
+  { href: "/", label: "Início", icon: House },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/produtos", label: "Produtos", icon: Package },
+  { href: "/vendas", label: "Vendas", icon: Wallet },
+  { href: "/pedidos", label: "Pedidos", icon: ShoppingCart },
+  { href: "/historico-vendas", label: "Histórico de Vendas", icon: ReceiptText },
+  { href: "/clientes", label: "Clientes", icon: Users },
+  { href: "/financeiro", label: "Financeiro", icon: ClipboardList },
+  { href: "/loja", label: "Minha Loja", icon: Store },
+  { href: "/login", label: "Login", icon: LogIn },
 ]
 
 export default function RootLayout({
@@ -50,6 +63,7 @@ export default function RootLayout({
             <nav className="sidebar-nav">
               {menuItems.map((item) => {
                 const ativo = pathname === item.href
+                const Icon = item.icon
 
                 return (
                   <Link
@@ -57,14 +71,18 @@ export default function RootLayout({
                     href={item.href}
                     className={`menu-link ${ativo ? "menu-link-active" : ""}`}
                   >
-                    <span className="menu-icon">{item.icon}</span>
+                    <span className="menu-icon">
+                      <Icon size={18} strokeWidth={2.2} />
+                    </span>
                     <span>{item.label}</span>
                   </Link>
                 )
               })}
 
               <button onClick={sair} className="menu-link-danger">
-                <span className="menu-icon">🚪</span>
+                <span className="menu-icon">
+                  <LogOut size={18} strokeWidth={2.2} />
+                </span>
                 <span>Sair</span>
               </button>
             </nav>
