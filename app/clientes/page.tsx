@@ -21,6 +21,7 @@ export default function ClientesPage() {
   const [idEmEdicao, setIdEmEdicao] = useState<number | null>(null)
   const [busca, setBusca] = useState("")
   const [mensagem, setMensagem] = useState("")
+  const [modalAberto, setModalAberto] = useState(false)
 
   useEffect(() => {
     carregarClientes()
@@ -60,6 +61,18 @@ export default function ClientesPage() {
     setIdEmEdicao(null)
   }
 
+  function abrirNovoModal() {
+    limparFormulario()
+    setMensagem("")
+    setModalAberto(true)
+  }
+
+  function fecharModal() {
+    limparFormulario()
+    setMensagem("")
+    setModalAberto(false)
+  }
+
   async function salvarCliente() {
     setMensagem("")
 
@@ -94,8 +107,7 @@ export default function ClientesPage() {
         return
       }
 
-      setMensagem("Cliente atualizado com sucesso.")
-      limparFormulario()
+      fecharModal()
       carregarClientes()
       return
     }
@@ -115,8 +127,7 @@ export default function ClientesPage() {
       return
     }
 
-    setMensagem("Cliente cadastrado com sucesso.")
-    limparFormulario()
+    fecharModal()
     carregarClientes()
   }
 
@@ -126,6 +137,8 @@ export default function ClientesPage() {
     setTelefone(cliente.telefone || "")
     setEmail(cliente.email || "")
     setCidade(cliente.cidade || "")
+    setMensagem("")
+    setModalAberto(true)
   }
 
   async function excluirCliente(id: number) {
@@ -176,204 +189,137 @@ export default function ClientesPage() {
 
   return (
     <div>
-      <h2>Clientes</h2>
-      <p>Cadastre e gerencie os clientes da sua loja.</p>
+      <h2 className="page-title">Clientes</h2>
+      <p className="page-subtitle">Cadastre e gerencie os clientes da sua loja.</p>
 
-      {mensagem && <p>{mensagem}</p>}
+      {mensagem && !modalAberto && <p>{mensagem}</p>}
 
-      <div style={formBox}>
-        <h3 style={{ marginTop: 0 }}>
-          {idEmEdicao ? "Editar cliente" : "Novo cliente"}
-        </h3>
-
-        <div style={grid}>
-          <input
-            style={input}
-            placeholder="Nome"
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-          />
-
-          <input
-            style={input}
-            placeholder="Telefone"
-            value={telefone}
-            onChange={(e) => setTelefone(e.target.value)}
-          />
-
-          <input
-            style={input}
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-
-          <input
-            style={input}
-            placeholder="Cidade"
-            value={cidade}
-            onChange={(e) => setCidade(e.target.value)}
-          />
-        </div>
-
-        <div style={acoesFormulario}>
-          <button onClick={salvarCliente} style={botao}>
-            {idEmEdicao ? "Salvar alterações" : "Cadastrar cliente"}
-          </button>
-
-          {idEmEdicao && (
-            <button onClick={limparFormulario} style={botaoCancelar}>
-              Cancelar edição
-            </button>
-          )}
-        </div>
+      <div className="page-actions">
+        <button onClick={abrirNovoModal} className="btn btn-primary">
+          + Novo cliente
+        </button>
       </div>
 
-      <div style={buscaBox}>
+      <div className="table-toolbar">
         <input
-          style={inputBusca}
           placeholder="Buscar por nome, telefone, email ou cidade"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
+          style={{ maxWidth: "420px" }}
         />
-        <span style={contadorResultados}>
-          {clientesFiltrados.length} cliente(s)
-        </span>
+        <span className="info-muted">{clientesFiltrados.length} cliente(s)</span>
       </div>
 
-      <table style={tabela}>
-        <thead>
-          <tr>
-            <th style={th}>Nome</th>
-            <th style={th}>Telefone</th>
-            <th style={th}>Email</th>
-            <th style={th}>Cidade</th>
-            <th style={th}>Ações</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {clientesFiltrados.map((cliente) => (
-            <tr key={cliente.id}>
-              <td style={td}>{cliente.nome}</td>
-              <td style={td}>{cliente.telefone || "-"}</td>
-              <td style={td}>{cliente.email || "-"}</td>
-              <td style={td}>{cliente.cidade || "-"}</td>
-              <td style={td}>
-                <div style={acoesTabela}>
-                  <button onClick={() => editarCliente(cliente)} style={botaoEditar}>
-                    Editar
-                  </button>
-                  <button onClick={() => excluirCliente(cliente.id)} style={botaoExcluir}>
-                    Excluir
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-
-          {clientesFiltrados.length === 0 && (
+      <div className="data-table-wrap">
+        <table style={tabela}>
+          <thead>
             <tr>
-              <td style={tdVazio} colSpan={5}>
-                Nenhum cliente encontrado.
-              </td>
+              <th style={th}>Nome</th>
+              <th style={th}>Telefone</th>
+              <th style={th}>Email</th>
+              <th style={th}>Cidade</th>
+              <th style={th}>Ações</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {clientesFiltrados.map((cliente) => (
+              <tr key={cliente.id}>
+                <td style={td}>{cliente.nome}</td>
+                <td style={td}>{cliente.telefone || "-"}</td>
+                <td style={td}>{cliente.email || "-"}</td>
+                <td style={td}>{cliente.cidade || "-"}</td>
+                <td style={td}>
+                  <div style={acoesTabela}>
+                    <button
+                      onClick={() => editarCliente(cliente)}
+                      className="btn btn-success btn-sm"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => excluirCliente(cliente.id)}
+                      className="btn btn-danger btn-sm"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+
+            {clientesFiltrados.length === 0 && (
+              <tr>
+                <td style={tdVazio} colSpan={5}>
+                  Nenhum cliente encontrado.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modalAberto && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3 className="modal-title">
+                {idEmEdicao ? "Editar cliente" : "Novo cliente"}
+              </h3>
+
+              <button onClick={fecharModal} className="icon-btn">
+                ×
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
+
+              <div className="grid-2">
+                <input
+                  placeholder="Nome"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                />
+
+                <input
+                  placeholder="Telefone"
+                  value={telefone}
+                  onChange={(e) => setTelefone(e.target.value)}
+                />
+
+                <input
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+
+                <input
+                  placeholder="Cidade"
+                  value={cidade}
+                  onChange={(e) => setCidade(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button onClick={fecharModal} className="btn btn-secondary">
+                Cancelar
+              </button>
+              <button onClick={salvarCliente} className="btn btn-primary">
+                {idEmEdicao ? "Salvar alterações" : "Cadastrar cliente"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
-}
-
-const formBox = {
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
-  borderRadius: "12px",
-  padding: "20px",
-  marginTop: "20px",
-  marginBottom: "24px",
-}
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
-  gap: "12px",
-  marginBottom: "16px",
-}
-
-const input = {
-  padding: "10px",
-  border: "1px solid #d1d5db",
-  borderRadius: "8px",
-  fontSize: "14px",
-}
-
-const acoesFormulario = {
-  display: "flex",
-  gap: "10px",
 }
 
 const acoesTabela = {
   display: "flex",
   gap: "8px",
-}
-
-const botao = {
-  padding: "10px 16px",
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  borderRadius: "8px",
-  cursor: "pointer",
-}
-
-const botaoCancelar = {
-  padding: "10px 16px",
-  background: "#6b7280",
-  color: "white",
-  border: "none",
-  borderRadius: "8px",
-  cursor: "pointer",
-}
-
-const botaoEditar = {
-  background: "#059669",
-  color: "white",
-  border: "none",
-  padding: "6px 10px",
-  borderRadius: "6px",
-  cursor: "pointer",
-}
-
-const botaoExcluir = {
-  background: "#dc2626",
-  color: "white",
-  border: "none",
-  padding: "6px 10px",
-  borderRadius: "6px",
-  cursor: "pointer",
-}
-
-const buscaBox = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "12px",
-  marginBottom: "16px",
-}
-
-const inputBusca = {
-  flex: 1,
-  padding: "10px",
-  border: "1px solid #d1d5db",
-  borderRadius: "8px",
-  fontSize: "14px",
-}
-
-const contadorResultados = {
-  fontSize: "14px",
-  color: "#6b7280",
-  whiteSpace: "nowrap" as const,
 }
 
 const tabela = {
