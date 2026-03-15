@@ -31,6 +31,7 @@ export default function Pedidos() {
 
   const [busca, setBusca] = useState("")
   const [filtroStatus, setFiltroStatus] = useState("Todos")
+  const [modalAberto, setModalAberto] = useState(false)
 
   useEffect(() => {
     carregarPedidos()
@@ -68,6 +69,18 @@ export default function Pedidos() {
     setQuantidade("")
     setStatus("Pendente")
     setIdEmEdicao(null)
+  }
+
+  function abrirNovoModal() {
+    limparFormulario()
+    setMensagem("")
+    setModalAberto(true)
+  }
+
+  function fecharModal() {
+    limparFormulario()
+    setMensagem("")
+    setModalAberto(false)
   }
 
   async function salvarPedido() {
@@ -127,14 +140,12 @@ export default function Pedidos() {
         if (erroProduto) {
           setMensagem("Pedido atualizado, mas houve erro ao buscar o produto.")
           carregarPedidos()
-          limparFormulario()
           return
         }
 
         if (!produtoBanco) {
           setMensagem("Pedido atualizado, mas nenhum produto com esse nome foi encontrado.")
           carregarPedidos()
-          limparFormulario()
           return
         }
 
@@ -150,7 +161,6 @@ export default function Pedidos() {
         if (erroAtualizarEstoque) {
           setMensagem("Pedido atualizado, mas houve erro ao lançar no estoque.")
           carregarPedidos()
-          limparFormulario()
           return
         }
 
@@ -163,18 +173,15 @@ export default function Pedidos() {
         if (erroMarcarLancado) {
           setMensagem("Estoque atualizado, mas houve erro ao marcar o pedido.")
           carregarPedidos()
-          limparFormulario()
           return
         }
 
-        setMensagem("Pedido atualizado e estoque lançado com sucesso.")
-        limparFormulario()
+        fecharModal()
         carregarPedidos()
         return
       }
 
-      setMensagem("Pedido atualizado com sucesso.")
-      limparFormulario()
+      fecharModal()
       carregarPedidos()
       return
     }
@@ -194,8 +201,7 @@ export default function Pedidos() {
       return
     }
 
-    setMensagem("Pedido cadastrado com sucesso.")
-    limparFormulario()
+    fecharModal()
     carregarPedidos()
   }
 
@@ -205,6 +211,8 @@ export default function Pedidos() {
     setFornecedor(pedido.fornecedor || "")
     setQuantidade(String(pedido.quantidade))
     setStatus(pedido.status)
+    setMensagem("")
+    setModalAberto(true)
   }
 
   async function excluirPedido(id: number) {
@@ -261,77 +269,29 @@ export default function Pedidos() {
 
   return (
     <div>
-      <h2>Pedidos</h2>
-      <p>Controle de reposição e pedidos ao fornecedor.</p>
+      <h2 className="page-title">Pedidos</h2>
+      <p className="page-subtitle">Controle de reposição e pedidos ao fornecedor.</p>
 
-      <div className="form-card">
-        <h3 style={{ marginTop: 0 }}>
-          {idEmEdicao ? "Editar pedido" : "Novo pedido"}
-        </h3>
+      {mensagem && !modalAberto && <p>{mensagem}</p>}
 
-        <div className="grid-2">
-          <input
-            style={input}
-            placeholder="Produto"
-            value={produto}
-            onChange={(e) => setProduto(e.target.value)}
-          />
-
-          <input
-            style={input}
-            placeholder="Fornecedor"
-            value={fornecedor}
-            onChange={(e) => setFornecedor(e.target.value)}
-          />
-
-          <input
-            style={input}
-            type="number"
-            placeholder="Quantidade"
-            value={quantidade}
-            onChange={(e) => setQuantidade(e.target.value)}
-          />
-
-          <select
-            style={input}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="Pendente">Pendente</option>
-            <option value="Encomendado">Encomendado</option>
-            <option value="Enviado">Enviado</option>
-            <option value="Recebido">Recebido</option>
-            <option value="Cancelado">Cancelado</option>
-          </select>
-        </div>
-
-        <div style={acoesFormulario}>
-          <button onClick={salvarPedido} className="btn btn-primary">
-            {idEmEdicao ? "Salvar alterações" : "Cadastrar pedido"}
-          </button>
-
-          {idEmEdicao && (
-            <button onClick={limparFormulario} className="btn btn-secondary">
-              Cancelar edição
-            </button>
-          )}
-        </div>
-
-        {mensagem && <p style={{ marginTop: "16px" }}>{mensagem}</p>}
+      <div className="page-actions">
+        <button onClick={abrirNovoModal} className="btn btn-primary">
+          + Novo pedido
+        </button>
       </div>
 
-      <div style={filtrosBox}>
+      <div className="table-toolbar">
         <input
-          style={inputBusca}
           placeholder="Buscar por produto ou fornecedor"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
+          style={{ maxWidth: "420px" }}
         />
 
         <select
-          style={selectFiltro}
           value={filtroStatus}
           onChange={(e) => setFiltroStatus(e.target.value)}
+          style={{ maxWidth: "220px" }}
         >
           <option value="Todos">Todos os status</option>
           <option value="Pendente">Pendente</option>
@@ -341,174 +301,152 @@ export default function Pedidos() {
           <option value="Cancelado">Cancelado</option>
         </select>
 
-        <span style={contadorResultados}>
-          {pedidosFiltrados.length} pedido(s)
-        </span>
+        <span className="info-muted">{pedidosFiltrados.length} pedido(s)</span>
       </div>
 
       <div className="data-table-wrap">
-      <table style={tabela}>
-        <thead>
-          <tr>
-            <th style={th}>Produto</th>
-            <th style={th}>Fornecedor</th>
-            <th style={th}>Quantidade</th>
-            <th style={th}>Status</th>
-            <th style={th}>Estoque lançado</th>
-            <th style={th}>Data</th>
-            <th style={th}>Ações</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {pedidosFiltrados.map((pedido) => (
-            <tr key={pedido.id}>
-              <td style={td}>{pedido.produto}</td>
-              <td style={td}>{pedido.fornecedor || "-"}</td>
-              <td style={td}>{pedido.quantidade}</td>
-              <td style={td}>
-  <span
-    className={
-      pedido.status === "Recebido"
-        ? "status-pill status-green"
-        : pedido.status === "Cancelado"
-        ? "status-pill status-red"
-        : pedido.status === "Enviado"
-        ? "status-pill status-blue"
-        : pedido.status === "Encomendado"
-        ? "status-pill status-yellow"
-        : "status-pill status-gray"
-    }
-  >
-    {pedido.status}
-  </span>
-</td>
-              <td style={td}>{pedido.estoque_lancado ? "Sim" : "Não"}</td>
-              <td style={td}>{formatarData(pedido.created_at)}</td>
-              <td style={td}>
-                <div style={acoesTabela}>
-                  <button onClick={() => editarPedido(pedido)} className="btn btn-success btn-sm">
-                    Editar
-                  </button>
-                  <button onClick={() => excluirPedido(pedido.id)} className="btn btn-danger btn-sm">
-                    Excluir
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-
-          {pedidosFiltrados.length === 0 && (
+        <table style={tabela}>
+          <thead>
             <tr>
-              <td style={tdVazio} colSpan={7}>
-                Nenhum pedido encontrado.
-              </td>
+              <th style={th}>Produto</th>
+              <th style={th}>Fornecedor</th>
+              <th style={th}>Quantidade</th>
+              <th style={th}>Status</th>
+              <th style={th}>Estoque lançado</th>
+              <th style={th}>Data</th>
+              <th style={th}>Ações</th>
             </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+
+          <tbody>
+            {pedidosFiltrados.map((pedido) => (
+              <tr key={pedido.id}>
+                <td style={td}>{pedido.produto}</td>
+                <td style={td}>{pedido.fornecedor || "-"}</td>
+                <td style={td}>{pedido.quantidade}</td>
+                <td style={td}>
+                  <span
+                    className={
+                      pedido.status === "Recebido"
+                        ? "status-pill status-green"
+                        : pedido.status === "Cancelado"
+                        ? "status-pill status-red"
+                        : pedido.status === "Enviado"
+                        ? "status-pill status-blue"
+                        : pedido.status === "Encomendado"
+                        ? "status-pill status-yellow"
+                        : "status-pill status-gray"
+                    }
+                  >
+                    {pedido.status}
+                  </span>
+                </td>
+                <td style={td}>
+                  <span
+                    className={
+                      pedido.estoque_lancado
+                        ? "status-pill status-green"
+                        : "status-pill status-gray"
+                    }
+                  >
+                    {pedido.estoque_lancado ? "Sim" : "Não"}
+                  </span>
+                </td>
+                <td style={td}>{formatarData(pedido.created_at)}</td>
+                <td style={td}>
+                  <div style={acoesTabela}>
+                    <button
+                      onClick={() => editarPedido(pedido)}
+                      className="btn btn-success btn-sm"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => excluirPedido(pedido.id)}
+                      className="btn btn-danger btn-sm"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+
+            {pedidosFiltrados.length === 0 && (
+              <tr>
+                <td style={tdVazio} colSpan={7}>
+                  Nenhum pedido encontrado.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modalAberto && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3 className="modal-title">
+                {idEmEdicao ? "Editar pedido" : "Novo pedido"}
+              </h3>
+
+              <button onClick={fecharModal} className="icon-btn">
+                ×
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
+
+              <div className="grid-2">
+                <input
+                  placeholder="Produto"
+                  value={produto}
+                  onChange={(e) => setProduto(e.target.value)}
+                />
+
+                <input
+                  placeholder="Fornecedor"
+                  value={fornecedor}
+                  onChange={(e) => setFornecedor(e.target.value)}
+                />
+
+                <input
+                  type="number"
+                  placeholder="Quantidade"
+                  value={quantidade}
+                  onChange={(e) => setQuantidade(e.target.value)}
+                />
+
+                <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="Pendente">Pendente</option>
+                  <option value="Encomendado">Encomendado</option>
+                  <option value="Enviado">Enviado</option>
+                  <option value="Recebido">Recebido</option>
+                  <option value="Cancelado">Cancelado</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button onClick={fecharModal} className="btn btn-secondary">
+                Cancelar
+              </button>
+              <button onClick={salvarPedido} className="btn btn-primary">
+                {idEmEdicao ? "Salvar alterações" : "Cadastrar pedido"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
-}
-
-const formBox = {
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
-  borderRadius: "12px",
-  padding: "20px",
-  marginTop: "20px",
-  marginBottom: "24px",
-}
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
-  gap: "12px",
-  marginBottom: "16px",
-}
-
-const input = {
-  padding: "10px",
-  border: "1px solid #d1d5db",
-  borderRadius: "8px",
-  fontSize: "14px",
-  width: "100%",
-}
-
-const acoesFormulario = {
-  display: "flex",
-  gap: "10px",
 }
 
 const acoesTabela = {
   display: "flex",
   gap: "8px",
-}
-
-const botao = {
-  padding: "10px 16px",
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  borderRadius: "8px",
-  cursor: "pointer",
-}
-
-const botaoCancelar = {
-  padding: "10px 16px",
-  background: "#6b7280",
-  color: "white",
-  border: "none",
-  borderRadius: "8px",
-  cursor: "pointer",
-}
-
-const botaoEditar = {
-  background: "#059669",
-  color: "white",
-  border: "none",
-  padding: "6px 10px",
-  borderRadius: "6px",
-  cursor: "pointer",
-}
-
-const botaoExcluir = {
-  background: "#dc2626",
-  color: "white",
-  border: "none",
-  padding: "6px 10px",
-  borderRadius: "6px",
-  cursor: "pointer",
-}
-
-const filtrosBox = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "12px",
-  marginBottom: "16px",
-}
-
-const inputBusca = {
-  flex: 1,
-  padding: "10px",
-  border: "1px solid #d1d5db",
-  borderRadius: "8px",
-  fontSize: "14px",
-}
-
-const selectFiltro = {
-  padding: "10px",
-  border: "1px solid #d1d5db",
-  borderRadius: "8px",
-  fontSize: "14px",
-}
-
-const contadorResultados = {
-  fontSize: "14px",
-  color: "#6b7280",
-  whiteSpace: "nowrap" as const,
 }
 
 const tabela = {
