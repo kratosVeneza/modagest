@@ -43,10 +43,10 @@ export default function LoginPage() {
 }
 
   return (
-    <div style={container}>
-      <div style={box}>
-        <h2>Login</h2>
-        <p>Entre no ModaGest</p>
+    <div className="login-page">
+      <div className="login-card">
+        <h2 className="login-title">Login</h2>
+        <p className="login-subtitle">Entre no ModaGest</p>
 
         <input
           style={input}

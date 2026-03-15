@@ -866,3 +866,86 @@ body.dark .status-pill.status-gray {
     width: 100%;
   }
 }
+/* ===== LOGIN SEM MODO ESCURO ===== */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+}
+
+body.dark .login-page {
+  background: #0b1220;
+}
+
+.login-card {
+  width: 420px;
+  background: white;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  padding: 28px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
+}
+
+body.dark .login-card {
+  background: #111827;
+  border-color: #1f2937;
+}
+
+.login-title {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 22px;
+}
+
+body.dark .login-subtitle {
+  color: #94a3b8;
+}
+/* ===== LOGIN ===== */
+
+.login-page {
+  min-height: calc(100vh - 120px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  width: 420px;
+  background: white;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  padding: 30px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
+}
+
+.login-title {
+  margin: 0 0 6px 0;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.login-subtitle {
+  margin: 0 0 22px 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* modo escuro */
+
+body.dark .login-card {
+  background: #111827;
+  border-color: #1f2937;
+}
+
+body.dark .login-subtitle {
+  color: #94a3b8;
+}
