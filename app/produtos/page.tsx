@@ -18,7 +18,6 @@ type Produto = {
 
 export default function Produtos() {
   const [produtos, setProdutos] = useState<Produto[]>([])
-  const [carregando, setCarregando] = useState(true)
   const [nome, setNome] = useState("")
   const [cor, setCor] = useState("")
   const [tamanho, setTamanho] = useState("")
@@ -27,6 +26,8 @@ export default function Produtos() {
   const [idEmEdicao, setIdEmEdicao] = useState<number | null>(null)
   const [busca, setBusca] = useState("")
   const [modalAberto, setModalAberto] = useState(false)
+  const [mensagem, setMensagem] = useState("")
+  const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
     carregarProdutos()
@@ -34,12 +35,15 @@ export default function Produtos() {
 
   async function carregarProdutos() {
     setCarregando(true)
+    setMensagem("")
+
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) {
-      alert("Você precisa estar logado.")
+      setMensagem("Você precisa estar logado.")
+      setCarregando(false)
       return
     }
 
@@ -50,13 +54,14 @@ export default function Produtos() {
       .order("id", { ascending: false })
 
     if (error) {
-      alert("Erro ao carregar produtos.")
+      setMensagem("Erro ao carregar produtos.")
+      setCarregando(false)
       return
     }
 
-    setProdutos(data || [])
+    setProdutos((data ?? []) as Produto[])
+    setCarregando(false)
   }
-  setCarregando(false)
 
   function gerarSku(nomeProduto: string, corProduto: string, tamanhoProduto: string) {
     const nomeParte = nomeProduto.trim().slice(0, 3).toUpperCase() || "PRO"
@@ -78,26 +83,30 @@ export default function Produtos() {
 
   function abrirNovoModal() {
     limparFormulario()
+    setMensagem("")
     setModalAberto(true)
   }
 
   function fecharModal() {
     limparFormulario()
+    setMensagem("")
     setModalAberto(false)
   }
 
   async function salvarProduto() {
+    setMensagem("")
+
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) {
-      alert("Você precisa estar logado.")
+      setMensagem("Você precisa estar logado.")
       return
     }
 
     if (!nome || !cor || !tamanho || !estoque || !preco) {
-      alert("Preencha todos os campos.")
+      setMensagem("Preencha todos os campos.")
       return
     }
 
@@ -115,12 +124,12 @@ export default function Produtos() {
         .eq("user_id", user.id)
 
       if (error) {
-        alert("Erro ao atualizar produto.")
+        setMensagem("Erro ao atualizar produto.")
         return
       }
 
       fecharModal()
-      carregarProdutos()
+      await carregarProdutos()
       return
     }
 
@@ -137,12 +146,12 @@ export default function Produtos() {
     ])
 
     if (error) {
-      alert("Erro ao cadastrar produto.")
+      setMensagem("Erro ao cadastrar produto.")
       return
     }
 
     fecharModal()
-    carregarProdutos()
+    await carregarProdutos()
   }
 
   function editarProduto(produto: Produto) {
@@ -156,12 +165,14 @@ export default function Produtos() {
   }
 
   async function excluirProduto(id: number) {
+    setMensagem("")
+
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) {
-      alert("Você precisa estar logado.")
+      setMensagem("Você precisa estar logado.")
       return
     }
 
@@ -172,15 +183,11 @@ export default function Produtos() {
       .eq("user_id", user.id)
 
     if (error) {
-      alert("Erro ao excluir produto.")
+      setMensagem("Erro ao excluir produto.")
       return
     }
 
-    if (idEmEdicao === id) {
-      limparFormulario()
-    }
-
-    carregarProdutos()
+    await carregarProdutos()
   }
 
   const produtosFiltrados = useMemo(() => {
@@ -203,6 +210,8 @@ export default function Produtos() {
       <h2 className="page-title">Produtos</h2>
       <p className="page-subtitle">Cadastro e controle de estoque da loja.</p>
 
+      {mensagem && !modalAberto && <p style={{ marginTop: 16 }}>{mensagem}</p>}
+
       <div className="page-actions">
         <button onClick={abrirNovoModal} className="btn btn-primary">
           + Novo produto
@@ -211,7 +220,6 @@ export default function Produtos() {
 
       <div className="table-toolbar">
         <input
-          className="inputBusca"
           placeholder="Buscar por nome, SKU, cor ou tamanho"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
@@ -235,88 +243,96 @@ export default function Produtos() {
           </thead>
 
           <tbody>
-
-  {carregando ? (
-
-    <TableSkeleton rows={6} />
-
-  ) : (
-
-    produtosFiltrados.map((p) => (
-      <tr key={p.id}>
-        <td style={td}>{p.sku}</td>
-        <td style={td}>{p.nome}</td>
-        <td style={td}>{p.cor}</td>
-        <td style={td}>{p.tamanho}</td>
-        <td style={td}>{p.estoque}</td>
-        <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
-
-        <td style={td}>
-          <div style={acoesTabela}>
-            <button onClick={() => editarProduto(p)}>
-              Editar
-            </button>
-
-            <button onClick={() => excluirProduto(p.id)}>
-              Excluir
-            </button>
-          </div>
-        </td>
-      </tr>
-    ))
-
-  )}
-
-</tbody>
+            {carregando ? (
+              <TableSkeleton rows={6} cols={7} />
+            ) : produtosFiltrados.length > 0 ? (
+              produtosFiltrados.map((p) => (
+                <tr key={p.id}>
+                  <td style={td}>{p.sku}</td>
+                  <td style={td}>{p.nome}</td>
+                  <td style={td}>{p.cor}</td>
+                  <td style={td}>{p.tamanho}</td>
+                  <td style={td}>{p.estoque}</td>
+                  <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
+                  <td style={td}>
+                    <div style={acoesTabela}>
+                      <button
+                        onClick={() => editarProduto(p)}
+                        className="btn btn-success btn-sm"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => excluirProduto(p.id)}
+                        className="btn btn-danger btn-sm"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td style={tdVazio} colSpan={7}>
+                  Nenhum produto encontrado.
+                </td>
+              </tr>
+            )}
+          </tbody>
         </table>
       </div>
 
       <AnimatedModal
-  open={modalAberto}
-  onClose={fecharModal}
-  title={idEmEdicao ? "Editar produto" : "Novo produto"}
-  footer={
-    <>
-      <button onClick={fecharModal} className="btn btn-secondary">
-        Cancelar
-      </button>
-      <button onClick={salvarProduto} className="btn btn-primary">
-        {idEmEdicao ? "Salvar alterações" : "Cadastrar produto"}
-      </button>
-    </>
-  }
->
-  <div className="grid-2">
-    <input
-      placeholder="Nome do produto"
-      value={nome}
-      onChange={(e) => setNome(e.target.value)}
-    />
-    <input
-      placeholder="Cor"
-      value={cor}
-      onChange={(e) => setCor(e.target.value)}
-    />
-    <input
-      placeholder="Tamanho"
-      value={tamanho}
-      onChange={(e) => setTamanho(e.target.value)}
-    />
-    <input
-      placeholder="Estoque"
-      type="number"
-      value={estoque}
-      onChange={(e) => setEstoque(e.target.value)}
-    />
-    <input
-      placeholder="Preço"
-      type="number"
-      step="0.01"
-      value={preco}
-      onChange={(e) => setPreco(e.target.value)}
-    />
-  </div>
-</AnimatedModal>
+        open={modalAberto}
+        onClose={fecharModal}
+        title={idEmEdicao ? "Editar produto" : "Novo produto"}
+        footer={
+          <>
+            <button onClick={fecharModal} className="btn btn-secondary">
+              Cancelar
+            </button>
+            <button onClick={salvarProduto} className="btn btn-primary">
+              {idEmEdicao ? "Salvar alterações" : "Cadastrar produto"}
+            </button>
+          </>
+        }
+      >
+        <>
+          {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
+
+          <div className="grid-2">
+            <input
+              placeholder="Nome do produto"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+            />
+            <input
+              placeholder="Cor"
+              value={cor}
+              onChange={(e) => setCor(e.target.value)}
+            />
+            <input
+              placeholder="Tamanho"
+              value={tamanho}
+              onChange={(e) => setTamanho(e.target.value)}
+            />
+            <input
+              placeholder="Estoque"
+              type="number"
+              value={estoque}
+              onChange={(e) => setEstoque(e.target.value)}
+            />
+            <input
+              placeholder="Preço"
+              type="number"
+              step="0.01"
+              value={preco}
+              onChange={(e) => setPreco(e.target.value)}
+            />
+          </div>
+        </>
+      </AnimatedModal>
     </div>
   )
 }

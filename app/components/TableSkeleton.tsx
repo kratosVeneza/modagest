@@ -1,17 +1,26 @@
 "use client"
 
-export default function TableSkeleton({ rows = 6 }: { rows?: number }) {
+export default function TableSkeleton({
+  rows = 6,
+  cols = 7,
+}: {
+  rows?: number
+  cols?: number
+}) {
   const linhas = Array.from({ length: rows })
+  const colunas = Array.from({ length: cols })
 
   return (
-    <tbody>
+    <>
       {linhas.map((_, i) => (
         <tr key={i}>
-          <td colSpan={10}>
-            <div className="skeleton-row" />
-          </td>
+          {colunas.map((_, j) => (
+            <td key={j} style={{ padding: "12px" }}>
+              <div className="skeleton-row" />
+            </td>
+          ))}
         </tr>
       ))}
-    </tbody>
+    </>
   )
 }
