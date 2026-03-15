@@ -276,7 +276,7 @@ export default function Vendas() {
             </strong>
           </div>
 
-          <div style={totalBox}>
+          <div className="summary-box" style={totalBox}>
             <span>Total da venda</span>
             <strong style={{ fontSize: "22px" }}>
               R$ {valorTotal.toFixed(2)}
@@ -300,7 +300,6 @@ const totalBox = {
   marginTop: "18px",
   padding: "16px",
   borderRadius: "14px",
-  background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",

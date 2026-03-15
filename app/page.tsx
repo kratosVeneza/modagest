@@ -101,7 +101,7 @@ export default function Home() {
 
         <div className="grid-3" style={{ marginTop: "16px" }}>
           {atalhos.map((atalho) => (
-            <Link key={atalho.href} href={atalho.href} style={atalhoCard}>
+            <Link key={atalho.href} href={atalho.href} className="section-card" style={atalhoCard}>
               <div style={atalhoIcone}>{atalho.icone}</div>
 
               <div>
@@ -179,10 +179,7 @@ const sectionTitle = {
 }
 
 const atalhoCard = {
-  background: "white",
-  border: "1px solid #e5e7eb",
   borderRadius: "18px",
-  boxShadow: "0 6px 24px rgba(15, 23, 42, 0.06)",
   padding: "20px",
   display: "flex",
   flexDirection: "column" as const,
@@ -203,12 +200,10 @@ const atalhoIcone = {
 const atalhoTitulo = {
   margin: 0,
   fontSize: "18px",
-  color: "#111827",
 }
 
 const atalhoDescricao = {
   margin: "8px 0 0 0",
-  color: "#6b7280",
   fontSize: "14px",
   lineHeight: 1.5,
 }
