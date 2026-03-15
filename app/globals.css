@@ -963,3 +963,10 @@ body.dark .login-subtitle {
 .chart-shell:hover {
   transform: translateY(-2px);
 }
+.modal-overlay {
+  backdrop-filter: blur(4px);
+}
+
+.modal-box {
+  transform-origin: center;
+}

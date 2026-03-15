@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import AnimatedModal from "../components/AnimatedModal"
 
 type Pedido = {
   id: number
@@ -383,63 +384,54 @@ export default function Pedidos() {
         </table>
       </div>
 
-      {modalAberto && (
-        <div className="modal-overlay">
-          <div className="modal-box">
-            <div className="modal-header">
-              <h3 className="modal-title">
-                {idEmEdicao ? "Editar pedido" : "Novo pedido"}
-              </h3>
+      <AnimatedModal
+  open={modalAberto}
+  onClose={fecharModal}
+  title={idEmEdicao ? "Editar pedido" : "Novo pedido"}
+  footer={
+    <>
+      <button onClick={fecharModal} className="btn btn-secondary">
+        Cancelar
+      </button>
+      <button onClick={salvarPedido} className="btn btn-primary">
+        {idEmEdicao ? "Salvar alterações" : "Cadastrar pedido"}
+      </button>
+    </>
+  }
+>
+  <>
+    {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
 
-              <button onClick={fecharModal} className="icon-btn">
-                ×
-              </button>
-            </div>
+    <div className="grid-2">
+      <input
+        placeholder="Produto"
+        value={produto}
+        onChange={(e) => setProduto(e.target.value)}
+      />
 
-            <div className="modal-body">
-              {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
+      <input
+        placeholder="Fornecedor"
+        value={fornecedor}
+        onChange={(e) => setFornecedor(e.target.value)}
+      />
 
-              <div className="grid-2">
-                <input
-                  placeholder="Produto"
-                  value={produto}
-                  onChange={(e) => setProduto(e.target.value)}
-                />
+      <input
+        type="number"
+        placeholder="Quantidade"
+        value={quantidade}
+        onChange={(e) => setQuantidade(e.target.value)}
+      />
 
-                <input
-                  placeholder="Fornecedor"
-                  value={fornecedor}
-                  onChange={(e) => setFornecedor(e.target.value)}
-                />
-
-                <input
-                  type="number"
-                  placeholder="Quantidade"
-                  value={quantidade}
-                  onChange={(e) => setQuantidade(e.target.value)}
-                />
-
-                <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="Pendente">Pendente</option>
-                  <option value="Encomendado">Encomendado</option>
-                  <option value="Enviado">Enviado</option>
-                  <option value="Recebido">Recebido</option>
-                  <option value="Cancelado">Cancelado</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button onClick={fecharModal} className="btn btn-secondary">
-                Cancelar
-              </button>
-              <button onClick={salvarPedido} className="btn btn-primary">
-                {idEmEdicao ? "Salvar alterações" : "Cadastrar pedido"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <select value={status} onChange={(e) => setStatus(e.target.value)}>
+        <option value="Pendente">Pendente</option>
+        <option value="Encomendado">Encomendado</option>
+        <option value="Enviado">Enviado</option>
+        <option value="Recebido">Recebido</option>
+        <option value="Cancelado">Cancelado</option>
+      </select>
+    </div>
+  </>
+</AnimatedModal>
     </div>
   )
 }

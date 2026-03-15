@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import AnimatedModal from "../components/AnimatedModal"
 
 type Cliente = {
   id: number
@@ -259,60 +260,51 @@ export default function ClientesPage() {
         </table>
       </div>
 
-      {modalAberto && (
-        <div className="modal-overlay">
-          <div className="modal-box">
-            <div className="modal-header">
-              <h3 className="modal-title">
-                {idEmEdicao ? "Editar cliente" : "Novo cliente"}
-              </h3>
+      <AnimatedModal
+  open={modalAberto}
+  onClose={fecharModal}
+  title={idEmEdicao ? "Editar cliente" : "Novo cliente"}
+  footer={
+    <>
+      <button onClick={fecharModal} className="btn btn-secondary">
+        Cancelar
+      </button>
+      <button onClick={salvarCliente} className="btn btn-primary">
+        {idEmEdicao ? "Salvar alterações" : "Cadastrar cliente"}
+      </button>
+    </>
+  }
+>
+  <>
+    {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
 
-              <button onClick={fecharModal} className="icon-btn">
-                ×
-              </button>
-            </div>
+    <div className="grid-2">
+      <input
+        placeholder="Nome"
+        value={nome}
+        onChange={(e) => setNome(e.target.value)}
+      />
 
-            <div className="modal-body">
-              {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
+      <input
+        placeholder="Telefone"
+        value={telefone}
+        onChange={(e) => setTelefone(e.target.value)}
+      />
 
-              <div className="grid-2">
-                <input
-                  placeholder="Nome"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                />
+      <input
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
 
-                <input
-                  placeholder="Telefone"
-                  value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                />
-
-                <input
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-
-                <input
-                  placeholder="Cidade"
-                  value={cidade}
-                  onChange={(e) => setCidade(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button onClick={fecharModal} className="btn btn-secondary">
-                Cancelar
-              </button>
-              <button onClick={salvarCliente} className="btn btn-primary">
-                {idEmEdicao ? "Salvar alterações" : "Cadastrar cliente"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <input
+        placeholder="Cidade"
+        value={cidade}
+        onChange={(e) => setCidade(e.target.value)}
+      />
+    </div>
+  </>
+</AnimatedModal>
     </div>
   )
 }

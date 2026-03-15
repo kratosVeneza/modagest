@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import AnimatedModal from "../components/AnimatedModal"
 
 type Produto = {
   id: number
@@ -262,63 +263,52 @@ export default function Produtos() {
         </table>
       </div>
 
-      {modalAberto && (
-        <div className="modal-overlay">
-          <div className="modal-box">
-            <div className="modal-header">
-              <h3 className="modal-title">
-                {idEmEdicao ? "Editar produto" : "Novo produto"}
-              </h3>
-
-              <button onClick={fecharModal} className="icon-btn">
-                ×
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="grid-2">
-                <input
-                  placeholder="Nome do produto"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                />
-                <input
-                  placeholder="Cor"
-                  value={cor}
-                  onChange={(e) => setCor(e.target.value)}
-                />
-                <input
-                  placeholder="Tamanho"
-                  value={tamanho}
-                  onChange={(e) => setTamanho(e.target.value)}
-                />
-                <input
-                  placeholder="Estoque"
-                  type="number"
-                  value={estoque}
-                  onChange={(e) => setEstoque(e.target.value)}
-                />
-                <input
-                  placeholder="Preço"
-                  type="number"
-                  step="0.01"
-                  value={preco}
-                  onChange={(e) => setPreco(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button onClick={fecharModal} className="btn btn-secondary">
-                Cancelar
-              </button>
-              <button onClick={salvarProduto} className="btn btn-primary">
-                {idEmEdicao ? "Salvar alterações" : "Cadastrar produto"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AnimatedModal
+  open={modalAberto}
+  onClose={fecharModal}
+  title={idEmEdicao ? "Editar produto" : "Novo produto"}
+  footer={
+    <>
+      <button onClick={fecharModal} className="btn btn-secondary">
+        Cancelar
+      </button>
+      <button onClick={salvarProduto} className="btn btn-primary">
+        {idEmEdicao ? "Salvar alterações" : "Cadastrar produto"}
+      </button>
+    </>
+  }
+>
+  <div className="grid-2">
+    <input
+      placeholder="Nome do produto"
+      value={nome}
+      onChange={(e) => setNome(e.target.value)}
+    />
+    <input
+      placeholder="Cor"
+      value={cor}
+      onChange={(e) => setCor(e.target.value)}
+    />
+    <input
+      placeholder="Tamanho"
+      value={tamanho}
+      onChange={(e) => setTamanho(e.target.value)}
+    />
+    <input
+      placeholder="Estoque"
+      type="number"
+      value={estoque}
+      onChange={(e) => setEstoque(e.target.value)}
+    />
+    <input
+      placeholder="Preço"
+      type="number"
+      step="0.01"
+      value={preco}
+      onChange={(e) => setPreco(e.target.value)}
+    />
+  </div>
+</AnimatedModal>
     </div>
   )
 }
