@@ -949,3 +949,17 @@ body.dark .login-card {
 body.dark .login-subtitle {
   color: #94a3b8;
 }
+.section-card,
+.metric-card,
+.chart-shell,
+.data-table-wrap,
+.form-card,
+.soft-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.section-card:hover,
+.metric-card:hover,
+.chart-shell:hover {
+  transform: translateY(-2px);
+}

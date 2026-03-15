@@ -1,6 +1,7 @@
 "use client"
 
 import "./globals.css"
+import PageTransition from "./components/PageTransition"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useRouter, usePathname } from "next/navigation"
@@ -89,7 +90,7 @@ export default function RootLayout({
           </aside>
 
           <main className="main-area">
-            <header className="soft-card top-bar">
+           <header className="soft-card top-bar">
               <div className="top-bar-content">
                 <div className="top-bar-left">
                   <HeaderLoja />
@@ -105,7 +106,9 @@ export default function RootLayout({
               </div>
             </header>
 
-            <section>{children}</section>
+            <section>
+  <PageTransition>{children}</PageTransition>
+</section>
           </main>
         </div>
       </body>
