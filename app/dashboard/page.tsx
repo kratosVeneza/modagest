@@ -1,31 +1,39 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts"
 
-type GraficoItem = {
-  data: string
-  total: number
-}
-
-type VendaBanco = {
+type Venda = {
   id: number
   product_id: number
   customer_id: number | null
   quantidade: number
   valor_total: number
   created_at: string
-  user_id: string
   status?: string
 }
 
-type ProdutoBanco = {
+type Produto = {
   id: number
   nome: string
   sku: string
+  estoque: number
 }
 
-type ClienteBanco = {
+type Cliente = {
   id: number
   nome: string
 }
@@ -33,20 +41,23 @@ type ClienteBanco = {
 type VendaRecente = {
   id: number
   nomeProduto: string
-  skuProduto: string
   nomeCliente: string
   quantidade: number
   valorTotal: number
   created_at: string
 }
 
-type ProdutoMaisVendido = {
-  productId: number
-  nomeProduto: string
-  skuProduto: string
-  totalQuantidade: number
-  totalFaturado: number
+type GraficoDia = {
+  dia: string
+  total: number
 }
+
+type ProdutoGrafico = {
+  name: string
+  value: number
+}
+
+const CORES = ["#2563eb", "#059669", "#dc2626", "#d97706", "#7c3aed"]
 
 export default function Dashboard() {
   const [faturamentoHoje, setFaturamentoHoje] = useState(0)
@@ -55,16 +66,18 @@ export default function Dashboard() {
   const [estoqueBaixo, setEstoqueBaixo] = useState(0)
   const [pedidosPendentes, setPedidosPendentes] = useState(0)
   const [pedidosRecebidos, setPedidosRecebidos] = useState(0)
-  const [graficoVendas, setGraficoVendas] = useState<GraficoItem[]>([])
   const [ultimasVendas, setUltimasVendas] = useState<VendaRecente[]>([])
-  const [produtosMaisVendidos, setProdutosMaisVendidos] = useState<ProdutoMaisVendido[]>([])
+  const [graficoDias, setGraficoDias] = useState<GraficoDia[]>([])
+  const [graficoProdutos, setGraficoProdutos] = useState<ProdutoGrafico[]>([])
   const [mensagem, setMensagem] = useState("")
+  const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
-    carregarDados()
+    carregarDashboard()
   }, [])
 
-  async function carregarDados() {
+  async function carregarDashboard() {
+    setCarregando(true)
     setMensagem("")
 
     const {
@@ -73,67 +86,36 @@ export default function Dashboard() {
 
     if (!user) {
       setMensagem("Você precisa estar logado.")
+      setCarregando(false)
       return
     }
 
-    const agora = new Date()
-
+    const hoje = new Date()
     const inicioHoje = new Date()
     inicioHoje.setHours(0, 0, 0, 0)
 
-    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1)
+    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
 
     const seteDiasAtras = new Date()
-    seteDiasAtras.setDate(agora.getDate() - 6)
+    seteDiasAtras.setDate(hoje.getDate() - 6)
     seteDiasAtras.setHours(0, 0, 0, 0)
 
-    const { data: vendasHojeData } = await supabase
+    const { data: vendasAtivas } = await supabase
       .from("sales")
       .select("*")
       .eq("user_id", user.id)
       .neq("status", "Cancelada")
-      .gte("created_at", inicioHoje.toISOString())
+      .order("created_at", { ascending: false })
 
-    if (vendasHojeData) {
-      const totalHoje = vendasHojeData.reduce(
-        (soma, venda) => soma + Number(venda.valor_total),
-        0
-      )
-
-      const totalItensHoje = vendasHojeData.reduce(
-        (soma, venda) => soma + Number(venda.quantidade),
-        0
-      )
-
-      setFaturamentoHoje(totalHoje)
-      setProdutosVendidosHoje(totalItensHoje)
-    }
-
-    const { data: vendasMesData } = await supabase
-      .from("sales")
-      .select("*")
-      .eq("user_id", user.id)
-      .neq("status", "Cancelada")
-      .gte("created_at", inicioMes.toISOString())
-
-    if (vendasMesData) {
-      const totalMes = vendasMesData.reduce(
-        (soma, venda) => soma + Number(venda.valor_total),
-        0
-      )
-
-      setFaturamentoMes(totalMes)
-    }
-
-    const { data: produtosData } = await supabase
+    const { data: produtos } = await supabase
       .from("products")
-      .select("*")
+      .select("id, nome, sku, estoque")
       .eq("user_id", user.id)
-      .lt("estoque", 5)
 
-    if (produtosData) {
-      setEstoqueBaixo(produtosData.length)
-    }
+    const { data: clientes } = await supabase
+      .from("customers")
+      .select("id, nome")
+      .eq("user_id", user.id)
 
     const { data: pedidosPendentesData } = await supabase
       .from("orders")
@@ -141,145 +123,103 @@ export default function Dashboard() {
       .eq("user_id", user.id)
       .in("status", ["Pendente", "Encomendado", "Enviado"])
 
-    if (pedidosPendentesData) {
-      setPedidosPendentes(pedidosPendentesData.length)
-    }
-
     const { data: pedidosRecebidosData } = await supabase
       .from("orders")
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "Recebido")
 
-    if (pedidosRecebidosData) {
-      setPedidosRecebidos(pedidosRecebidosData.length)
+    const vendas = (vendasAtivas ?? []) as Venda[]
+    const produtosLista = (produtos ?? []) as Produto[]
+    const clientesLista = (clientes ?? []) as Cliente[]
+
+    const vendasHoje = vendas.filter((v) => new Date(v.created_at) >= inicioHoje)
+    const vendasMes = vendas.filter((v) => new Date(v.created_at) >= inicioMes)
+
+    setFaturamentoHoje(
+      vendasHoje.reduce((soma, v) => soma + Number(v.valor_total), 0)
+    )
+
+    setProdutosVendidosHoje(
+      vendasHoje.reduce((soma, v) => soma + Number(v.quantidade), 0)
+    )
+
+    setFaturamentoMes(
+      vendasMes.reduce((soma, v) => soma + Number(v.valor_total), 0)
+    )
+
+    setEstoqueBaixo(produtosLista.filter((p) => Number(p.estoque) < 5).length)
+    setPedidosPendentes((pedidosPendentesData ?? []).length)
+    setPedidosRecebidos((pedidosRecebidosData ?? []).length)
+
+    const recentes = vendas.slice(0, 5).map((venda) => {
+      const produto = produtosLista.find((p) => p.id === venda.product_id)
+      const cliente = clientesLista.find((c) => c.id === venda.customer_id)
+
+      return {
+        id: venda.id,
+        nomeProduto: produto?.nome || "Produto removido",
+        nomeCliente: cliente?.nome || "Sem cliente",
+        quantidade: venda.quantidade,
+        valorTotal: Number(venda.valor_total),
+        created_at: venda.created_at,
+      }
+    })
+
+    setUltimasVendas(recentes)
+
+    const diasBase: GraficoDia[] = []
+    for (let i = 0; i < 7; i++) {
+      const data = new Date()
+      data.setDate(hoje.getDate() - (6 - i))
+      diasBase.push({
+        dia: data.toLocaleDateString("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+        }),
+        total: 0,
+      })
     }
 
-    const { data: vendasUltimosDias } = await supabase
-      .from("sales")
-      .select("*")
-      .eq("user_id", user.id)
-      .neq("status", "Cancelada")
-      .gte("created_at", seteDiasAtras.toISOString())
-      .order("created_at", { ascending: true })
+    vendas
+      .filter((v) => new Date(v.created_at) >= seteDiasAtras)
+      .forEach((venda) => {
+        const chave = new Date(venda.created_at).toLocaleDateString("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+        })
+        const item = diasBase.find((d) => d.dia === chave)
+        if (item) item.total += Number(venda.valor_total)
+      })
 
-    if (vendasUltimosDias) {
-      const dias: GraficoItem[] = []
+    setGraficoDias(diasBase)
 
-      for (let i = 0; i < 7; i++) {
-        const data = new Date()
-        data.setDate(agora.getDate() - (6 - i))
-        const chave = data.toLocaleDateString("pt-BR")
-        dias.push({ data: chave, total: 0 })
+    const mapaProdutos = new Map<number, ProdutoGrafico>()
+
+    vendas.forEach((venda) => {
+      const produto = produtosLista.find((p) => p.id === venda.product_id)
+      const nome = produto?.nome || "Produto removido"
+
+      if (!mapaProdutos.has(venda.product_id)) {
+        mapaProdutos.set(venda.product_id, {
+          name: nome,
+          value: 0,
+        })
       }
 
-      vendasUltimosDias.forEach((venda) => {
-        const dataVenda = new Date(venda.created_at).toLocaleDateString("pt-BR")
-        const item = dias.find((d) => d.data === dataVenda)
+      mapaProdutos.get(venda.product_id)!.value += Number(venda.quantidade)
+    })
 
-        if (item) {
-          item.total += Number(venda.valor_total)
-        }
-      })
+    const ranking = Array.from(mapaProdutos.values())
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
 
-      setGraficoVendas(dias)
-    }
-
-    const { data: vendasRecentesData } = await supabase
-      .from("sales")
-      .select("*")
-      .eq("user_id", user.id)
-      .neq("status", "Cancelada")
-      .order("created_at", { ascending: false })
-      .limit(5)
-
-    const { data: produtosTodosData } = await supabase
-      .from("products")
-      .select("id, nome, sku")
-      .eq("user_id", user.id)
-
-    const { data: clientesTodosData } = await supabase
-      .from("customers")
-      .select("id, nome")
-      .eq("user_id", user.id)
-
-    if (vendasRecentesData && produtosTodosData && clientesTodosData) {
-      const vendasTipadas = vendasRecentesData as VendaBanco[]
-      const produtosTipados = produtosTodosData as ProdutoBanco[]
-      const clientesTipados = clientesTodosData as ClienteBanco[]
-
-      const vendasFormatadas: VendaRecente[] = vendasTipadas.map((venda) => {
-        const produtoRelacionado = produtosTipados.find(
-          (produto) => produto.id === venda.product_id
-        )
-
-        const clienteRelacionado = clientesTipados.find(
-          (cliente) => cliente.id === venda.customer_id
-        )
-
-        return {
-          id: venda.id,
-          nomeProduto: produtoRelacionado?.nome || "Produto removido",
-          skuProduto: produtoRelacionado?.sku || "-",
-          nomeCliente: clienteRelacionado?.nome || "Sem cliente",
-          quantidade: venda.quantidade,
-          valorTotal: Number(venda.valor_total),
-          created_at: venda.created_at,
-        }
-      })
-
-      setUltimasVendas(vendasFormatadas)
-
-      const { data: todasVendasAtivasData } = await supabase
-        .from("sales")
-        .select("*")
-        .eq("user_id", user.id)
-        .neq("status", "Cancelada")
-
-      const todasVendasAtivas = (todasVendasAtivasData ?? []) as VendaBanco[]
-
-      const agrupado = new Map<number, ProdutoMaisVendido>()
-
-      todasVendasAtivas.forEach((venda) => {
-        const produtoRelacionado = produtosTipados.find(
-          (produto) => produto.id === venda.product_id
-        )
-
-        const nomeProduto = produtoRelacionado?.nome || "Produto removido"
-        const skuProduto = produtoRelacionado?.sku || "-"
-
-        if (!agrupado.has(venda.product_id)) {
-          agrupado.set(venda.product_id, {
-            productId: venda.product_id,
-            nomeProduto,
-            skuProduto,
-            totalQuantidade: 0,
-            totalFaturado: 0,
-          })
-        }
-
-        const item = agrupado.get(venda.product_id)!
-
-        item.totalQuantidade += Number(venda.quantidade)
-        item.totalFaturado += Number(venda.valor_total)
-      })
-
-      const ranking = Array.from(agrupado.values())
-        .sort((a, b) => b.totalQuantidade - a.totalQuantidade)
-        .slice(0, 5)
-
-      setProdutosMaisVendidos(ranking)
-    }
+    setGraficoProdutos(ranking)
+    setCarregando(false)
   }
 
-  const maxGrafico = useMemo(() => {
-    const maior = Math.max(...graficoVendas.map((item) => item.total), 0)
-    return maior === 0 ? 1 : maior
-  }, [graficoVendas])
-
   function formatarData(dataIso: string) {
-    const data = new Date(dataIso)
-    return data.toLocaleString("pt-BR")
+    return new Date(dataIso).toLocaleString("pt-BR")
   }
 
   return (
@@ -289,7 +229,7 @@ export default function Dashboard() {
 
       {mensagem && <p>{mensagem}</p>}
 
-      <div className="grid-3" style={{ marginTop: "24px", marginBottom: "24px" }}>
+      <div className="grid-3" style={{ marginTop: 24, marginBottom: 24 }}>
         <div className="metric-card">
           <p className="metric-label">Faturamento hoje</p>
           <p className="metric-value">R$ {faturamentoHoje.toFixed(2)}</p>
@@ -311,7 +251,7 @@ export default function Dashboard() {
         <div className="metric-card">
           <p className="metric-label">Estoque baixo</p>
           <p className="metric-value">{estoqueBaixo}</p>
-          <div className="metric-helper">Produtos abaixo do limite</div>
+          <div className="metric-helper">Abaixo do limite</div>
         </div>
 
         <div className="metric-card">
@@ -327,57 +267,75 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="chart-shell" style={{ marginBottom: "24px" }}>
-        <h3 className="dashboard-block-title">Faturamento dos últimos 7 dias</h3>
-        <p className="dashboard-block-subtitle">
-          Visão rápida da evolução recente das vendas
-        </p>
+      <div className="dashboard-two-columns" style={{ marginBottom: 24 }}>
+        <div className="chart-shell">
+          <h3 className="dashboard-block-title">Faturamento por dia</h3>
+          <p className="dashboard-block-subtitle">Últimos 7 dias</p>
 
-        <div style={graficoArea}>
-          {graficoVendas.map((item) => {
-            const altura = `${(item.total / maxGrafico) * 180}px`
+          <div style={{ width: "100%", height: 300, marginTop: 16 }}>
+            <ResponsiveContainer>
+              <BarChart data={graficoDias}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="dia" />
+                <YAxis />
+               <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
+                <Bar dataKey="total" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-            return (
-              <div key={item.data} style={colunaBox}>
-                <div style={valorTopo}>R$ {item.total.toFixed(0)}</div>
+        <div className="chart-shell">
+          <h3 className="dashboard-block-title">Produtos mais vendidos</h3>
+          <p className="dashboard-block-subtitle">Top 5 por quantidade</p>
 
-                <div style={barraContainer}>
-                  <div
-                    style={{
-                      ...barra,
-                      height: altura,
-                    }}
-                  />
-                </div>
-
-                <div style={rotulo}>{item.data}</div>
-              </div>
-            )
-          })}
+          <div style={{ width: "100%", height: 300, marginTop: 16 }}>
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie
+                  data={graficoProdutos}
+                  dataKey="value"
+                  nameKey="name"
+                  outerRadius={100}
+                  label
+                >
+                  {graficoProdutos.map((_, index) => (
+                    <Cell key={index} fill={CORES[index % CORES.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
-      <div className="dashboard-two-columns">
-        <div className="section-card">
-          <h3 className="dashboard-block-title">Últimas vendas</h3>
-          <p className="dashboard-block-subtitle">
-            As 5 movimentações mais recentes
-          </p>
+      <div className="section-card">
+        <h3 className="dashboard-block-title">Últimas vendas</h3>
+        <p className="dashboard-block-subtitle">As 5 movimentações mais recentes</p>
 
-          <div className="data-table-wrap" style={{ marginTop: "16px" }}>
-            <table className="premium-table" style={tabela}>
-              <thead>
+        <div className="data-table-wrap" style={{ marginTop: 16 }}>
+          <table className="premium-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={th}>Cliente</th>
+                <th style={th}>Produto</th>
+                <th style={th}>Qtd.</th>
+                <th style={th}>Valor</th>
+                <th style={th}>Data</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {carregando ? (
                 <tr>
-                  <th style={th}>Cliente</th>
-                  <th style={th}>Produto</th>
-                  <th style={th}>Qtd.</th>
-                  <th style={th}>Valor</th>
-                  <th style={th}>Data</th>
+                  <td colSpan={5} style={{ padding: 20 }}>
+                    Carregando...
+                  </td>
                 </tr>
-              </thead>
-
-              <tbody>
-                {ultimasVendas.map((venda) => (
+              ) : ultimasVendas.length > 0 ? (
+                ultimasVendas.map((venda) => (
                   <tr key={venda.id}>
                     <td style={td}>{venda.nomeCliente}</td>
                     <td style={td}>{venda.nomeProduto}</td>
@@ -385,113 +343,20 @@ export default function Dashboard() {
                     <td style={td}>R$ {venda.valorTotal.toFixed(2)}</td>
                     <td style={td}>{formatarData(venda.created_at)}</td>
                   </tr>
-                ))}
-
-                {ultimasVendas.length === 0 && (
-                  <tr>
-                    <td style={tdVazio} colSpan={5}>
-                      Nenhuma venda recente encontrada.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="section-card">
-          <h3 className="dashboard-block-title">Produtos mais vendidos</h3>
-          <p className="dashboard-block-subtitle">
-            Ranking dos itens com maior saída
-          </p>
-
-          <div className="data-table-wrap" style={{ marginTop: "16px" }}>
-            <table className="premium-table" style={tabela}>
-              <thead>
+                ))
+              ) : (
                 <tr>
-                  <th style={th}>Produto</th>
-                  <th style={th}>SKU</th>
-                  <th style={th}>Qtd. vendida</th>
-                  <th style={th}>Faturado</th>
+                  <td style={tdVazio} colSpan={5}>
+                    Nenhuma venda recente encontrada.
+                  </td>
                 </tr>
-              </thead>
-
-              <tbody>
-                {produtosMaisVendidos.map((produto) => (
-                  <tr key={produto.productId}>
-                    <td style={td}>{produto.nomeProduto}</td>
-                    <td style={td}>{produto.skuProduto}</td>
-                    <td style={td}>{produto.totalQuantidade}</td>
-                    <td style={td}>R$ {produto.totalFaturado.toFixed(2)}</td>
-                  </tr>
-                ))}
-
-                {produtosMaisVendidos.length === 0 && (
-                  <tr>
-                    <td style={tdVazio} colSpan={4}>
-                      Nenhum produto vendido ainda.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   )
-}
-
-const graficoArea = {
-  display: "flex",
-  alignItems: "flex-end",
-  gap: "16px",
-  height: "260px",
-  marginTop: "20px",
-  overflowX: "auto" as const,
-}
-
-const colunaBox = {
-  minWidth: "90px",
-  display: "flex",
-  flexDirection: "column" as const,
-  alignItems: "center",
-  justifyContent: "flex-end",
-}
-
-const valorTopo = {
-  fontSize: "12px",
-  color: "#374151",
-  marginBottom: "8px",
-}
-
-const barraContainer = {
-  width: "42px",
-  height: "180px",
-  display: "flex",
-  alignItems: "flex-end",
-  justifyContent: "center",
-  background: "#f3f4f6",
-  borderRadius: "8px",
-  overflow: "hidden",
-}
-
-const barra = {
-  width: "100%",
-  background: "#2563eb",
-  borderRadius: "8px 8px 0 0",
-}
-
-const rotulo = {
-  marginTop: "10px",
-  fontSize: "12px",
-  color: "#6b7280",
-  textAlign: "center" as const,
-}
-
-const tabela = {
-  width: "100%",
-  borderCollapse: "collapse" as const,
 }
 
 const th = {
