@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 type VendaBanco = {
   id: number
@@ -177,7 +179,7 @@ export default function HistoricoVendas() {
       .from("sales")
       .update({
         status: "Cancelada",
-        estoque_devolvido: true
+        estoque_devolvido: true,
       })
       .eq("id", venda.id)
       .eq("user_id", user.id)
@@ -238,7 +240,7 @@ export default function HistoricoVendas() {
       "Valor Unitario",
       "Valor Total",
       "Status",
-      "Data"
+      "Data",
     ]
 
     const linhas = vendasFiltradas.map((venda) => [
@@ -249,7 +251,7 @@ export default function HistoricoVendas() {
       venda.valor_unitario.toFixed(2),
       venda.valor_total.toFixed(2),
       venda.status,
-      formatarData(venda.created_at)
+      formatarData(venda.created_at),
     ])
 
     const conteudo = [cabecalho, ...linhas]
@@ -259,7 +261,7 @@ export default function HistoricoVendas() {
       .join("\n")
 
     const blob = new Blob([conteudo], {
-      type: "text/csv;charset=utf-8;"
+      type: "text/csv;charset=utf-8;",
     })
 
     const url = URL.createObjectURL(blob)
@@ -270,10 +272,60 @@ export default function HistoricoVendas() {
     URL.revokeObjectURL(url)
   }
 
+  function exportarPDF() {
+    if (vendasFiltradas.length === 0) {
+      setMensagem("Não há vendas para exportar.")
+      return
+    }
+
+    const doc = new jsPDF()
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(18)
+    doc.text("ModaGest - Histórico de Vendas", 14, 18)
+
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(11)
+    doc.text(`Total no filtro: R$ ${totalFiltrado.toFixed(2)}`, 14, 26)
+    doc.text(`Quantidade de vendas: ${vendasFiltradas.length}`, 14, 32)
+
+    autoTable(doc, {
+      startY: 40,
+      head: [[
+        "Cliente",
+        "Produto",
+        "SKU",
+        "Quantidade",
+        "Valor Unit.",
+        "Valor Total",
+        "Status",
+        "Data",
+      ]],
+      body: vendasFiltradas.map((venda) => [
+        venda.nomeCliente,
+        venda.nomeProduto,
+        venda.skuProduto,
+        String(venda.quantidade),
+        `R$ ${venda.valor_unitario.toFixed(2)}`,
+        `R$ ${venda.valor_total.toFixed(2)}`,
+        venda.status,
+        formatarData(venda.created_at),
+      ]),
+      styles: {
+        fontSize: 8.5,
+      },
+      headStyles: {
+        fillColor: [37, 99, 235],
+      },
+    })
+
+    doc.save("historico_vendas.pdf")
+  }
+
   return (
     <div>
-      <h2>Histórico de Vendas</h2>
-      <p>Lista de vendas registradas no sistema.</p>
+      <h2 className="page-title">Histórico de Vendas</h2>
+      <p className="page-subtitle">Lista de vendas registradas no sistema.</p>
 
       {mensagem && <p>{mensagem}</p>}
 
@@ -299,9 +351,15 @@ export default function HistoricoVendas() {
           onChange={(e) => setDataFim(e.target.value)}
         />
 
-       <button onClick={exportarCSV} className="btn btn-primary">
-          Exportar CSV
-        </button>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button onClick={exportarCSV} className="btn btn-secondary">
+            Exportar CSV
+          </button>
+
+          <button onClick={exportarPDF} className="btn btn-primary">
+            Exportar PDF
+          </button>
+        </div>
       </div>
 
       <div style={resumoBox}>
@@ -341,20 +399,20 @@ export default function HistoricoVendas() {
               <td style={td}>
                 <span
                   className={
-                  venda.status === "Cancelada"
-                  ? "status-pill status-red"
-                  : "status-pill status-green"
-                 }
-               >
-               {venda.status}
-              </span>
+                    venda.status === "Cancelada"
+                      ? "status-pill status-red"
+                      : "status-pill status-green"
+                  }
+                >
+                  {venda.status}
+                </span>
               </td>
               <td style={td}>{formatarData(venda.created_at)}</td>
               <td style={td}>
                 {venda.status !== "Cancelada" ? (
                   <button
-                   onClick={() => cancelarVenda(venda)}
-                   className="btn btn-danger btn-sm"
+                    onClick={() => cancelarVenda(venda)}
+                    className="btn btn-danger btn-sm"
                   >
                     Cancelar venda
                   </button>
@@ -381,18 +439,18 @@ export default function HistoricoVendas() {
 const tabela = {
   width: "100%",
   borderCollapse: "collapse" as const,
-  marginTop: "20px"
+  marginTop: "20px",
 }
 
 const th = {
   textAlign: "left" as const,
   borderBottom: "1px solid #d1d5db",
-  padding: "12px"
+  padding: "12px",
 }
 
 const td = {
   borderBottom: "1px solid #e5e7eb",
-  padding: "12px"
+  padding: "12px",
 }
 
 const tdVazio = {
@@ -444,31 +502,6 @@ const contadorResultados = {
 const totalResumo = {
   fontSize: "14px",
   color: "#111827",
-}
-
-const statusBadge = {
-  padding: "4px 8px",
-  borderRadius: "999px",
-  fontSize: "12px",
-  fontWeight: 600,
-}
-
-const botaoCancelarVenda = {
-  background: "#dc2626",
-  color: "white",
-  border: "none",
-  padding: "8px 10px",
-  borderRadius: "6px",
-  cursor: "pointer",
-}
-
-const botaoExportar = {
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: "8px",
-  cursor: "pointer",
 }
 
 const textoCancelado = {

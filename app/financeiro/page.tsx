@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 type Venda = {
   id: number
@@ -138,17 +140,61 @@ export default function Financeiro() {
     URL.revokeObjectURL(url)
   }
 
+  function exportarPDF() {
+    if (todasVendas.length === 0) {
+      setMensagem("Não há dados financeiros para exportar.")
+      return
+    }
+
+    const doc = new jsPDF()
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(18)
+    doc.text("ModaGest - Relatório Financeiro", 14, 18)
+
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(11)
+    doc.text(`Faturamento total: R$ ${faturamentoTotal.toFixed(2)}`, 14, 26)
+    doc.text(`Quantidade vendida: ${quantidadeVendida}`, 14, 32)
+    doc.text(`Ticket médio: R$ ${ticketMedio.toFixed(2)}`, 14, 38)
+
+    autoTable(doc, {
+      startY: 46,
+      head: [["Cliente", "Quantidade", "Valor Total", "Data"]],
+      body: todasVendas.map((venda) => [
+        venda.nomeCliente,
+        String(venda.quantidade),
+        `R$ ${Number(venda.valor_total).toFixed(2)}`,
+        formatarData(venda.created_at),
+      ]),
+      styles: {
+        fontSize: 9,
+      },
+      headStyles: {
+        fillColor: [37, 99, 235],
+      },
+    })
+
+    doc.save("financeiro.pdf")
+  }
+
   return (
     <div>
-      <h2>Financeiro</h2>
-      <p>Resumo financeiro da loja.</p>
+      <h2 className="page-title">Financeiro</h2>
+      <p className="page-subtitle">Resumo financeiro da loja.</p>
 
       {mensagem && <p>{mensagem}</p>}
 
       <div style={acoesTopo}>
-        <button onClick={exportarCSV} className="btn btn-primary">
-          Exportar CSV
-        </button>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button onClick={exportarCSV} className="btn btn-secondary">
+            Exportar CSV
+          </button>
+
+          <button onClick={exportarPDF} className="btn btn-primary">
+            Exportar PDF
+          </button>
+        </div>
       </div>
 
       <div className="grid-3">
@@ -210,30 +256,6 @@ const acoesTopo = {
   justifyContent: "flex-end",
   marginTop: "20px",
   marginBottom: "20px",
-}
-
-const botaoExportar = {
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: "8px",
-  cursor: "pointer",
-}
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
-  gap: "16px",
-  marginTop: "24px",
-  marginBottom: "24px",
-}
-
-const card = {
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
-  borderRadius: "12px",
-  padding: "20px",
 }
 
 const blocoTabela = {
