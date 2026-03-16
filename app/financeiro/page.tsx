@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { montarCabecalhoPDF } from "@/lib/pdfHeader"
+import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 
 type Venda = {
   id: number
@@ -27,6 +29,11 @@ type VendaExibicao = {
   nomeCliente: string
 }
 
+type Loja = {
+  nome_loja?: string | null
+  logo_url?: string | null
+}
+
 export default function Financeiro() {
   const [faturamentoTotal, setFaturamentoTotal] = useState(0)
   const [quantidadeVendida, setQuantidadeVendida] = useState(0)
@@ -34,6 +41,8 @@ export default function Financeiro() {
   const [ultimasVendas, setUltimasVendas] = useState<VendaExibicao[]>([])
   const [todasVendas, setTodasVendas] = useState<VendaExibicao[]>([])
   const [mensagem, setMensagem] = useState("")
+  const [nomeLoja, setNomeLoja] = useState("ModaGest")
+  const [logoUrl, setLogoUrl] = useState("")
 
   useEffect(() => {
     carregarFinanceiro()
@@ -49,6 +58,22 @@ export default function Financeiro() {
     if (!user) {
       setMensagem("Você precisa estar logado.")
       return
+    }
+
+    const { data: lojaData } = await supabase
+      .from("stores")
+      .select("nome_loja, logo_url")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    const loja = (lojaData ?? null) as Loja | null
+
+    if (loja?.nome_loja) {
+      setNomeLoja(loja.nome_loja)
+    }
+
+    if (loja?.logo_url) {
+      setLogoUrl(loja.logo_url)
     }
 
     const { data: vendasData, error } = await supabase
@@ -140,26 +165,30 @@ export default function Financeiro() {
     URL.revokeObjectURL(url)
   }
 
-  function exportarPDF() {
+  async function exportarPDF() {
     if (todasVendas.length === 0) {
       setMensagem("Não há dados financeiros para exportar.")
       return
     }
 
     const doc = new jsPDF()
+    const logoDataUrl = await imageUrlToDataUrl(logoUrl)
 
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(18)
-    doc.text("ModaGest - Relatório Financeiro", 14, 18)
+    const startY = await montarCabecalhoPDF({
+      doc,
+      titulo: "Relatório Financeiro",
+      nomeLoja,
+      logoDataUrl,
+    })
 
     doc.setFont("helvetica", "normal")
     doc.setFontSize(11)
-    doc.text(`Faturamento total: R$ ${faturamentoTotal.toFixed(2)}`, 14, 26)
-    doc.text(`Quantidade vendida: ${quantidadeVendida}`, 14, 32)
-    doc.text(`Ticket médio: R$ ${ticketMedio.toFixed(2)}`, 14, 38)
+    doc.text(`Faturamento total: R$ ${faturamentoTotal.toFixed(2)}`, 14, startY)
+    doc.text(`Quantidade vendida: ${quantidadeVendida}`, 14, startY + 6)
+    doc.text(`Ticket médio: R$ ${ticketMedio.toFixed(2)}`, 14, startY + 12)
 
     autoTable(doc, {
-      startY: 46,
+      startY: startY + 20,
       head: [["Cliente", "Quantidade", "Valor Total", "Data"]],
       body: todasVendas.map((venda) => [
         venda.nomeCliente,
