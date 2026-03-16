@@ -1,0 +1,104 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
+
+type Movimento = {
+  id: number
+  tipo: string
+  quantidade: number
+  motivo: string
+  created_at: string
+  product_id: number
+  nomeProduto?: string
+}
+
+export default function EstoqueHistorico() {
+  const [movimentos, setMovimentos] = useState<Movimento[]>([])
+
+  useEffect(() => {
+    carregarMovimentos()
+  }, [])
+
+  async function carregarMovimentos() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    const { data } = await supabase
+      .from("stock_movements")
+      .select("*")
+      .eq("user_id", user?.id)
+      .order("created_at", { ascending: false })
+
+    const { data: produtos } = await supabase
+      .from("products")
+      .select("id, nome")
+      .eq("user_id", user?.id)
+
+    const lista = data?.map((mov) => {
+      const produto = produtos?.find((p) => p.id === mov.product_id)
+
+      return {
+        ...mov,
+        nomeProduto: produto?.nome || "Produto removido",
+      }
+    })
+
+    setMovimentos(lista || [])
+  }
+
+  function formatarData(dataIso: string) {
+    return new Date(dataIso).toLocaleString("pt-BR")
+  }
+
+  return (
+    <div>
+      <h2 className="page-title">Movimentação de Estoque</h2>
+      <p className="page-subtitle">
+        Histórico completo de alterações no estoque.
+      </p>
+
+      <table style={tabela}>
+        <thead>
+          <tr>
+            <th style={th}>Produto</th>
+            <th style={th}>Tipo</th>
+            <th style={th}>Quantidade</th>
+            <th style={th}>Motivo</th>
+            <th style={th}>Data</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {movimentos.map((mov) => (
+            <tr key={mov.id}>
+              <td style={td}>{mov.nomeProduto}</td>
+              <td style={td}>{mov.tipo}</td>
+              <td style={td}>{mov.quantidade}</td>
+              <td style={td}>{mov.motivo}</td>
+              <td style={td}>{formatarData(mov.created_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+const tabela = {
+  width: "100%",
+  borderCollapse: "collapse" as const,
+  marginTop: "20px",
+}
+
+const th = {
+  textAlign: "left" as const,
+  borderBottom: "1px solid #d1d5db",
+  padding: "12px",
+}
+
+const td = {
+  borderBottom: "1px solid #e5e7eb",
+  padding: "12px",
+}
