@@ -1261,3 +1261,10 @@ body.dark .period-btn.active {
   color: white;
   border-color: transparent;
 }
+.dashboard-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}

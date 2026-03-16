@@ -351,7 +351,52 @@ export default function Dashboard() {
   function formatarData(dataIso: string) {
     return new Date(dataIso).toLocaleString("pt-BR")
   }
+  function exportarDashboardCSV() {
+  const linhas: string[] = []
 
+  linhas.push(`"ModaGest Dashboard"`)
+  linhas.push(`"Período";"${periodo}"`)
+  linhas.push("")
+
+  linhas.push(`"RESUMO"`)
+  linhas.push(`"Faturamento do período";"${faturamentoPrincipal.toFixed(2)}"`)
+  linhas.push(`"Comparação";"${faturamentoComparacao.toFixed(2)}"`)
+  linhas.push(`"Itens vendidos";"${produtosVendidosPeriodo}"`)
+  linhas.push(`"Estoque baixo";"${estoqueBaixo}"`)
+  linhas.push(`"Pedidos pendentes";"${pedidosPendentes}"`)
+  linhas.push(`"Pedidos recebidos";"${pedidosRecebidos}"`)
+  linhas.push("")
+
+  linhas.push(`"RECEITA POR DIA"`)
+  linhas.push(`"Dia";"Total"`)
+  graficoDias.forEach((item) => {
+    linhas.push(`"${item.dia}";"${item.total.toFixed(2)}"`)
+  })
+  linhas.push("")
+
+  linhas.push(`"PRODUTOS MAIS VENDIDOS"`)
+  linhas.push(`"Produto";"Quantidade"`)
+  rankingProdutos.forEach((item) => {
+    linhas.push(`"${item.nome.replace(/"/g, '""')}";"${item.quantidade}"`)
+  })
+  linhas.push("")
+
+  linhas.push(`"ÚLTIMAS VENDAS"`)
+  linhas.push(`"Cliente";"Produto";"Quantidade";"Valor";"Data"`)
+  ultimasVendas.forEach((item) => {
+    linhas.push(
+      `"${item.nomeCliente.replace(/"/g, '""')}";"${item.nomeProduto.replace(/"/g, '""')}";"${item.quantidade}";"${item.valorTotal.toFixed(2)}";"${formatarData(item.created_at)}"`
+    )
+  })
+  const conteudo = linhas.join("\n")
+  const blob = new Blob([conteudo], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = `dashboard_${periodo}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
   function calcularTendencia(atual: number, anterior: number): TrendInfo {
     if (anterior === 0 && atual > 0) {
       return {
@@ -406,6 +451,11 @@ export default function Dashboard() {
     <div>
       <h2 className="page-title">Dashboard</h2>
       <p className="page-subtitle">Resumo geral da operação da sua loja.</p>
+      <div className="dashboard-actions">
+  <button onClick={exportarDashboardCSV} className="btn btn-primary">
+    Exportar CSV
+  </button>
+</div>
 
       {mensagem && <p>{mensagem}</p>}
 
