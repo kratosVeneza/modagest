@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { montarCabecalhoPDF } from "@/lib/pdfHeader"
+import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 
 type VendaBanco = {
   id: number
@@ -30,6 +32,11 @@ type ClienteBanco = {
   nome: string
 }
 
+type Loja = {
+  nome_loja?: string | null
+  logo_url?: string | null
+}
+
 type VendaExibicao = {
   id: number
   product_id: number
@@ -51,6 +58,8 @@ export default function HistoricoVendas() {
   const [busca, setBusca] = useState("")
   const [dataInicio, setDataInicio] = useState("")
   const [dataFim, setDataFim] = useState("")
+  const [nomeLoja, setNomeLoja] = useState("ModaGest")
+  const [logoUrl, setLogoUrl] = useState("")
 
   useEffect(() => {
     carregarVendas()
@@ -66,6 +75,22 @@ export default function HistoricoVendas() {
     if (!user) {
       setMensagem("Você precisa estar logado.")
       return
+    }
+
+    const { data: lojaData } = await supabase
+      .from("stores")
+      .select("nome_loja, logo_url")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    const loja = (lojaData ?? null) as Loja | null
+
+    if (loja?.nome_loja) {
+      setNomeLoja(loja.nome_loja)
+    }
+
+    if (loja?.logo_url) {
+      setLogoUrl(loja.logo_url)
     }
 
     const { data: vendasData, error: erroVendas } = await supabase
@@ -272,25 +297,29 @@ export default function HistoricoVendas() {
     URL.revokeObjectURL(url)
   }
 
-  function exportarPDF() {
+  async function exportarPDF() {
     if (vendasFiltradas.length === 0) {
       setMensagem("Não há vendas para exportar.")
       return
     }
 
     const doc = new jsPDF()
+    const logoDataUrl = await imageUrlToDataUrl(logoUrl)
 
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(18)
-    doc.text("ModaGest - Histórico de Vendas", 14, 18)
+    const startY = await montarCabecalhoPDF({
+      doc,
+      titulo: "Histórico de Vendas",
+      nomeLoja,
+      logoDataUrl,
+    })
 
     doc.setFont("helvetica", "normal")
     doc.setFontSize(11)
-    doc.text(`Total no filtro: R$ ${totalFiltrado.toFixed(2)}`, 14, 26)
-    doc.text(`Quantidade de vendas: ${vendasFiltradas.length}`, 14, 32)
+    doc.text(`Total no filtro: R$ ${totalFiltrado.toFixed(2)}`, 14, startY)
+    doc.text(`Quantidade de vendas: ${vendasFiltradas.length}`, 14, startY + 6)
 
     autoTable(doc, {
-      startY: 40,
+      startY: startY + 14,
       head: [[
         "Cliente",
         "Produto",
