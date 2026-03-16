@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 
 type Produto = {
   id: number
@@ -52,7 +53,7 @@ export default function Vendas() {
       return
     }
 
-    setProdutos(data || [])
+    setProdutos((data ?? []) as Produto[])
   }
 
   async function carregarClientes() {
@@ -154,6 +155,14 @@ export default function Vendas() {
       return
     }
 
+    await registrarMovimentoEstoque({
+      productId: produto.id,
+      userId: user.id,
+      tipo: "saida",
+      quantidade: qtd,
+      motivo: "Venda",
+    })
+
     const { error: erroEstoque } = await supabase
       .from("products")
       .update({ estoque: novoEstoque })
@@ -188,10 +197,7 @@ export default function Vendas() {
           <h3 style={{ marginTop: 0 }}>Nova venda</h3>
 
           <div className="grid-2">
-            <select
-              value={produtoId}
-              onChange={(e) => setProdutoId(e.target.value)}
-            >
+            <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
               <option value="">Selecione um produto</option>
               {produtos.map((produto) => (
                 <option key={produto.id} value={produto.id}>
@@ -200,10 +206,7 @@ export default function Vendas() {
               ))}
             </select>
 
-            <select
-              value={clienteId}
-              onChange={(e) => setClienteId(e.target.value)}
-            >
+            <select value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
               <option value="">Cliente (opcional)</option>
               {clientes.map((cliente) => (
                 <option key={cliente.id} value={cliente.id}>
@@ -269,7 +272,7 @@ export default function Vendas() {
             <strong
               style={{
                 color:
-                  produtoSelecionado && estoqueRestante < 0 ? "#991b1b" : "#111827",
+                  produtoSelecionado && estoqueRestante < 0 ? "#991b1b" : undefined,
               }}
             >
               {produtoSelecionado ? estoqueRestante : 0}
