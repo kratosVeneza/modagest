@@ -6,6 +6,7 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
+import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 
 type VendaBanco = {
   id: number
@@ -198,6 +199,14 @@ export default function HistoricoVendas() {
         setMensagem("Erro ao devolver o item ao estoque.")
         return
       }
+
+      await registrarMovimentoEstoque({
+        productId: venda.product_id,
+        userId: user.id,
+        tipo: "cancelamento",
+        quantidade: venda.quantidade,
+        motivo: "Cancelamento de venda",
+      })
     }
 
     const { error: erroVenda } = await supabase
