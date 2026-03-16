@@ -20,12 +20,14 @@ import {
   Store,
   LogIn,
   LogOut,
+  Boxes,
 } from "lucide-react"
 
 const menuItems = [
   { href: "/", label: "Início", icon: House },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/produtos", label: "Produtos", icon: Package },
+  { href: "/estoque", label: "Estoque", icon: Boxes },
   { href: "/vendas", label: "Vendas", icon: Wallet },
   { href: "/pedidos", label: "Pedidos", icon: ShoppingCart },
   { href: "/historico-vendas", label: "Histórico de Vendas", icon: ReceiptText },
