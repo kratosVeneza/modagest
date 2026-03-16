@@ -69,10 +69,24 @@ type TrendInfo = {
   icon: React.ReactNode
 }
 
+type Periodo = "hoje" | "7dias" | "30dias" | "mes"
+
+const periodos: { value: Periodo; label: string }[] = [
+  { value: "hoje", label: "Hoje" },
+  { value: "7dias", label: "7 dias" },
+  { value: "30dias", label: "30 dias" },
+  { value: "mes", label: "Mês atual" },
+]
+
 export default function Dashboard() {
-  const [faturamentoHoje, setFaturamentoHoje] = useState(0)
-  const [faturamentoMes, setFaturamentoMes] = useState(0)
-  const [produtosVendidosHoje, setProdutosVendidosHoje] = useState(0)
+  const [todasVendas, setTodasVendas] = useState<Venda[]>([])
+  const [produtosLista, setProdutosLista] = useState<Produto[]>([])
+  const [clientesLista, setClientesLista] = useState<Cliente[]>([])
+  const [periodo, setPeriodo] = useState<Periodo>("7dias")
+
+  const [faturamentoPrincipal, setFaturamentoPrincipal] = useState(0)
+  const [faturamentoComparacao, setFaturamentoComparacao] = useState(0)
+  const [produtosVendidosPeriodo, setProdutosVendidosPeriodo] = useState(0)
   const [estoqueBaixo, setEstoqueBaixo] = useState(0)
   const [pedidosPendentes, setPedidosPendentes] = useState(0)
   const [pedidosRecebidos, setPedidosRecebidos] = useState(0)
@@ -82,12 +96,15 @@ export default function Dashboard() {
   const [mensagem, setMensagem] = useState("")
   const [carregando, setCarregando] = useState(true)
 
-  const [faturamentoOntem, setFaturamentoOntem] = useState(0)
-  const [faturamentoMesAnterior, setFaturamentoMesAnterior] = useState(0)
-
   useEffect(() => {
     carregarDashboard()
   }, [])
+
+  useEffect(() => {
+    if (todasVendas.length > 0 || produtosLista.length > 0) {
+      recalcularDashboard()
+    }
+  }, [periodo, todasVendas, produtosLista, clientesLista])
 
   async function carregarDashboard() {
     setCarregando(true)
@@ -102,25 +119,6 @@ export default function Dashboard() {
       setCarregando(false)
       return
     }
-
-    const agora = new Date()
-
-    const inicioHoje = new Date()
-    inicioHoje.setHours(0, 0, 0, 0)
-
-    const inicioOntem = new Date(inicioHoje)
-    inicioOntem.setDate(inicioOntem.getDate() - 1)
-
-    const fimOntem = new Date(inicioHoje)
-    fimOntem.setMilliseconds(-1)
-
-    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1)
-    const inicioMesAnterior = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
-    const fimMesAnterior = new Date(agora.getFullYear(), agora.getMonth(), 0, 23, 59, 59, 999)
-
-    const seteDiasAtras = new Date()
-    seteDiasAtras.setDate(agora.getDate() - 6)
-    seteDiasAtras.setHours(0, 0, 0, 0)
 
     const { data: vendasAtivas, error: vendasError } = await supabase
       .from("sales")
@@ -157,46 +155,136 @@ export default function Dashboard() {
       .eq("user_id", user.id)
       .eq("status", "Recebido")
 
-    const vendas = (vendasAtivas ?? []) as Venda[]
-    const produtosLista = (produtos ?? []) as Produto[]
-    const clientesLista = (clientes ?? []) as Cliente[]
+    setTodasVendas((vendasAtivas ?? []) as Venda[])
+    setProdutosLista((produtos ?? []) as Produto[])
+    setClientesLista((clientes ?? []) as Cliente[])
 
-    const vendasHoje = vendas.filter((v) => new Date(v.created_at) >= inicioHoje)
+    setEstoqueBaixo(((produtos ?? []) as Produto[]).filter((p) => Number(p.estoque) < 5).length)
+    setPedidosPendentes((pedidosPendentesData ?? []).length)
+    setPedidosRecebidos((pedidosRecebidosData ?? []).length)
 
-    const vendasOntem = vendas.filter((v) => {
+    setCarregando(false)
+  }
+
+  function obterIntervalosSelecionados() {
+    const agora = new Date()
+
+    const inicioHoje = new Date()
+    inicioHoje.setHours(0, 0, 0, 0)
+
+    const inicioOntem = new Date(inicioHoje)
+    inicioOntem.setDate(inicioOntem.getDate() - 1)
+
+    const fimOntem = new Date(inicioHoje)
+    fimOntem.setMilliseconds(-1)
+
+    if (periodo === "hoje") {
+      return {
+        inicioAtual: inicioHoje,
+        fimAtual: agora,
+        inicioComparacao: inicioOntem,
+        fimComparacao: fimOntem,
+        quantidadeDiasGrafico: 1,
+      }
+    }
+
+    if (periodo === "7dias") {
+      const inicioAtual = new Date()
+      inicioAtual.setDate(agora.getDate() - 6)
+      inicioAtual.setHours(0, 0, 0, 0)
+
+      const fimAtual = agora
+
+      const inicioComparacao = new Date(inicioAtual)
+      inicioComparacao.setDate(inicioComparacao.getDate() - 7)
+
+      const fimComparacao = new Date(inicioAtual)
+      fimComparacao.setMilliseconds(-1)
+
+      return {
+        inicioAtual,
+        fimAtual,
+        inicioComparacao,
+        fimComparacao,
+        quantidadeDiasGrafico: 7,
+      }
+    }
+
+    if (periodo === "30dias") {
+      const inicioAtual = new Date()
+      inicioAtual.setDate(agora.getDate() - 29)
+      inicioAtual.setHours(0, 0, 0, 0)
+
+      const fimAtual = agora
+
+      const inicioComparacao = new Date(inicioAtual)
+      inicioComparacao.setDate(inicioComparacao.getDate() - 30)
+
+      const fimComparacao = new Date(inicioAtual)
+      fimComparacao.setMilliseconds(-1)
+
+      return {
+        inicioAtual,
+        fimAtual,
+        inicioComparacao,
+        fimComparacao,
+        quantidadeDiasGrafico: 30,
+      }
+    }
+
+    const inicioAtual = new Date(agora.getFullYear(), agora.getMonth(), 1)
+    const fimAtual = agora
+
+    const inicioComparacao = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
+    const fimComparacao = new Date(agora.getFullYear(), agora.getMonth(), 0, 23, 59, 59, 999)
+
+    const quantidadeDiasGrafico = Math.max(
+      1,
+      Math.ceil((fimAtual.getTime() - inicioAtual.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    )
+
+    return {
+      inicioAtual,
+      fimAtual,
+      inicioComparacao,
+      fimComparacao,
+      quantidadeDiasGrafico,
+    }
+  }
+
+  function recalcularDashboard() {
+    const {
+      inicioAtual,
+      fimAtual,
+      inicioComparacao,
+      fimComparacao,
+      quantidadeDiasGrafico,
+    } = obterIntervalosSelecionados()
+
+    const vendasPeriodo = todasVendas.filter((v) => {
       const data = new Date(v.created_at)
-      return data >= inicioOntem && data <= fimOntem
+      return data >= inicioAtual && data <= fimAtual
     })
 
-    const vendasMes = vendas.filter((v) => new Date(v.created_at) >= inicioMes)
-
-    const vendasMesAnterior = vendas.filter((v) => {
+    const vendasComparacao = todasVendas.filter((v) => {
       const data = new Date(v.created_at)
-      return data >= inicioMesAnterior && data <= fimMesAnterior
+      return data >= inicioComparacao && data <= fimComparacao
     })
 
-    const totalHoje = vendasHoje.reduce((soma, v) => soma + Number(v.valor_total), 0)
-    const totalOntem = vendasOntem.reduce((soma, v) => soma + Number(v.valor_total), 0)
-    const totalMes = vendasMes.reduce((soma, v) => soma + Number(v.valor_total), 0)
-    const totalMesAnterior = vendasMesAnterior.reduce(
+    const totalAtual = vendasPeriodo.reduce((soma, v) => soma + Number(v.valor_total), 0)
+    const totalComparacao = vendasComparacao.reduce(
       (soma, v) => soma + Number(v.valor_total),
       0
     )
 
-    setFaturamentoHoje(totalHoje)
-    setFaturamentoOntem(totalOntem)
-    setFaturamentoMes(totalMes)
-    setFaturamentoMesAnterior(totalMesAnterior)
+    setFaturamentoPrincipal(totalAtual)
+    setFaturamentoComparacao(totalComparacao)
 
-    setProdutosVendidosHoje(
-      vendasHoje.reduce((soma, v) => soma + Number(v.quantidade), 0)
+    setProdutosVendidosPeriodo(
+      vendasPeriodo.reduce((soma, v) => soma + Number(v.quantidade), 0)
     )
 
-    setEstoqueBaixo(produtosLista.filter((p) => Number(p.estoque) < 5).length)
-    setPedidosPendentes((pedidosPendentesData ?? []).length)
-    setPedidosRecebidos((pedidosRecebidosData ?? []).length)
-
-    const recentes = vendas.slice(0, 5).map((venda) => {
+    const recentes = vendasPeriodo.slice(0, 5).map((venda) => {
       const produto = produtosLista.find((p) => p.id === venda.product_id)
       const cliente = clientesLista.find((c) => c.id === venda.customer_id)
 
@@ -213,9 +301,10 @@ export default function Dashboard() {
     setUltimasVendas(recentes)
 
     const diasBase: GraficoDia[] = []
-    for (let i = 0; i < 7; i++) {
-      const data = new Date()
-      data.setDate(agora.getDate() - (6 - i))
+    for (let i = 0; i < quantidadeDiasGrafico; i++) {
+      const data = new Date(inicioAtual)
+      data.setDate(inicioAtual.getDate() + i)
+
       diasBase.push({
         dia: data.toLocaleDateString("pt-BR", {
           day: "2-digit",
@@ -225,22 +314,20 @@ export default function Dashboard() {
       })
     }
 
-    vendas
-      .filter((v) => new Date(v.created_at) >= seteDiasAtras)
-      .forEach((venda) => {
-        const chave = new Date(venda.created_at).toLocaleDateString("pt-BR", {
-          day: "2-digit",
-          month: "2-digit",
-        })
-        const item = diasBase.find((d) => d.dia === chave)
-        if (item) item.total += Number(venda.valor_total)
+    vendasPeriodo.forEach((venda) => {
+      const chave = new Date(venda.created_at).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
       })
+      const item = diasBase.find((d) => d.dia === chave)
+      if (item) item.total += Number(venda.valor_total)
+    })
 
     setGraficoDias(diasBase)
 
     const mapaProdutos = new Map<number, ProdutoRanking>()
 
-    vendas.forEach((venda) => {
+    vendasPeriodo.forEach((venda) => {
       const produto = produtosLista.find((p) => p.id === venda.product_id)
       const nome = produto?.nome || "Produto removido"
 
@@ -259,7 +346,6 @@ export default function Dashboard() {
       .slice(0, 5)
 
     setRankingProdutos(ranking)
-    setCarregando(false)
   }
 
   function formatarData(dataIso: string) {
@@ -275,7 +361,7 @@ export default function Dashboard() {
       }
     }
 
-    if (atual > anterior) {
+    if (atual > anterior && anterior > 0) {
       const percentual = ((atual - anterior) / anterior) * 100
       return {
         variant: "up",
@@ -284,7 +370,7 @@ export default function Dashboard() {
       }
     }
 
-    if (atual < anterior) {
+    if (atual < anterior && anterior > 0) {
       const percentual = ((anterior - atual) / anterior) * 100
       return {
         variant: "down",
@@ -300,19 +386,21 @@ export default function Dashboard() {
     }
   }
 
-  const tendenciaHoje = useMemo(
-    () => calcularTendencia(faturamentoHoje, faturamentoOntem),
-    [faturamentoHoje, faturamentoOntem]
-  )
-
-  const tendenciaMes = useMemo(
-    () => calcularTendencia(faturamentoMes, faturamentoMesAnterior),
-    [faturamentoMes, faturamentoMesAnterior]
+  const tendenciaPeriodo = useMemo(
+    () => calcularTendencia(faturamentoPrincipal, faturamentoComparacao),
+    [faturamentoPrincipal, faturamentoComparacao]
   )
 
   const maiorRanking = useMemo(() => {
     return Math.max(...rankingProdutos.map((item) => item.quantidade), 1)
   }, [rankingProdutos])
+
+  const textoComparacao =
+    periodo === "hoje"
+      ? "vs ontem"
+      : periodo === "mes"
+      ? "vs mês anterior"
+      : "vs período anterior"
 
   return (
     <div>
@@ -321,12 +409,25 @@ export default function Dashboard() {
 
       {mensagem && <p>{mensagem}</p>}
 
-      <div className="grid-3" style={{ marginTop: 24, marginBottom: 24 }}>
+      <div className="period-filter">
+        {periodos.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            className={`period-btn ${periodo === item.value ? "active" : ""}`}
+            onClick={() => setPeriodo(item.value)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid-3" style={{ marginBottom: 24 }}>
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Faturamento hoje</p>
-              <p className="metric-value">R$ {faturamentoHoje.toFixed(2)}</p>
+              <p className="metric-label">Faturamento do período</p>
+              <p className="metric-value">R$ {faturamentoPrincipal.toFixed(2)}</p>
             </div>
             <div className="metric-icon-box">
               <DollarSign size={20} />
@@ -334,45 +435,25 @@ export default function Dashboard() {
           </div>
 
           <div className="trend-row">
-            <span className={`trend-pill trend-${tendenciaHoje.variant}`}>
-              {tendenciaHoje.icon}
-              {tendenciaHoje.label}
+            <span className={`trend-pill trend-${tendenciaPeriodo.variant}`}>
+              {tendenciaPeriodo.icon}
+              {tendenciaPeriodo.label}
             </span>
-            <span className="metric-helper">vs ontem</span>
+            <span className="metric-helper">{textoComparacao}</span>
           </div>
         </div>
 
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Faturamento do mês</p>
-              <p className="metric-value">R$ {faturamentoMes.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box green">
-              <TrendingUp size={20} />
-            </div>
-          </div>
-
-          <div className="trend-row">
-            <span className={`trend-pill trend-${tendenciaMes.variant}`}>
-              {tendenciaMes.icon}
-              {tendenciaMes.label}
-            </span>
-            <span className="metric-helper">vs mês anterior</span>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label">Produtos vendidos hoje</p>
-              <p className="metric-value">{produtosVendidosHoje}</p>
+              <p className="metric-label">Itens vendidos</p>
+              <p className="metric-value">{produtosVendidosPeriodo}</p>
             </div>
             <div className="metric-icon-box purple">
               <ShoppingBag size={20} />
             </div>
           </div>
-          <div className="metric-helper">Itens vendidos no dia atual</div>
+          <div className="metric-helper">Total no período selecionado</div>
         </div>
 
         <div className="metric-card">
@@ -413,18 +494,31 @@ export default function Dashboard() {
           </div>
           <div className="metric-helper">Reposições concluídas</div>
         </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label">Comparação</p>
+              <p className="metric-value">R$ {faturamentoComparacao.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box green">
+              <TrendingUp size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">{textoComparacao}</div>
+        </div>
       </div>
 
       <div className="dashboard-two-columns" style={{ marginBottom: 24 }}>
         <div className="chart-shell">
           <div className="chart-header-row">
             <div>
-              <h3 className="dashboard-block-title">Receita dos últimos 7 dias</h3>
+              <h3 className="dashboard-block-title">Receita por dia</h3>
               <p className="dashboard-block-subtitle">
-                Evolução recente do faturamento
+                Evolução do período selecionado
               </p>
             </div>
-            <span className="chart-badge">Atualizado em tempo real</span>
+            <span className="chart-badge">Filtro ativo</span>
           </div>
 
           <div style={{ width: "100%", height: 320 }}>
@@ -458,9 +552,9 @@ export default function Dashboard() {
           <div className="chart-header-row">
             <div>
               <h3 className="dashboard-block-title">Produtos mais vendidos</h3>
-              <p className="dashboard-block-subtitle">Top 5 por quantidade</p>
+              <p className="dashboard-block-subtitle">Ranking do período</p>
             </div>
-            <span className="chart-badge">Ranking</span>
+            <span className="chart-badge">Top 5</span>
           </div>
 
           <div className="bar-list">
@@ -490,7 +584,9 @@ export default function Dashboard() {
 
       <div className="section-card">
         <h3 className="dashboard-block-title">Últimas vendas</h3>
-        <p className="dashboard-block-subtitle">As 5 movimentações mais recentes</p>
+        <p className="dashboard-block-subtitle">
+          As 5 movimentações mais recentes do período
+        </p>
 
         <div className="data-table-wrap" style={{ marginTop: 16 }}>
           <table
@@ -527,7 +623,7 @@ export default function Dashboard() {
               ) : (
                 <tr>
                   <td style={tdVazio} colSpan={5}>
-                    Nenhuma venda recente encontrada.
+                    Nenhuma venda encontrada.
                   </td>
                 </tr>
               )}
