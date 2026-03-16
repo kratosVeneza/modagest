@@ -9,11 +9,13 @@ type Movimento = {
   quantidade: number
   motivo: string
   created_at: string
-  product_id: number
-  nomeProduto?: string
+  products: {
+    nome: string
+    sku: string
+  }
 }
 
-export default function EstoqueHistorico() {
+export default function Estoque() {
   const [movimentos, setMovimentos] = useState<Movimento[]>([])
 
   useEffect(() => {
@@ -25,44 +27,47 @@ export default function EstoqueHistorico() {
       data: { user },
     } = await supabase.auth.getUser()
 
+    if (!user) return
+
     const { data } = await supabase
       .from("stock_movements")
-      .select("*")
-      .eq("user_id", user?.id)
+      .select(`
+        id,
+        tipo,
+        quantidade,
+        motivo,
+        created_at,
+        products (
+          nome,
+          sku
+        )
+      `)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
-    const { data: produtos } = await supabase
-      .from("products")
-      .select("id, nome")
-      .eq("user_id", user?.id)
-
-    const lista = data?.map((mov) => {
-      const produto = produtos?.find((p) => p.id === mov.product_id)
-
-      return {
-        ...mov,
-        nomeProduto: produto?.nome || "Produto removido",
-      }
-    })
-
-    setMovimentos(lista || [])
+    setMovimentos(data || [])
   }
 
-  function formatarData(dataIso: string) {
-    return new Date(dataIso).toLocaleString("pt-BR")
+  function formatarData(data: string) {
+    return new Date(data).toLocaleString("pt-BR")
   }
 
   return (
     <div>
-      <h2 className="page-title">Movimentação de Estoque</h2>
-      <p className="page-subtitle">
-        Histórico completo de alterações no estoque.
+
+      <h2 style={{fontSize:22, fontWeight:600}}>
+        Movimentação de Estoque
+      </h2>
+
+      <p style={{color:"#6b7280", marginBottom:20}}>
+        Histórico de entradas e saídas de produtos
       </p>
 
       <table style={tabela}>
         <thead>
           <tr>
             <th style={th}>Produto</th>
+            <th style={th}>SKU</th>
             <th style={th}>Tipo</th>
             <th style={th}>Quantidade</th>
             <th style={th}>Motivo</th>
@@ -71,17 +76,33 @@ export default function EstoqueHistorico() {
         </thead>
 
         <tbody>
-          {movimentos.map((mov) => (
-            <tr key={mov.id}>
-              <td style={td}>{mov.nomeProduto}</td>
-              <td style={td}>{mov.tipo}</td>
-              <td style={td}>{mov.quantidade}</td>
-              <td style={td}>{mov.motivo}</td>
-              <td style={td}>{formatarData(mov.created_at)}</td>
+
+          {movimentos.map((m) => (
+
+            <tr key={m.id}>
+              <td style={td}>{m.products?.nome}</td>
+              <td style={td}>{m.products?.sku}</td>
+
+              <td style={td}>
+                {m.tipo === "entrada" && "Entrada"}
+                {m.tipo === "saida" && "Saída"}
+                {m.tipo === "cancelamento" && "Cancelamento"}
+                {m.tipo === "ajuste" && "Ajuste"}
+              </td>
+
+              <td style={td}>{m.quantidade}</td>
+
+              <td style={td}>{m.motivo}</td>
+
+              <td style={td}>{formatarData(m.created_at)}</td>
+
             </tr>
+
           ))}
+
         </tbody>
       </table>
+
     </div>
   )
 }
@@ -89,16 +110,16 @@ export default function EstoqueHistorico() {
 const tabela = {
   width: "100%",
   borderCollapse: "collapse" as const,
-  marginTop: "20px",
+  marginTop:20
 }
 
 const th = {
-  textAlign: "left" as const,
-  borderBottom: "1px solid #d1d5db",
-  padding: "12px",
+  borderBottom: "1px solid #ddd",
+  padding: "10px",
+  textAlign:"left" as const
 }
 
 const td = {
-  borderBottom: "1px solid #e5e7eb",
-  padding: "12px",
+  borderBottom: "1px solid #eee",
+  padding: "10px"
 }
