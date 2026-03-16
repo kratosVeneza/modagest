@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import AnimatedModal from "../components/AnimatedModal"
+import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 
 type Pedido = {
   id: number
@@ -140,18 +141,19 @@ export default function Pedidos() {
 
         if (erroProduto) {
           setMensagem("Pedido atualizado, mas houve erro ao buscar o produto.")
-          carregarPedidos()
+          await carregarPedidos()
           return
         }
 
         if (!produtoBanco) {
           setMensagem("Pedido atualizado, mas nenhum produto com esse nome foi encontrado.")
-          carregarPedidos()
+          await carregarPedidos()
           return
         }
 
         const produtoTipado = produtoBanco as Produto
-        const novoEstoque = Number(produtoTipado.estoque) + Number(quantidade)
+        const quantidadeRecebida = Number(quantidade)
+        const novoEstoque = Number(produtoTipado.estoque) + quantidadeRecebida
 
         const { error: erroAtualizarEstoque } = await supabase
           .from("products")
@@ -161,9 +163,17 @@ export default function Pedidos() {
 
         if (erroAtualizarEstoque) {
           setMensagem("Pedido atualizado, mas houve erro ao lançar no estoque.")
-          carregarPedidos()
+          await carregarPedidos()
           return
         }
+
+        await registrarMovimentoEstoque({
+          productId: produtoTipado.id,
+          userId: user.id,
+          tipo: "entrada",
+          quantidade: quantidadeRecebida,
+          motivo: "Reposição fornecedor",
+        })
 
         const { error: erroMarcarLancado } = await supabase
           .from("orders")
@@ -173,17 +183,17 @@ export default function Pedidos() {
 
         if (erroMarcarLancado) {
           setMensagem("Estoque atualizado, mas houve erro ao marcar o pedido.")
-          carregarPedidos()
+          await carregarPedidos()
           return
         }
 
         fecharModal()
-        carregarPedidos()
+        await carregarPedidos()
         return
       }
 
       fecharModal()
-      carregarPedidos()
+      await carregarPedidos()
       return
     }
 
@@ -203,7 +213,7 @@ export default function Pedidos() {
     }
 
     fecharModal()
-    carregarPedidos()
+    await carregarPedidos()
   }
 
   function editarPedido(pedido: Pedido) {
@@ -244,7 +254,7 @@ export default function Pedidos() {
     }
 
     setMensagem("Pedido excluído com sucesso.")
-    carregarPedidos()
+    await carregarPedidos()
   }
 
   function formatarData(dataIso: string) {
@@ -385,53 +395,53 @@ export default function Pedidos() {
       </div>
 
       <AnimatedModal
-  open={modalAberto}
-  onClose={fecharModal}
-  title={idEmEdicao ? "Editar pedido" : "Novo pedido"}
-  footer={
-    <>
-      <button onClick={fecharModal} className="btn btn-secondary">
-        Cancelar
-      </button>
-      <button onClick={salvarPedido} className="btn btn-primary">
-        {idEmEdicao ? "Salvar alterações" : "Cadastrar pedido"}
-      </button>
-    </>
-  }
->
-  <>
-    {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
+        open={modalAberto}
+        onClose={fecharModal}
+        title={idEmEdicao ? "Editar pedido" : "Novo pedido"}
+        footer={
+          <>
+            <button onClick={fecharModal} className="btn btn-secondary">
+              Cancelar
+            </button>
+            <button onClick={salvarPedido} className="btn btn-primary">
+              {idEmEdicao ? "Salvar alterações" : "Cadastrar pedido"}
+            </button>
+          </>
+        }
+      >
+        <>
+          {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
 
-    <div className="grid-2">
-      <input
-        placeholder="Produto"
-        value={produto}
-        onChange={(e) => setProduto(e.target.value)}
-      />
+          <div className="grid-2">
+            <input
+              placeholder="Produto"
+              value={produto}
+              onChange={(e) => setProduto(e.target.value)}
+            />
 
-      <input
-        placeholder="Fornecedor"
-        value={fornecedor}
-        onChange={(e) => setFornecedor(e.target.value)}
-      />
+            <input
+              placeholder="Fornecedor"
+              value={fornecedor}
+              onChange={(e) => setFornecedor(e.target.value)}
+            />
 
-      <input
-        type="number"
-        placeholder="Quantidade"
-        value={quantidade}
-        onChange={(e) => setQuantidade(e.target.value)}
-      />
+            <input
+              type="number"
+              placeholder="Quantidade"
+              value={quantidade}
+              onChange={(e) => setQuantidade(e.target.value)}
+            />
 
-      <select value={status} onChange={(e) => setStatus(e.target.value)}>
-        <option value="Pendente">Pendente</option>
-        <option value="Encomendado">Encomendado</option>
-        <option value="Enviado">Enviado</option>
-        <option value="Recebido">Recebido</option>
-        <option value="Cancelado">Cancelado</option>
-      </select>
-    </div>
-  </>
-</AnimatedModal>
+            <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="Pendente">Pendente</option>
+              <option value="Encomendado">Encomendado</option>
+              <option value="Enviado">Enviado</option>
+              <option value="Recebido">Recebido</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
+          </div>
+        </>
+      </AnimatedModal>
     </div>
   )
 }
