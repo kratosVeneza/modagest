@@ -11,6 +11,10 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
+import { montarCabecalhoPDF } from "@/lib/pdfHeader"
+import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import {
   DollarSign,
   ShoppingBag,
@@ -21,8 +25,7 @@ import {
   TrendingDown,
   Minus,
 } from "lucide-react"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
+
 type Venda = {
   id: number
   product_id: number
@@ -72,6 +75,11 @@ type TrendInfo = {
 
 type Periodo = "hoje" | "7dias" | "30dias" | "mes"
 
+type Loja = {
+  nome_loja?: string | null
+  logo_url?: string | null
+}
+
 const periodos: { value: Periodo; label: string }[] = [
   { value: "hoje", label: "Hoje" },
   { value: "7dias", label: "7 dias" },
@@ -97,6 +105,9 @@ export default function Dashboard() {
   const [mensagem, setMensagem] = useState("")
   const [carregando, setCarregando] = useState(true)
 
+  const [nomeLoja, setNomeLoja] = useState("ModaGest")
+  const [logoUrl, setLogoUrl] = useState("")
+
   useEffect(() => {
     carregarDashboard()
   }, [])
@@ -119,6 +130,22 @@ export default function Dashboard() {
       setMensagem("Você precisa estar logado.")
       setCarregando(false)
       return
+    }
+
+    const { data: lojaData } = await supabase
+      .from("stores")
+      .select("nome_loja, logo_url")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    const loja = (lojaData ?? null) as Loja | null
+
+    if (loja?.nome_loja) {
+      setNomeLoja(loja.nome_loja)
+    }
+
+    if (loja?.logo_url) {
+      setLogoUrl(loja.logo_url)
     }
 
     const { data: vendasAtivas, error: vendasError } = await supabase
@@ -352,135 +379,7 @@ export default function Dashboard() {
   function formatarData(dataIso: string) {
     return new Date(dataIso).toLocaleString("pt-BR")
   }
-  function exportarDashboardCSV() {
-  const linhas: string[] = []
 
-  linhas.push(`"ModaGest Dashboard"`)
-  linhas.push(`"Período";"${periodo}"`)
-  linhas.push("")
-
-  linhas.push(`"RESUMO"`)
-  linhas.push(`"Faturamento do período";"${faturamentoPrincipal.toFixed(2)}"`)
-  linhas.push(`"Comparação";"${faturamentoComparacao.toFixed(2)}"`)
-  linhas.push(`"Itens vendidos";"${produtosVendidosPeriodo}"`)
-  linhas.push(`"Estoque baixo";"${estoqueBaixo}"`)
-  linhas.push(`"Pedidos pendentes";"${pedidosPendentes}"`)
-  linhas.push(`"Pedidos recebidos";"${pedidosRecebidos}"`)
-  linhas.push("")
-
-  linhas.push(`"RECEITA POR DIA"`)
-  linhas.push(`"Dia";"Total"`)
-  graficoDias.forEach((item) => {
-    linhas.push(`"${item.dia}";"${item.total.toFixed(2)}"`)
-  })
-  linhas.push("")
-
-  linhas.push(`"PRODUTOS MAIS VENDIDOS"`)
-  linhas.push(`"Produto";"Quantidade"`)
-  rankingProdutos.forEach((item) => {
-    linhas.push(`"${item.nome.replace(/"/g, '""')}";"${item.quantidade}"`)
-  })
-  linhas.push("")
-
-  linhas.push(`"ÚLTIMAS VENDAS"`)
-  linhas.push(`"Cliente";"Produto";"Quantidade";"Valor";"Data"`)
-  ultimasVendas.forEach((item) => {
-    linhas.push(
-      `"${item.nomeCliente.replace(/"/g, '""')}";"${item.nomeProduto.replace(/"/g, '""')}";"${item.quantidade}";"${item.valorTotal.toFixed(2)}";"${formatarData(item.created_at)}"`
-    )
-  })
-  const conteudo = linhas.join("\n")
-  const blob = new Blob([conteudo], { type: "text/csv;charset=utf-8;" })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement("a")
-  link.href = url
-  link.download = `dashboard_${periodo}.csv`
-  link.click()
-  URL.revokeObjectURL(url)
-}
-function exportarDashboardPDF() {
-  const doc = new jsPDF()
-
-  const tituloPeriodo =
-    periodo === "hoje"
-      ? "Hoje"
-      : periodo === "7dias"
-      ? "7 dias"
-      : periodo === "30dias"
-      ? "30 dias"
-      : "Mês atual"
-
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(18)
-  doc.text("ModaGest - Relatório do Dashboard", 14, 18)
-
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(11)
-  doc.text(`Período: ${tituloPeriodo}`, 14, 26)
-
-  autoTable(doc, {
-    startY: 34,
-    head: [["Resumo", "Valor"]],
-    body: [
-      ["Faturamento do período", `R$ ${faturamentoPrincipal.toFixed(2)}`],
-      ["Comparação", `R$ ${faturamentoComparacao.toFixed(2)}`],
-      ["Itens vendidos", String(produtosVendidosPeriodo)],
-      ["Estoque baixo", String(estoqueBaixo)],
-      ["Pedidos pendentes", String(pedidosPendentes)],
-      ["Pedidos recebidos", String(pedidosRecebidos)],
-    ],
-    styles: {
-      fontSize: 10,
-    },
-    headStyles: {
-      fillColor: [37, 99, 235],
-    },
-  })
-
-  autoTable(doc, {
-    startY: (doc as any).lastAutoTable.finalY + 10,
-    head: [["Dia", "Receita"]],
-    body: graficoDias.map((item) => [item.dia, `R$ ${item.total.toFixed(2)}`]),
-    styles: {
-      fontSize: 10,
-    },
-    headStyles: {
-      fillColor: [5, 150, 105],
-    },
-  })
-
-  autoTable(doc, {
-    startY: (doc as any).lastAutoTable.finalY + 10,
-    head: [["Produto", "Quantidade"]],
-    body: rankingProdutos.map((item) => [item.nome, String(item.quantidade)]),
-    styles: {
-      fontSize: 10,
-    },
-    headStyles: {
-      fillColor: [124, 58, 237],
-    },
-  })
-
-  autoTable(doc, {
-    startY: (doc as any).lastAutoTable.finalY + 10,
-    head: [["Cliente", "Produto", "Quantidade", "Valor", "Data"]],
-    body: ultimasVendas.map((item) => [
-      item.nomeCliente,
-      item.nomeProduto,
-      String(item.quantidade),
-      `R$ ${item.valorTotal.toFixed(2)}`,
-      formatarData(item.created_at),
-    ]),
-    styles: {
-      fontSize: 9,
-    },
-    headStyles: {
-      fillColor: [220, 38, 38],
-    },
-  })
-
-  doc.save(`dashboard_${periodo}.pdf`)
-}
   function calcularTendencia(atual: number, anterior: number): TrendInfo {
     if (anterior === 0 && atual > 0) {
       return {
@@ -531,21 +430,159 @@ function exportarDashboardPDF() {
       ? "vs mês anterior"
       : "vs período anterior"
 
+  function exportarDashboardCSV() {
+    const linhas: string[] = []
+
+    linhas.push(`"ModaGest Dashboard"`)
+    linhas.push(`"Período";"${periodo}"`)
+    linhas.push("")
+
+    linhas.push(`"RESUMO"`)
+    linhas.push(`"Faturamento do período";"${faturamentoPrincipal.toFixed(2)}"`)
+    linhas.push(`"Comparação";"${faturamentoComparacao.toFixed(2)}"`)
+    linhas.push(`"Itens vendidos";"${produtosVendidosPeriodo}"`)
+    linhas.push(`"Estoque baixo";"${estoqueBaixo}"`)
+    linhas.push(`"Pedidos pendentes";"${pedidosPendentes}"`)
+    linhas.push(`"Pedidos recebidos";"${pedidosRecebidos}"`)
+    linhas.push("")
+
+    linhas.push(`"RECEITA POR DIA"`)
+    linhas.push(`"Dia";"Total"`)
+    graficoDias.forEach((item) => {
+      linhas.push(`"${item.dia}";"${item.total.toFixed(2)}"`)
+    })
+    linhas.push("")
+
+    linhas.push(`"PRODUTOS MAIS VENDIDOS"`)
+    linhas.push(`"Produto";"Quantidade"`)
+    rankingProdutos.forEach((item) => {
+      linhas.push(`"${item.nome.replace(/"/g, '""')}";"${item.quantidade}"`)
+    })
+    linhas.push("")
+
+    linhas.push(`"ÚLTIMAS VENDAS"`)
+    linhas.push(`"Cliente";"Produto";"Quantidade";"Valor";"Data"`)
+    ultimasVendas.forEach((item) => {
+      linhas.push(
+        `"${item.nomeCliente.replace(/"/g, '""')}";"${item.nomeProduto.replace(/"/g, '""')}";"${item.quantidade}";"${item.valorTotal.toFixed(2)}";"${formatarData(item.created_at)}"`
+      )
+    })
+
+    const conteudo = linhas.join("\n")
+    const blob = new Blob([conteudo], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `dashboard_${periodo}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function exportarDashboardPDF() {
+    const doc = new jsPDF()
+
+    const tituloPeriodo =
+      periodo === "hoje"
+        ? "Hoje"
+        : periodo === "7dias"
+        ? "7 dias"
+        : periodo === "30dias"
+        ? "30 dias"
+        : "Mês atual"
+
+    const logoDataUrl = await imageUrlToDataUrl(logoUrl)
+
+    const startY = await montarCabecalhoPDF({
+      doc,
+      titulo: "Relatório do Dashboard",
+      nomeLoja,
+      logoDataUrl,
+    })
+
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(11)
+    doc.text(`Período: ${tituloPeriodo}`, 14, startY)
+
+    autoTable(doc, {
+      startY: startY + 8,
+      head: [["Resumo", "Valor"]],
+      body: [
+        ["Faturamento do período", `R$ ${faturamentoPrincipal.toFixed(2)}`],
+        ["Comparação", `R$ ${faturamentoComparacao.toFixed(2)}`],
+        ["Itens vendidos", String(produtosVendidosPeriodo)],
+        ["Estoque baixo", String(estoqueBaixo)],
+        ["Pedidos pendentes", String(pedidosPendentes)],
+        ["Pedidos recebidos", String(pedidosRecebidos)],
+      ],
+      styles: {
+        fontSize: 10,
+      },
+      headStyles: {
+        fillColor: [37, 99, 235],
+      },
+    })
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [["Dia", "Receita"]],
+      body: graficoDias.map((item) => [item.dia, `R$ ${item.total.toFixed(2)}`]),
+      styles: {
+        fontSize: 10,
+      },
+      headStyles: {
+        fillColor: [5, 150, 105],
+      },
+    })
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [["Produto", "Quantidade"]],
+      body: rankingProdutos.map((item) => [item.nome, String(item.quantidade)]),
+      styles: {
+        fontSize: 10,
+      },
+      headStyles: {
+        fillColor: [124, 58, 237],
+      },
+    })
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [["Cliente", "Produto", "Quantidade", "Valor", "Data"]],
+      body: ultimasVendas.map((item) => [
+        item.nomeCliente,
+        item.nomeProduto,
+        String(item.quantidade),
+        `R$ ${item.valorTotal.toFixed(2)}`,
+        formatarData(item.created_at),
+      ]),
+      styles: {
+        fontSize: 9,
+      },
+      headStyles: {
+        fillColor: [220, 38, 38],
+      },
+    })
+
+    doc.save(`dashboard_${periodo}.pdf`)
+  }
+
   return (
     <div>
       <h2 className="page-title">Dashboard</h2>
       <p className="page-subtitle">Resumo geral da operação da sua loja.</p>
-      <div className="dashboard-actions">
-  <button onClick={exportarDashboardCSV} className="btn btn-secondary">
-    Exportar CSV
-  </button>
-
-  <button onClick={exportarDashboardPDF} className="btn btn-primary">
-    Exportar PDF
-  </button>
-</div>
 
       {mensagem && <p>{mensagem}</p>}
+
+      <div className="dashboard-actions">
+        <button onClick={exportarDashboardCSV} className="btn btn-secondary">
+          Exportar CSV
+        </button>
+
+        <button onClick={exportarDashboardPDF} className="btn btn-primary">
+          Exportar PDF
+        </button>
+      </div>
 
       <div className="period-filter">
         {periodos.map((item) => (
