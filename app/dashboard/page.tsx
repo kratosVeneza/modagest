@@ -21,7 +21,8 @@ import {
   TrendingDown,
   Minus,
 } from "lucide-react"
-
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 type Venda = {
   id: number
   product_id: number
@@ -397,6 +398,89 @@ export default function Dashboard() {
   link.click()
   URL.revokeObjectURL(url)
 }
+function exportarDashboardPDF() {
+  const doc = new jsPDF()
+
+  const tituloPeriodo =
+    periodo === "hoje"
+      ? "Hoje"
+      : periodo === "7dias"
+      ? "7 dias"
+      : periodo === "30dias"
+      ? "30 dias"
+      : "Mês atual"
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(18)
+  doc.text("ModaGest - Relatório do Dashboard", 14, 18)
+
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(11)
+  doc.text(`Período: ${tituloPeriodo}`, 14, 26)
+
+  autoTable(doc, {
+    startY: 34,
+    head: [["Resumo", "Valor"]],
+    body: [
+      ["Faturamento do período", `R$ ${faturamentoPrincipal.toFixed(2)}`],
+      ["Comparação", `R$ ${faturamentoComparacao.toFixed(2)}`],
+      ["Itens vendidos", String(produtosVendidosPeriodo)],
+      ["Estoque baixo", String(estoqueBaixo)],
+      ["Pedidos pendentes", String(pedidosPendentes)],
+      ["Pedidos recebidos", String(pedidosRecebidos)],
+    ],
+    styles: {
+      fontSize: 10,
+    },
+    headStyles: {
+      fillColor: [37, 99, 235],
+    },
+  })
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 10,
+    head: [["Dia", "Receita"]],
+    body: graficoDias.map((item) => [item.dia, `R$ ${item.total.toFixed(2)}`]),
+    styles: {
+      fontSize: 10,
+    },
+    headStyles: {
+      fillColor: [5, 150, 105],
+    },
+  })
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 10,
+    head: [["Produto", "Quantidade"]],
+    body: rankingProdutos.map((item) => [item.nome, String(item.quantidade)]),
+    styles: {
+      fontSize: 10,
+    },
+    headStyles: {
+      fillColor: [124, 58, 237],
+    },
+  })
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 10,
+    head: [["Cliente", "Produto", "Quantidade", "Valor", "Data"]],
+    body: ultimasVendas.map((item) => [
+      item.nomeCliente,
+      item.nomeProduto,
+      String(item.quantidade),
+      `R$ ${item.valorTotal.toFixed(2)}`,
+      formatarData(item.created_at),
+    ]),
+    styles: {
+      fontSize: 9,
+    },
+    headStyles: {
+      fillColor: [220, 38, 38],
+    },
+  })
+
+  doc.save(`dashboard_${periodo}.pdf`)
+}
   function calcularTendencia(atual: number, anterior: number): TrendInfo {
     if (anterior === 0 && atual > 0) {
       return {
@@ -452,8 +536,12 @@ export default function Dashboard() {
       <h2 className="page-title">Dashboard</h2>
       <p className="page-subtitle">Resumo geral da operação da sua loja.</p>
       <div className="dashboard-actions">
-  <button onClick={exportarDashboardCSV} className="btn btn-primary">
+  <button onClick={exportarDashboardCSV} className="btn btn-secondary">
     Exportar CSV
+  </button>
+
+  <button onClick={exportarDashboardPDF} className="btn btn-primary">
+    Exportar PDF
   </button>
 </div>
 
