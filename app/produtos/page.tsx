@@ -9,16 +9,34 @@ type Produto = {
   id: number
   sku: string
   nome: string
-  cor: string
-  tamanho: string
+  marca: string | null
+  categoria: string | null
+  tipo: string | null
+  unidade: string | null
+  cor: string | null
+  tamanho: string | null
   estoque: number
   preco: number
   user_id: string
 }
 
+const categorias = [
+  "Roupas",
+  "Calçados",
+  "Acessórios",
+  "Suplementos",
+  "Equipamentos",
+]
+
+const unidades = ["un", "par", "caixa", "sachê", "kit"]
+
 export default function Produtos() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [nome, setNome] = useState("")
+  const [marca, setMarca] = useState("")
+  const [categoria, setCategoria] = useState("")
+  const [tipo, setTipo] = useState("")
+  const [unidade, setUnidade] = useState("un")
   const [cor, setCor] = useState("")
   const [tamanho, setTamanho] = useState("")
   const [estoque, setEstoque] = useState("")
@@ -63,17 +81,26 @@ export default function Produtos() {
     setCarregando(false)
   }
 
-  function gerarSku(nomeProduto: string, corProduto: string, tamanhoProduto: string) {
+  function gerarSku(
+    nomeProduto: string,
+    categoriaProduto: string,
+    tipoProduto: string
+  ) {
     const nomeParte = nomeProduto.trim().slice(0, 3).toUpperCase() || "PRO"
-    const corParte = corProduto.trim().slice(0, 2).toUpperCase() || "CO"
-    const tamanhoParte = tamanhoProduto.trim().toUpperCase() || "U"
+    const categoriaParte =
+      categoriaProduto.trim().slice(0, 2).toUpperCase() || "CT"
+    const tipoParte = tipoProduto.trim().slice(0, 2).toUpperCase() || "TP"
     const numero = String(produtos.length + 1).padStart(3, "0")
 
-    return `${nomeParte}-${corParte}-${tamanhoParte}-${numero}`
+    return `${nomeParte}-${categoriaParte}-${tipoParte}-${numero}`
   }
 
   function limparFormulario() {
     setNome("")
+    setMarca("")
+    setCategoria("")
+    setTipo("")
+    setUnidade("un")
     setCor("")
     setTamanho("")
     setEstoque("")
@@ -105,8 +132,8 @@ export default function Produtos() {
       return
     }
 
-    if (!nome || !cor || !tamanho || !estoque || !preco) {
-      setMensagem("Preencha todos os campos.")
+    if (!nome || !categoria || !tipo || !estoque || !preco) {
+      setMensagem("Preencha nome, categoria, tipo, estoque e preço.")
       return
     }
 
@@ -115,8 +142,12 @@ export default function Produtos() {
         .from("products")
         .update({
           nome,
-          cor,
-          tamanho,
+          marca: marca || null,
+          categoria,
+          tipo,
+          unidade,
+          cor: cor || null,
+          tamanho: tamanho || null,
           estoque: Number(estoque),
           preco: Number(preco),
         })
@@ -135,10 +166,14 @@ export default function Produtos() {
 
     const { error } = await supabase.from("products").insert([
       {
-        sku: gerarSku(nome, cor, tamanho),
+        sku: gerarSku(nome, categoria, tipo),
         nome,
-        cor,
-        tamanho,
+        marca: marca || null,
+        categoria,
+        tipo,
+        unidade,
+        cor: cor || null,
+        tamanho: tamanho || null,
         estoque: Number(estoque),
         preco: Number(preco),
         user_id: user.id,
@@ -157,8 +192,12 @@ export default function Produtos() {
   function editarProduto(produto: Produto) {
     setIdEmEdicao(produto.id)
     setNome(produto.nome)
-    setCor(produto.cor)
-    setTamanho(produto.tamanho)
+    setMarca(produto.marca || "")
+    setCategoria(produto.categoria || "")
+    setTipo(produto.tipo || "")
+    setUnidade(produto.unidade || "un")
+    setCor(produto.cor || "")
+    setTamanho(produto.tamanho || "")
     setEstoque(String(produto.estoque))
     setPreco(String(produto.preco))
     setModalAberto(true)
@@ -199,8 +238,11 @@ export default function Produtos() {
       return (
         p.nome.toLowerCase().includes(termo) ||
         p.sku.toLowerCase().includes(termo) ||
-        p.cor.toLowerCase().includes(termo) ||
-        p.tamanho.toLowerCase().includes(termo)
+        (p.marca || "").toLowerCase().includes(termo) ||
+        (p.categoria || "").toLowerCase().includes(termo) ||
+        (p.tipo || "").toLowerCase().includes(termo) ||
+        (p.cor || "").toLowerCase().includes(termo) ||
+        (p.tamanho || "").toLowerCase().includes(termo)
       )
     })
   }, [produtos, busca])
@@ -208,7 +250,9 @@ export default function Produtos() {
   return (
     <div>
       <h2 className="page-title">Produtos</h2>
-      <p className="page-subtitle">Cadastro e controle de estoque da loja.</p>
+      <p className="page-subtitle">
+        Cadastro e controle de produtos, marcas, categorias e estoque.
+      </p>
 
       {mensagem && !modalAberto && <p style={{ marginTop: 16 }}>{mensagem}</p>}
 
@@ -220,7 +264,7 @@ export default function Produtos() {
 
       <div className="table-toolbar">
         <input
-          placeholder="Buscar por nome, SKU, cor ou tamanho"
+          placeholder="Buscar por nome, SKU, marca, categoria ou tipo"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           style={{ maxWidth: "420px" }}
@@ -234,8 +278,10 @@ export default function Produtos() {
             <tr>
               <th style={th}>SKU</th>
               <th style={th}>Produto</th>
-              <th style={th}>Cor</th>
-              <th style={th}>Tamanho</th>
+              <th style={th}>Marca</th>
+              <th style={th}>Categoria</th>
+              <th style={th}>Tipo</th>
+              <th style={th}>Unidade</th>
               <th style={th}>Estoque</th>
               <th style={th}>Preço</th>
               <th style={th}>Ações</th>
@@ -244,14 +290,25 @@ export default function Produtos() {
 
           <tbody>
             {carregando ? (
-              <TableSkeleton rows={6} cols={7} />
+              <TableSkeleton rows={6} cols={9} />
             ) : produtosFiltrados.length > 0 ? (
               produtosFiltrados.map((p) => (
                 <tr key={p.id}>
                   <td style={td}>{p.sku}</td>
-                  <td style={td}>{p.nome}</td>
-                  <td style={td}>{p.cor}</td>
-                  <td style={td}>{p.tamanho}</td>
+                  <td style={td}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <strong>{p.nome}</strong>
+                      {(p.cor || p.tamanho) && (
+                        <span style={{ fontSize: 12, color: "#6b7280" }}>
+                          {[p.cor, p.tamanho].filter(Boolean).join(" • ")}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={td}>{p.marca || "-"}</td>
+                  <td style={td}>{p.categoria || "-"}</td>
+                  <td style={td}>{p.tipo || "-"}</td>
+                  <td style={td}>{p.unidade || "-"}</td>
                   <td style={td}>{p.estoque}</td>
                   <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
                   <td style={td}>
@@ -274,7 +331,7 @@ export default function Produtos() {
               ))
             ) : (
               <tr>
-                <td style={tdVazio} colSpan={7}>
+                <td style={tdVazio} colSpan={9}>
                   Nenhum produto encontrado.
                 </td>
               </tr>
@@ -307,28 +364,64 @@ export default function Produtos() {
               value={nome}
               onChange={(e) => setNome(e.target.value)}
             />
+
             <input
-              placeholder="Cor"
-              value={cor}
-              onChange={(e) => setCor(e.target.value)}
+              placeholder="Marca"
+              value={marca}
+              onChange={(e) => setMarca(e.target.value)}
             />
+
+            <select
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+            >
+              <option value="">Selecione a categoria</option>
+              {categorias.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+
             <input
-              placeholder="Tamanho"
-              value={tamanho}
-              onChange={(e) => setTamanho(e.target.value)}
+              placeholder="Tipo do produto"
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value)}
             />
+
+            <select value={unidade} onChange={(e) => setUnidade(e.target.value)}>
+              {unidades.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+
             <input
               placeholder="Estoque"
               type="number"
               value={estoque}
               onChange={(e) => setEstoque(e.target.value)}
             />
+
             <input
               placeholder="Preço"
               type="number"
               step="0.01"
               value={preco}
               onChange={(e) => setPreco(e.target.value)}
+            />
+
+            <input
+              placeholder="Cor (opcional)"
+              value={cor}
+              onChange={(e) => setCor(e.target.value)}
+            />
+
+            <input
+              placeholder="Tamanho (opcional)"
+              value={tamanho}
+              onChange={(e) => setTamanho(e.target.value)}
             />
           </div>
         </>
@@ -363,4 +456,4 @@ const tdVazio = {
   padding: "20px",
   textAlign: "center" as const,
   color: "#6b7280",
-}
+} 
