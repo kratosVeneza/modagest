@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -14,6 +14,7 @@ type Venda = {
   created_at: string
   status?: string
   customer_id?: number | null
+  product_id: number
 }
 
 type Cliente = {
@@ -21,12 +22,24 @@ type Cliente = {
   nome: string
 }
 
+type Produto = {
+  id: number
+  nome: string
+  marca: string | null
+  categoria: string | null
+  custo: number | null
+}
+
 type VendaExibicao = {
   id: number
   quantidade: number
   valor_total: number
+  lucro_total: number
   created_at: string
   nomeCliente: string
+  nomeProduto: string
+  marca: string
+  categoria: string
 }
 
 type Loja = {
@@ -36,13 +49,16 @@ type Loja = {
 
 export default function Financeiro() {
   const [faturamentoTotal, setFaturamentoTotal] = useState(0)
+  const [lucroTotal, setLucroTotal] = useState(0)
   const [quantidadeVendida, setQuantidadeVendida] = useState(0)
   const [ticketMedio, setTicketMedio] = useState(0)
+  const [margemMedia, setMargemMedia] = useState(0)
   const [ultimasVendas, setUltimasVendas] = useState<VendaExibicao[]>([])
   const [todasVendas, setTodasVendas] = useState<VendaExibicao[]>([])
   const [mensagem, setMensagem] = useState("")
   const [nomeLoja, setNomeLoja] = useState("ModaGest")
   const [logoUrl, setLogoUrl] = useState("")
+  const [busca, setBusca] = useState("")
 
   useEffect(() => {
     carregarFinanceiro()
@@ -68,13 +84,8 @@ export default function Financeiro() {
 
     const loja = (lojaData ?? null) as Loja | null
 
-    if (loja?.nome_loja) {
-      setNomeLoja(loja.nome_loja)
-    }
-
-    if (loja?.logo_url) {
-      setLogoUrl(loja.logo_url)
-    }
+    if (loja?.nome_loja) setNomeLoja(loja.nome_loja)
+    if (loja?.logo_url) setLogoUrl(loja.logo_url)
 
     const { data: vendasData, error } = await supabase
       .from("sales")
@@ -93,23 +104,41 @@ export default function Financeiro() {
       .select("id, nome")
       .eq("user_id", user.id)
 
+    const { data: produtosData } = await supabase
+      .from("products")
+      .select("id, nome, marca, categoria, custo")
+      .eq("user_id", user.id)
+
     const vendas = (vendasData ?? []) as Venda[]
     const clientes = (clientesData ?? []) as Cliente[]
+    const produtos = (produtosData ?? []) as Produto[]
 
     const vendasFormatadas: VendaExibicao[] = vendas.map((venda) => {
       const cliente = clientes.find((c) => c.id === venda.customer_id)
+      const produto = produtos.find((p) => p.id === venda.product_id)
+      const custoUnitario = Number(produto?.custo || 0)
+      const lucro = Number(venda.valor_total) - custoUnitario * Number(venda.quantidade)
 
       return {
         id: venda.id,
         quantidade: venda.quantidade,
         valor_total: Number(venda.valor_total),
+        lucro_total: lucro,
         created_at: venda.created_at,
         nomeCliente: cliente?.nome || "Sem cliente",
+        nomeProduto: produto?.nome || "Produto removido",
+        marca: produto?.marca || "-",
+        categoria: produto?.categoria || "-",
       }
     })
 
-    const totalFaturamento = vendas.reduce(
+    const totalFaturamento = vendasFormatadas.reduce(
       (soma, venda) => soma + Number(venda.valor_total),
+      0
+    )
+
+    const totalLucro = vendasFormatadas.reduce(
+      (soma, venda) => soma + Number(venda.lucro_total),
       0
     )
 
@@ -119,10 +148,13 @@ export default function Financeiro() {
     )
 
     const ticket = vendas.length > 0 ? totalFaturamento / vendas.length : 0
+    const margem = totalFaturamento > 0 ? (totalLucro / totalFaturamento) * 100 : 0
 
     setFaturamentoTotal(totalFaturamento)
+    setLucroTotal(totalLucro)
     setQuantidadeVendida(totalQuantidade)
     setTicketMedio(ticket)
+    setMargemMedia(margem)
     setUltimasVendas(vendasFormatadas.slice(0, 5))
     setTodasVendas(vendasFormatadas)
   }
@@ -132,18 +164,46 @@ export default function Financeiro() {
     return data.toLocaleString("pt-BR")
   }
 
+  const vendasFiltradas = useMemo(() => {
+    const termo = busca.trim().toLowerCase()
+
+    if (!termo) return todasVendas
+
+    return todasVendas.filter((venda) => {
+      return (
+        venda.nomeCliente.toLowerCase().includes(termo) ||
+        venda.nomeProduto.toLowerCase().includes(termo) ||
+        venda.marca.toLowerCase().includes(termo) ||
+        venda.categoria.toLowerCase().includes(termo)
+      )
+    })
+  }, [todasVendas, busca])
+
   function exportarCSV() {
-    if (todasVendas.length === 0) {
+    if (vendasFiltradas.length === 0) {
       setMensagem("Não há dados financeiros para exportar.")
       return
     }
 
-    const cabecalho = ["Cliente", "Quantidade", "Valor Total", "Data"]
+    const cabecalho = [
+      "Cliente",
+      "Produto",
+      "Marca",
+      "Categoria",
+      "Quantidade",
+      "Valor Total",
+      "Lucro",
+      "Data",
+    ]
 
-    const linhas = todasVendas.map((venda) => [
+    const linhas = vendasFiltradas.map((venda) => [
       venda.nomeCliente,
+      venda.nomeProduto,
+      venda.marca,
+      venda.categoria,
       String(venda.quantidade),
       Number(venda.valor_total).toFixed(2),
+      Number(venda.lucro_total).toFixed(2),
       formatarData(venda.created_at),
     ])
 
@@ -166,7 +226,7 @@ export default function Financeiro() {
   }
 
   async function exportarPDF() {
-    if (todasVendas.length === 0) {
+    if (vendasFiltradas.length === 0) {
       setMensagem("Não há dados financeiros para exportar.")
       return
     }
@@ -184,20 +244,25 @@ export default function Financeiro() {
     doc.setFont("helvetica", "normal")
     doc.setFontSize(11)
     doc.text(`Faturamento total: R$ ${faturamentoTotal.toFixed(2)}`, 14, startY)
-    doc.text(`Quantidade vendida: ${quantidadeVendida}`, 14, startY + 6)
-    doc.text(`Ticket médio: R$ ${ticketMedio.toFixed(2)}`, 14, startY + 12)
+    doc.text(`Lucro total: R$ ${lucroTotal.toFixed(2)}`, 14, startY + 6)
+    doc.text(`Margem média: ${margemMedia.toFixed(1)}%`, 14, startY + 12)
+    doc.text(`Ticket médio: R$ ${ticketMedio.toFixed(2)}`, 14, startY + 18)
 
     autoTable(doc, {
-      startY: startY + 20,
-      head: [["Cliente", "Quantidade", "Valor Total", "Data"]],
-      body: todasVendas.map((venda) => [
+      startY: startY + 26,
+      head: [["Cliente", "Produto", "Marca", "Categoria", "Qtd.", "Valor", "Lucro", "Data"]],
+      body: vendasFiltradas.map((venda) => [
         venda.nomeCliente,
+        venda.nomeProduto,
+        venda.marca,
+        venda.categoria,
         String(venda.quantidade),
         `R$ ${Number(venda.valor_total).toFixed(2)}`,
+        `R$ ${Number(venda.lucro_total).toFixed(2)}`,
         formatarData(venda.created_at),
       ]),
       styles: {
-        fontSize: 9,
+        fontSize: 8.5,
       },
       headStyles: {
         fillColor: [37, 99, 235],
@@ -210,11 +275,18 @@ export default function Financeiro() {
   return (
     <div>
       <h2 className="page-title">Financeiro</h2>
-      <p className="page-subtitle">Resumo financeiro da loja.</p>
+      <p className="page-subtitle">Resumo financeiro com faturamento, lucro e margem.</p>
 
       {mensagem && <p>{mensagem}</p>}
 
       <div style={acoesTopo}>
+        <input
+          placeholder="Buscar por cliente, produto, marca ou categoria"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          style={inputBusca}
+        />
+
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button onClick={exportarCSV} className="btn btn-secondary">
             Exportar CSV
@@ -233,13 +305,28 @@ export default function Financeiro() {
         </div>
 
         <div className="section-card">
-          <h3>Quantidade vendida</h3>
-          <p>{quantidadeVendida}</p>
+          <h3>Lucro total</h3>
+          <p>R$ {lucroTotal.toFixed(2)}</p>
+        </div>
+
+        <div className="section-card">
+          <h3>Margem média</h3>
+          <p>{margemMedia.toFixed(1)}%</p>
         </div>
 
         <div className="section-card">
           <h3>Ticket médio</h3>
           <p>R$ {ticketMedio.toFixed(2)}</p>
+        </div>
+
+        <div className="section-card">
+          <h3>Quantidade vendida</h3>
+          <p>{quantidadeVendida}</p>
+        </div>
+
+        <div className="section-card">
+          <h3>Vendas filtradas</h3>
+          <p>{vendasFiltradas.length}</p>
         </div>
       </div>
 
@@ -250,8 +337,12 @@ export default function Financeiro() {
           <thead>
             <tr>
               <th style={th}>Cliente</th>
-              <th style={th}>Quantidade</th>
-              <th style={th}>Valor total</th>
+              <th style={th}>Produto</th>
+              <th style={th}>Marca</th>
+              <th style={th}>Categoria</th>
+              <th style={th}>Qtd.</th>
+              <th style={th}>Valor</th>
+              <th style={th}>Lucro</th>
               <th style={th}>Data</th>
             </tr>
           </thead>
@@ -260,15 +351,19 @@ export default function Financeiro() {
             {ultimasVendas.map((venda) => (
               <tr key={venda.id}>
                 <td style={td}>{venda.nomeCliente}</td>
+                <td style={td}>{venda.nomeProduto}</td>
+                <td style={td}>{venda.marca}</td>
+                <td style={td}>{venda.categoria}</td>
                 <td style={td}>{venda.quantidade}</td>
                 <td style={td}>R$ {Number(venda.valor_total).toFixed(2)}</td>
+                <td style={td}>R$ {Number(venda.lucro_total).toFixed(2)}</td>
                 <td style={td}>{formatarData(venda.created_at)}</td>
               </tr>
             ))}
 
             {ultimasVendas.length === 0 && (
               <tr>
-                <td style={tdVazio} colSpan={4}>
+                <td style={tdVazio} colSpan={8}>
                   Nenhuma venda ativa encontrada.
                 </td>
               </tr>
@@ -282,9 +377,21 @@ export default function Financeiro() {
 
 const acoesTopo = {
   display: "flex",
-  justifyContent: "flex-end",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "12px",
   marginTop: "20px",
   marginBottom: "20px",
+  flexWrap: "wrap" as const,
+}
+
+const inputBusca = {
+  minWidth: "280px",
+  flex: 1,
+  padding: "10px",
+  border: "1px solid #d1d5db",
+  borderRadius: "8px",
+  fontSize: "14px",
 }
 
 const blocoTabela = {
