@@ -16,6 +16,7 @@ type Produto = {
   cor: string | null
   tamanho: string | null
   estoque: number
+  custo: number
   preco: number
   user_id: string
 }
@@ -40,6 +41,7 @@ export default function Produtos() {
   const [cor, setCor] = useState("")
   const [tamanho, setTamanho] = useState("")
   const [estoque, setEstoque] = useState("")
+  const [custo, setCusto] = useState("")
   const [preco, setPreco] = useState("")
   const [idEmEdicao, setIdEmEdicao] = useState<number | null>(null)
   const [busca, setBusca] = useState("")
@@ -104,6 +106,7 @@ export default function Produtos() {
     setCor("")
     setTamanho("")
     setEstoque("")
+    setCusto("")
     setPreco("")
     setIdEmEdicao(null)
   }
@@ -132,8 +135,13 @@ export default function Produtos() {
       return
     }
 
-    if (!nome || !categoria || !tipo || !estoque || !preco) {
-      setMensagem("Preencha nome, categoria, tipo, estoque e preço.")
+    if (!nome || !categoria || !tipo || !estoque || !preco || !custo) {
+      setMensagem("Preencha nome, categoria, tipo, estoque, custo e preço.")
+      return
+    }
+
+    if (Number(preco) < Number(custo)) {
+      setMensagem("O preço de venda não deve ser menor que o custo.")
       return
     }
 
@@ -149,6 +157,7 @@ export default function Produtos() {
           cor: cor || null,
           tamanho: tamanho || null,
           estoque: Number(estoque),
+          custo: Number(custo),
           preco: Number(preco),
         })
         .eq("id", idEmEdicao)
@@ -175,6 +184,7 @@ export default function Produtos() {
         cor: cor || null,
         tamanho: tamanho || null,
         estoque: Number(estoque),
+        custo: Number(custo),
         preco: Number(preco),
         user_id: user.id,
       },
@@ -199,6 +209,7 @@ export default function Produtos() {
     setCor(produto.cor || "")
     setTamanho(produto.tamanho || "")
     setEstoque(String(produto.estoque))
+    setCusto(String(produto.custo ?? 0))
     setPreco(String(produto.preco))
     setModalAberto(true)
   }
@@ -251,7 +262,7 @@ export default function Produtos() {
     <div>
       <h2 className="page-title">Produtos</h2>
       <p className="page-subtitle">
-        Cadastro e controle de produtos, marcas, categorias e estoque.
+        Cadastro e controle de produtos, marcas, categorias, custo e estoque.
       </p>
 
       {mensagem && !modalAberto && <p style={{ marginTop: 16 }}>{mensagem}</p>}
@@ -283,55 +294,66 @@ export default function Produtos() {
               <th style={th}>Tipo</th>
               <th style={th}>Unidade</th>
               <th style={th}>Estoque</th>
+              <th style={th}>Custo</th>
               <th style={th}>Preço</th>
+              <th style={th}>Margem</th>
               <th style={th}>Ações</th>
             </tr>
           </thead>
 
           <tbody>
             {carregando ? (
-              <TableSkeleton rows={6} cols={9} />
+              <TableSkeleton rows={6} cols={11} />
             ) : produtosFiltrados.length > 0 ? (
-              produtosFiltrados.map((p) => (
-                <tr key={p.id}>
-                  <td style={td}>{p.sku}</td>
-                  <td style={td}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <strong>{p.nome}</strong>
-                      {(p.cor || p.tamanho) && (
-                        <span style={{ fontSize: 12, color: "#6b7280" }}>
-                          {[p.cor, p.tamanho].filter(Boolean).join(" • ")}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td style={td}>{p.marca || "-"}</td>
-                  <td style={td}>{p.categoria || "-"}</td>
-                  <td style={td}>{p.tipo || "-"}</td>
-                  <td style={td}>{p.unidade || "-"}</td>
-                  <td style={td}>{p.estoque}</td>
-                  <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
-                  <td style={td}>
-                    <div style={acoesTabela}>
-                      <button
-                        onClick={() => editarProduto(p)}
-                        className="btn btn-success btn-sm"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => excluirProduto(p.id)}
-                        className="btn btn-danger btn-sm"
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              produtosFiltrados.map((p) => {
+                const margem =
+                  Number(p.preco) > 0
+                    ? ((Number(p.preco) - Number(p.custo || 0)) / Number(p.preco)) * 100
+                    : 0
+
+                return (
+                  <tr key={p.id}>
+                    <td style={td}>{p.sku}</td>
+                    <td style={td}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <strong>{p.nome}</strong>
+                        {(p.cor || p.tamanho) && (
+                          <span style={{ fontSize: 12, color: "#6b7280" }}>
+                            {[p.cor, p.tamanho].filter(Boolean).join(" • ")}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td style={td}>{p.marca || "-"}</td>
+                    <td style={td}>{p.categoria || "-"}</td>
+                    <td style={td}>{p.tipo || "-"}</td>
+                    <td style={td}>{p.unidade || "-"}</td>
+                    <td style={td}>{p.estoque}</td>
+                    <td style={td}>R$ {Number(p.custo || 0).toFixed(2)}</td>
+                    <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
+                    <td style={td}>{margem.toFixed(1)}%</td>
+                    <td style={td}>
+                      <div style={acoesTabela}>
+                        <button
+                          onClick={() => editarProduto(p)}
+                          className="btn btn-success btn-sm"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => excluirProduto(p.id)}
+                          className="btn btn-danger btn-sm"
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
             ) : (
               <tr>
-                <td style={tdVazio} colSpan={9}>
+                <td style={tdVazio} colSpan={11}>
                   Nenhum produto encontrado.
                 </td>
               </tr>
@@ -405,7 +427,15 @@ export default function Produtos() {
             />
 
             <input
-              placeholder="Preço"
+              placeholder="Custo"
+              type="number"
+              step="0.01"
+              value={custo}
+              onChange={(e) => setCusto(e.target.value)}
+            />
+
+            <input
+              placeholder="Preço de venda"
               type="number"
               step="0.01"
               value={preco}
@@ -456,4 +486,4 @@ const tdVazio = {
   padding: "20px",
   textAlign: "center" as const,
   color: "#6b7280",
-} 
+}
