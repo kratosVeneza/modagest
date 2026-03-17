@@ -115,6 +115,12 @@ export default function Pedidos() {
     return produtos.find((p) => p.id === Number(productId)) || null
   }
 
+  const pedidoEmEdicao = useMemo(() => {
+    return pedidos.find((p) => p.id === idEmEdicao) || null
+  }, [pedidos, idEmEdicao])
+
+  const bloqueiaCamposEstruturais = Boolean(pedidoEmEdicao?.estoque_lancado)
+
   async function lancarEstoqueDoPedido({
     userId,
     produtoSelecionado,
@@ -169,18 +175,36 @@ export default function Pedidos() {
       return
     }
 
-    const produtoSelecionado = produtoSelecionadoAtual()
+    let produtoSelecionado = produtoSelecionadoAtual()
 
     if (!produtoSelecionado) {
       setMensagem("Produto não encontrado.")
       return
     }
 
-    const nomeProduto = produtoSelecionado.nome
-    const quantidadeNumerica = Number(quantidade)
+    let nomeProduto = produtoSelecionado.nome
+    let quantidadeNumerica = Number(quantidade)
 
     if (idEmEdicao) {
       const pedidoAtual = pedidos.find((p) => p.id === idEmEdicao)
+
+      if (!pedidoAtual) {
+        setMensagem("Pedido não encontrado.")
+        return
+      }
+
+      if (pedidoAtual.estoque_lancado) {
+        const produtoOriginal = produtos.find((p) => p.id === pedidoAtual.product_id)
+
+        if (produtoOriginal) {
+          produtoSelecionado = produtoOriginal
+          nomeProduto = produtoOriginal.nome
+        } else {
+          nomeProduto = pedidoAtual.produto
+        }
+
+        quantidadeNumerica = Number(pedidoAtual.quantidade)
+      }
 
       const { error } = await supabase
         .from("orders")
@@ -200,7 +224,6 @@ export default function Pedidos() {
       }
 
       const podeLancarEstoque =
-        pedidoAtual &&
         pedidoAtual.status !== "Recebido" &&
         status === "Recebido" &&
         !pedidoAtual.estoque_lancado
@@ -314,6 +337,13 @@ export default function Pedidos() {
 
     if (!user) {
       setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const pedido = pedidos.find((p) => p.id === id)
+
+    if (pedido?.estoque_lancado) {
+      setMensagem("Não é possível excluir um pedido que já lançou estoque.")
       return
     }
 
@@ -535,7 +565,11 @@ export default function Pedidos() {
           {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
 
           <div className="grid-2">
-            <select value={productId} onChange={(e) => setProductId(e.target.value)}>
+            <select
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+              disabled={bloqueiaCamposEstruturais}
+            >
               <option value="">Selecione um produto</option>
               {produtos.map((produto) => (
                 <option key={produto.id} value={produto.id}>
@@ -556,6 +590,7 @@ export default function Pedidos() {
               placeholder="Quantidade"
               value={quantidade}
               onChange={(e) => setQuantidade(e.target.value)}
+              disabled={bloqueiaCamposEstruturais}
             />
 
             <select value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -592,6 +627,21 @@ export default function Pedidos() {
               }}
             >
               Ao salvar com status <strong>Recebido</strong>, o estoque será lançado imediatamente.
+            </div>
+          )}
+
+          {bloqueiaCamposEstruturais && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#fff7ed",
+                color: "#9a3412",
+                fontSize: 14,
+              }}
+            >
+              Este pedido já lançou estoque. Produto e quantidade foram bloqueados para evitar inconsistência.
             </div>
           )}
         </>
