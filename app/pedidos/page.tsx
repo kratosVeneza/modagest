@@ -115,6 +115,38 @@ export default function Pedidos() {
     return produtos.find((p) => p.id === Number(productId)) || null
   }
 
+  async function lancarEstoqueDoPedido({
+    userId,
+    produtoSelecionado,
+    quantidadeNumerica,
+  }: {
+    userId: string
+    produtoSelecionado: Produto
+    quantidadeNumerica: number
+  }) {
+    const novoEstoque = Number(produtoSelecionado.estoque) + quantidadeNumerica
+
+    const { error: erroAtualizarEstoque } = await supabase
+      .from("products")
+      .update({ estoque: novoEstoque })
+      .eq("id", produtoSelecionado.id)
+      .eq("user_id", userId)
+
+    if (erroAtualizarEstoque) {
+      return { ok: false as const, mensagem: "Houve erro ao lançar no estoque." }
+    }
+
+    await registrarMovimentoEstoque({
+      productId: produtoSelecionado.id,
+      userId,
+      tipo: "entrada",
+      quantidade: quantidadeNumerica,
+      motivo: "Reposição fornecedor",
+    })
+
+    return { ok: true as const }
+  }
+
   async function salvarPedido() {
     setMensagem("")
 
@@ -174,28 +206,18 @@ export default function Pedidos() {
         !pedidoAtual.estoque_lancado
 
       if (podeLancarEstoque) {
-        const novoEstoque = Number(produtoSelecionado.estoque) + quantidadeNumerica
+        const resultado = await lancarEstoqueDoPedido({
+          userId: user.id,
+          produtoSelecionado,
+          quantidadeNumerica,
+        })
 
-        const { error: erroAtualizarEstoque } = await supabase
-          .from("products")
-          .update({ estoque: novoEstoque })
-          .eq("id", produtoSelecionado.id)
-          .eq("user_id", user.id)
-
-        if (erroAtualizarEstoque) {
+        if (!resultado.ok) {
           setMensagem("Pedido atualizado, mas houve erro ao lançar no estoque.")
           await carregarPedidos()
           await carregarProdutos()
           return
         }
-
-        await registrarMovimentoEstoque({
-          productId: produtoSelecionado.id,
-          userId: user.id,
-          tipo: "entrada",
-          quantidade: quantidadeNumerica,
-          motivo: "Reposição fornecedor",
-        })
 
         const { error: erroMarcarLancado } = await supabase
           .from("orders")
@@ -222,20 +244,50 @@ export default function Pedidos() {
       return
     }
 
-    const { error } = await supabase.from("orders").insert([
-      {
-        user_id: user.id,
-        product_id: produtoSelecionado.id,
-        produto: nomeProduto,
-        fornecedor,
-        quantidade: quantidadeNumerica,
-        status,
-      },
-    ])
+    const criarJaRecebido = status === "Recebido"
+
+    const { data: pedidoCriado, error } = await supabase
+      .from("orders")
+      .insert([
+        {
+          user_id: user.id,
+          product_id: produtoSelecionado.id,
+          produto: nomeProduto,
+          fornecedor,
+          quantidade: quantidadeNumerica,
+          status,
+          estoque_lancado: criarJaRecebido,
+        },
+      ])
+      .select("id")
+      .single()
 
     if (error) {
       setMensagem("Erro ao cadastrar pedido.")
       return
+    }
+
+    if (criarJaRecebido) {
+      const resultado = await lancarEstoqueDoPedido({
+        userId: user.id,
+        produtoSelecionado,
+        quantidadeNumerica,
+      })
+
+      if (!resultado.ok) {
+        if (pedidoCriado?.id) {
+          await supabase
+            .from("orders")
+            .update({ estoque_lancado: false })
+            .eq("id", pedidoCriado.id)
+            .eq("user_id", user.id)
+        }
+
+        setMensagem("Pedido cadastrado, mas houve erro ao lançar no estoque.")
+        await carregarPedidos()
+        await carregarProdutos()
+        return
+      }
     }
 
     fecharModal()
@@ -303,19 +355,18 @@ export default function Pedidos() {
     return pedidos.filter((pedido) => {
       const produtoRelacionado = produtoDoPedido(pedido)
 
-      const textoProduto =
-        [
-          produtoRelacionado?.nome,
-          produtoRelacionado?.sku,
-          produtoRelacionado?.marca,
-          produtoRelacionado?.categoria,
-          produtoRelacionado?.tipo,
-          pedido.produto,
-          pedido.fornecedor,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
+      const textoProduto = [
+        produtoRelacionado?.nome,
+        produtoRelacionado?.sku,
+        produtoRelacionado?.marca,
+        produtoRelacionado?.categoria,
+        produtoRelacionado?.tipo,
+        pedido.produto,
+        pedido.fornecedor,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
 
       const passouBusca = !termo || textoProduto.includes(termo)
       const passouStatus =
@@ -526,6 +577,21 @@ export default function Pedidos() {
               {[produtoSelecionadoAtual()?.marca, produtoSelecionadoAtual()?.categoria, produtoSelecionadoAtual()?.tipo]
                 .filter(Boolean)
                 .join(" • ")}
+            </div>
+          )}
+
+          {status === "Recebido" && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#ecfdf5",
+                color: "#065f46",
+                fontSize: 14,
+              }}
+            >
+              Ao salvar com status <strong>Recebido</strong>, o estoque será lançado imediatamente.
             </div>
           )}
         </>
