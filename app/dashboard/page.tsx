@@ -23,13 +23,13 @@ import {
   DollarSign,
   ShoppingBag,
   Boxes,
-  PackageCheck,
   PackageOpen,
   TrendingUp,
   TrendingDown,
   Minus,
   BadgeDollarSign,
   Percent,
+  AlertTriangle,
 } from "lucide-react"
 
 type Venda = {
@@ -47,6 +47,7 @@ type Produto = {
   nome: string
   sku: string
   estoque: number
+  estoque_minimo: number | null
   marca: string | null
   categoria: string | null
   tipo: string | null
@@ -125,11 +126,11 @@ export default function Dashboard() {
   const [produtosVendidosPeriodo, setProdutosVendidosPeriodo] = useState(0)
   const [estoqueBaixo, setEstoqueBaixo] = useState(0)
   const [pedidosPendentes, setPedidosPendentes] = useState(0)
-  const [pedidosRecebidos, setPedidosRecebidos] = useState(0)
   const [ultimasVendas, setUltimasVendas] = useState<VendaRecente[]>([])
   const [graficoDias, setGraficoDias] = useState<GraficoDia[]>([])
   const [rankingProdutos, setRankingProdutos] = useState<ProdutoRanking[]>([])
   const [graficoCategorias, setGraficoCategorias] = useState<CategoriaGrafico[]>([])
+  const [produtosAbaixoDoMinimo, setProdutosAbaixoDoMinimo] = useState<Produto[]>([])
   const [mensagem, setMensagem] = useState("")
   const [carregando, setCarregando] = useState(true)
 
@@ -186,7 +187,7 @@ export default function Dashboard() {
 
     const { data: produtos } = await supabase
       .from("products")
-      .select("id, nome, sku, estoque, marca, categoria, tipo, unidade, custo, preco")
+      .select("id, nome, sku, estoque, estoque_minimo, marca, categoria, tipo, unidade, custo, preco")
       .eq("user_id", user.id)
 
     const { data: clientes } = await supabase
@@ -200,19 +201,19 @@ export default function Dashboard() {
       .eq("user_id", user.id)
       .in("status", ["Pendente", "Encomendado", "Enviado"])
 
-    const { data: pedidosRecebidosData } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "Recebido")
+    const produtosTipados = (produtos ?? []) as Produto[]
 
     setTodasVendas((vendasAtivas ?? []) as Venda[])
-    setProdutosLista((produtos ?? []) as Produto[])
+    setProdutosLista(produtosTipados)
     setClientesLista((clientes ?? []) as Cliente[])
 
-    setEstoqueBaixo(((produtos ?? []) as Produto[]).filter((p) => Number(p.estoque) < 5).length)
+    const abaixoDoMinimo = produtosTipados.filter(
+      (p) => Number(p.estoque) <= Number(p.estoque_minimo || 0)
+    )
+
+    setProdutosAbaixoDoMinimo(abaixoDoMinimo)
+    setEstoqueBaixo(abaixoDoMinimo.length)
     setPedidosPendentes((pedidosPendentesData ?? []).length)
-    setPedidosRecebidos((pedidosRecebidosData ?? []).length)
 
     setCarregando(false)
   }
@@ -491,12 +492,57 @@ export default function Dashboard() {
     linhas.push(`"ModaGest Dashboard"`)
     linhas.push(`"Período";"${periodo}"`)
     linhas.push("")
+
     linhas.push(`"RESUMO"`)
     linhas.push(`"Faturamento do período";"${faturamentoPrincipal.toFixed(2)}"`)
     linhas.push(`"Lucro do período";"${lucroPrincipal.toFixed(2)}"`)
     linhas.push(`"Margem média";"${margemMediaPeriodo.toFixed(1)}%"`)
     linhas.push(`"Comparação faturamento";"${faturamentoComparacao.toFixed(2)}"`)
     linhas.push(`"Comparação lucro";"${lucroComparacao.toFixed(2)}"`)
+    linhas.push(`"Itens vendidos";"${produtosVendidosPeriodo}"`)
+    linhas.push(`"Produtos com estoque baixo";"${estoqueBaixo}"`)
+    linhas.push(`"Pedidos pendentes";"${pedidosPendentes}"`)
+    linhas.push("")
+
+    linhas.push(`"RECEITA POR DIA"`)
+    linhas.push(`"Dia";"Total"`)
+    graficoDias.forEach((item) => {
+      linhas.push(`"${item.dia}";"${item.total.toFixed(2)}"`)
+    })
+    linhas.push("")
+
+    linhas.push(`"PRODUTOS MAIS VENDIDOS"`)
+    linhas.push(`"Produto";"Marca";"Categoria";"Quantidade"`)
+    rankingProdutos.forEach((item) => {
+      linhas.push(
+        `"${item.nome.replace(/"/g, '""')}";"${item.marca.replace(/"/g, '""')}";"${item.categoria.replace(/"/g, '""')}";"${item.quantidade}"`
+      )
+    })
+    linhas.push("")
+
+    linhas.push(`"RECEITA POR CATEGORIA"`)
+    linhas.push(`"Categoria";"Receita"`)
+    graficoCategorias.forEach((item) => {
+      linhas.push(`"${item.name.replace(/"/g, '""')}";"${item.value.toFixed(2)}"`)
+    })
+    linhas.push("")
+
+    linhas.push(`"PRODUTOS ABAIXO DO MÍNIMO"`)
+    linhas.push(`"Produto";"SKU";"Estoque";"Mínimo"`)
+    produtosAbaixoDoMinimo.forEach((item) => {
+      linhas.push(
+        `"${item.nome.replace(/"/g, '""')}";"${item.sku.replace(/"/g, '""')}";"${item.estoque}";"${item.estoque_minimo || 0}"`
+      )
+    })
+    linhas.push("")
+
+    linhas.push(`"ÚLTIMAS VENDAS"`)
+    linhas.push(`"Cliente";"Produto";"Marca";"Categoria";"Quantidade";"Valor";"Lucro";"Data"`)
+    ultimasVendas.forEach((item) => {
+      linhas.push(
+        `"${item.nomeCliente.replace(/"/g, '""')}";"${item.nomeProduto.replace(/"/g, '""')}";"${item.marca.replace(/"/g, '""')}";"${item.categoria.replace(/"/g, '""')}";"${item.quantidade}";"${item.valorTotal.toFixed(2)}";"${item.lucroTotal.toFixed(2)}";"${formatarData(item.created_at)}"`
+      )
+    })
 
     const conteudo = linhas.join("\n")
     const blob = new Blob([conteudo], { type: "text/csv;charset=utf-8;" })
@@ -510,7 +556,6 @@ export default function Dashboard() {
 
   async function exportarDashboardPDF() {
     const doc = new jsPDF()
-
     const tituloPeriodo =
       periodo === "hoje"
         ? "Hoje"
@@ -540,15 +585,24 @@ export default function Dashboard() {
         ["Faturamento do período", `R$ ${faturamentoPrincipal.toFixed(2)}`],
         ["Lucro do período", `R$ ${lucroPrincipal.toFixed(2)}`],
         ["Margem média", `${margemMediaPeriodo.toFixed(1)}%`],
-        ["Comparação faturamento", `R$ ${faturamentoComparacao.toFixed(2)}`],
-        ["Comparação lucro", `R$ ${lucroComparacao.toFixed(2)}`],
-        ["Itens vendidos", String(produtosVendidosPeriodo)],
-        ["Estoque baixo", String(estoqueBaixo)],
+        ["Produtos com estoque baixo", String(estoqueBaixo)],
         ["Pedidos pendentes", String(pedidosPendentes)],
-        ["Pedidos recebidos", String(pedidosRecebidos)],
       ],
       styles: { fontSize: 10 },
       headStyles: { fillColor: [37, 99, 235] },
+    })
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [["Produto", "SKU", "Estoque", "Mínimo"]],
+      body: produtosAbaixoDoMinimo.map((item) => [
+        item.nome,
+        item.sku,
+        String(item.estoque),
+        String(item.estoque_minimo || 0),
+      ]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [220, 38, 38] },
     })
 
     doc.save(`dashboard_${periodo}.pdf`)
@@ -582,6 +636,31 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
+
+      {produtosAbaixoDoMinimo.length > 0 && (
+        <div
+          style={{
+            marginBottom: 20,
+            padding: "14px 16px",
+            borderRadius: 14,
+            background: "#fff7ed",
+            border: "1px solid #fdba74",
+            color: "#9a3412",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <AlertTriangle size={18} />
+            <strong>{produtosAbaixoDoMinimo.length} produto(s) com estoque baixo</strong>
+          </div>
+
+          <div style={{ fontSize: 14 }}>
+            {produtosAbaixoDoMinimo
+              .slice(0, 5)
+              .map((p) => `${p.nome} (${p.estoque}/${p.estoque_minimo || 0})`)
+              .join(" • ")}
+          </div>
+        </div>
+      )}
 
       <div className="grid-3" style={{ marginBottom: 24 }}>
         <div className="metric-card">
@@ -658,7 +737,7 @@ export default function Dashboard() {
               <Boxes size={20} />
             </div>
           </div>
-          <div className="metric-helper">Produtos abaixo do limite</div>
+          <div className="metric-helper">Produtos no limite mínimo</div>
         </div>
 
         <div className="metric-card">
@@ -851,4 +930,4 @@ const tdVazio = {
   padding: "20px",
   textAlign: "center" as const,
   color: "#6b7280",
-}
+} 
