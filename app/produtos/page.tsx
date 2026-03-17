@@ -108,7 +108,7 @@ export default function Produtos() {
     setCor("")
     setTamanho("")
     setEstoque("")
-    setEstoqueMinimo("1")
+    setEstoqueMinimo("")
     setCusto("")
     setPreco("")
     setIdEmEdicao(null)
