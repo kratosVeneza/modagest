@@ -4,6 +4,7 @@ import "./globals.css"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useRouter, usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
 import HeaderLoja from "./components/HeaderLoja"
 import UserProfile from "./components/UserProfile"
 import ThemeToggle from "./components/ThemeToggle"
@@ -18,14 +19,14 @@ import {
   ClipboardList,
   Store,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react"
 
 const menuGroups = [
   {
     title: "Visão geral",
-    items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    ],
+    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
   {
     title: "Operação",
@@ -54,6 +55,18 @@ export default function RootLayout({
 }>) {
   const router = useRouter()
   const pathname = usePathname()
+  const [menuFechado, setMenuFechado] = useState(false)
+
+  useEffect(() => {
+    const salvo = localStorage.getItem("modagest-menu-fechado")
+    setMenuFechado(salvo === "true")
+  }, [])
+
+  function alternarMenu() {
+    const novoValor = !menuFechado
+    setMenuFechado(novoValor)
+    localStorage.setItem("modagest-menu-fechado", String(novoValor))
+  }
 
   async function sair() {
     await supabase.auth.signOut()
@@ -63,33 +76,34 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body>
-        <div className="app-shell">
-          <aside className="sidebar">
+        <div className={`app-shell ${menuFechado ? "menu-collapsed" : ""}`}>
+          <aside className={`sidebar ${menuFechado ? "sidebar-collapsed" : ""}`}>
             <div className="logo-box">
               <div className="logo-badge">M</div>
-              <div>
-                <h2 className="logo-title">ModaGest</h2>
-                <p className="logo-subtitle">Gestão para lojas</p>
-              </div>
+
+              {!menuFechado && (
+                <div>
+                  <h2 className="logo-title">ModaGest</h2>
+                  <p className="logo-subtitle">Gestão para lojas</p>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={alternarMenu}
+                className="sidebar-toggle-btn"
+                title={menuFechado ? "Abrir menu" : "Fechar menu"}
+              >
+                {menuFechado ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+              </button>
             </div>
 
             <nav className="sidebar-nav">
               {menuGroups.map((group) => (
-                <div key={group.title} style={{ marginBottom: "18px" }}>
-                  <p
-                    style={{
-                      margin: "0 0 10px 6px",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      letterSpacing: "0.04em",
-                      textTransform: "uppercase",
-                      color: "#94a3b8",
-                    }}
-                  >
-                    {group.title}
-                  </p>
+                <div key={group.title} className="menu-group">
+                  {!menuFechado && <p className="menu-group-title">{group.title}</p>}
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div className="menu-group-items">
                     {group.items.map((item) => {
                       const ativo = pathname === item.href
                       const Icon = item.icon
@@ -98,12 +112,16 @@ export default function RootLayout({
                         <Link
                           key={item.href}
                           href={item.href}
-                          className={`menu-link ${ativo ? "menu-link-active" : ""}`}
+                          className={`menu-link ${ativo ? "menu-link-active" : ""} ${
+                            menuFechado ? "menu-link-collapsed" : ""
+                          }`}
+                          title={menuFechado ? item.label : ""}
                         >
                           <span className="menu-icon">
                             <Icon size={18} strokeWidth={2.2} />
                           </span>
-                          <span>{item.label}</span>
+
+                          {!menuFechado && <span>{item.label}</span>}
                         </Link>
                       )
                     })}
@@ -111,11 +129,16 @@ export default function RootLayout({
                 </div>
               ))}
 
-              <button onClick={sair} className="menu-link-danger">
+              <button
+                onClick={sair}
+                className={`menu-link-danger ${menuFechado ? "menu-link-collapsed" : ""}`}
+                title={menuFechado ? "Sair" : ""}
+              >
                 <span className="menu-icon">
                   <LogOut size={18} strokeWidth={2.2} />
                 </span>
-                <span>Sair</span>
+
+                {!menuFechado && <span>Sair</span>}
               </button>
             </nav>
           </aside>
@@ -125,9 +148,7 @@ export default function RootLayout({
               <div className="top-bar-content">
                 <div className="top-bar-left">
                   <HeaderLoja />
-                  <p className="top-bar-subtitle">
-                    Painel de gestão da sua operação
-                  </p>
+                  <p className="top-bar-subtitle">Painel de gestão da sua operação</p>
                 </div>
 
                 <div className="top-bar-actions">
