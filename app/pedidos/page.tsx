@@ -7,6 +7,7 @@ import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 
 type Pedido = {
   id: number
+  product_id: number | null
   produto: string
   fornecedor: string
   quantidade: number
@@ -18,13 +19,15 @@ type Pedido = {
 type Produto = {
   id: number
   nome: string
+  sku: string
   estoque: number
   user_id: string
 }
 
 export default function Pedidos() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
-  const [produto, setProduto] = useState("")
+  const [produtos, setProdutos] = useState<Produto[]>([])
+  const [productId, setProductId] = useState("")
   const [fornecedor, setFornecedor] = useState("")
   const [quantidade, setQuantidade] = useState("")
   const [mensagem, setMensagem] = useState("")
@@ -37,6 +40,7 @@ export default function Pedidos() {
 
   useEffect(() => {
     carregarPedidos()
+    carregarProdutos()
   }, [])
 
   async function carregarPedidos() {
@@ -65,8 +69,26 @@ export default function Pedidos() {
     setPedidos((data ?? []) as Pedido[])
   }
 
+  async function carregarProdutos() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from("products")
+      .select("id, nome, sku, estoque, user_id")
+      .eq("user_id", user.id)
+      .order("nome", { ascending: true })
+
+    if (!error) {
+      setProdutos((data ?? []) as Produto[])
+    }
+  }
+
   function limparFormulario() {
-    setProduto("")
+    setProductId("")
     setFornecedor("")
     setQuantidade("")
     setStatus("Pendente")
@@ -97,8 +119,8 @@ export default function Pedidos() {
       return
     }
 
-    if (!produto || !quantidade) {
-      setMensagem("Preencha produto e quantidade.")
+    if (!productId || !quantidade) {
+      setMensagem("Selecione um produto e informe a quantidade.")
       return
     }
 
@@ -107,15 +129,26 @@ export default function Pedidos() {
       return
     }
 
+    const produtoSelecionado = produtos.find((p) => p.id === Number(productId))
+
+    if (!produtoSelecionado) {
+      setMensagem("Produto não encontrado.")
+      return
+    }
+
+    const nomeProduto = produtoSelecionado.nome
+    const quantidadeNumerica = Number(quantidade)
+
     if (idEmEdicao) {
       const pedidoAtual = pedidos.find((p) => p.id === idEmEdicao)
 
       const { error } = await supabase
         .from("orders")
         .update({
-          produto,
+          product_id: produtoSelecionado.id,
+          produto: nomeProduto,
           fornecedor,
-          quantidade: Number(quantidade),
+          quantidade: quantidadeNumerica,
           status,
         })
         .eq("id", idEmEdicao)
@@ -126,52 +159,33 @@ export default function Pedidos() {
         return
       }
 
-      if (
+      const podeLancarEstoque =
         pedidoAtual &&
         pedidoAtual.status !== "Recebido" &&
         status === "Recebido" &&
         !pedidoAtual.estoque_lancado
-      ) {
-        const { data: produtoBanco, error: erroProduto } = await supabase
-          .from("products")
-          .select("*")
-          .eq("user_id", user.id)
-          .ilike("nome", produto)
-          .maybeSingle()
 
-        if (erroProduto) {
-          setMensagem("Pedido atualizado, mas houve erro ao buscar o produto.")
-          await carregarPedidos()
-          return
-        }
-
-        if (!produtoBanco) {
-          setMensagem("Pedido atualizado, mas nenhum produto com esse nome foi encontrado.")
-          await carregarPedidos()
-          return
-        }
-
-        const produtoTipado = produtoBanco as Produto
-        const quantidadeRecebida = Number(quantidade)
-        const novoEstoque = Number(produtoTipado.estoque) + quantidadeRecebida
+      if (podeLancarEstoque) {
+        const novoEstoque = Number(produtoSelecionado.estoque) + quantidadeNumerica
 
         const { error: erroAtualizarEstoque } = await supabase
           .from("products")
           .update({ estoque: novoEstoque })
-          .eq("id", produtoTipado.id)
+          .eq("id", produtoSelecionado.id)
           .eq("user_id", user.id)
 
         if (erroAtualizarEstoque) {
           setMensagem("Pedido atualizado, mas houve erro ao lançar no estoque.")
           await carregarPedidos()
+          await carregarProdutos()
           return
         }
 
         await registrarMovimentoEstoque({
-          productId: produtoTipado.id,
+          productId: produtoSelecionado.id,
           userId: user.id,
           tipo: "entrada",
-          quantidade: quantidadeRecebida,
+          quantidade: quantidadeNumerica,
           motivo: "Reposição fornecedor",
         })
 
@@ -184,25 +198,29 @@ export default function Pedidos() {
         if (erroMarcarLancado) {
           setMensagem("Estoque atualizado, mas houve erro ao marcar o pedido.")
           await carregarPedidos()
+          await carregarProdutos()
           return
         }
 
         fecharModal()
         await carregarPedidos()
+        await carregarProdutos()
         return
       }
 
       fecharModal()
       await carregarPedidos()
+      await carregarProdutos()
       return
     }
 
     const { error } = await supabase.from("orders").insert([
       {
         user_id: user.id,
-        produto,
+        product_id: produtoSelecionado.id,
+        produto: nomeProduto,
         fornecedor,
-        quantidade: Number(quantidade),
+        quantidade: quantidadeNumerica,
         status,
       },
     ])
@@ -214,11 +232,12 @@ export default function Pedidos() {
 
     fecharModal()
     await carregarPedidos()
+    await carregarProdutos()
   }
 
   function editarPedido(pedido: Pedido) {
     setIdEmEdicao(pedido.id)
-    setProduto(pedido.produto)
+    setProductId(pedido.product_id ? String(pedido.product_id) : "")
     setFornecedor(pedido.fornecedor || "")
     setQuantidade(String(pedido.quantidade))
     setStatus(pedido.status)
@@ -262,13 +281,23 @@ export default function Pedidos() {
     return data.toLocaleString("pt-BR")
   }
 
+  function nomeProdutoDoPedido(pedido: Pedido) {
+    if (pedido.product_id) {
+      const produtoRelacionado = produtos.find((p) => p.id === pedido.product_id)
+      if (produtoRelacionado) return produtoRelacionado.nome
+    }
+    return pedido.produto || "Produto não encontrado"
+  }
+
   const pedidosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
 
     return pedidos.filter((pedido) => {
+      const nomeProduto = nomeProdutoDoPedido(pedido).toLowerCase()
+
       const passouBusca =
         !termo ||
-        pedido.produto.toLowerCase().includes(termo) ||
+        nomeProduto.includes(termo) ||
         (pedido.fornecedor || "").toLowerCase().includes(termo)
 
       const passouStatus =
@@ -276,7 +305,7 @@ export default function Pedidos() {
 
       return passouBusca && passouStatus
     })
-  }, [pedidos, busca, filtroStatus])
+  }, [pedidos, busca, filtroStatus, produtos])
 
   return (
     <div>
@@ -332,7 +361,7 @@ export default function Pedidos() {
           <tbody>
             {pedidosFiltrados.map((pedido) => (
               <tr key={pedido.id}>
-                <td style={td}>{pedido.produto}</td>
+                <td style={td}>{nomeProdutoDoPedido(pedido)}</td>
                 <td style={td}>{pedido.fornecedor || "-"}</td>
                 <td style={td}>{pedido.quantidade}</td>
                 <td style={td}>
@@ -413,11 +442,14 @@ export default function Pedidos() {
           {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
 
           <div className="grid-2">
-            <input
-              placeholder="Produto"
-              value={produto}
-              onChange={(e) => setProduto(e.target.value)}
-            />
+            <select value={productId} onChange={(e) => setProductId(e.target.value)}>
+              <option value="">Selecione um produto</option>
+              {produtos.map((produto) => (
+                <option key={produto.id} value={produto.id}>
+                  {produto.nome} - {produto.sku}
+                </option>
+              ))}
+            </select>
 
             <input
               placeholder="Fornecedor"
