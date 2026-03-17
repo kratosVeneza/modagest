@@ -29,6 +29,7 @@ import {
   TrendingDown,
   Minus,
   BadgeDollarSign,
+  Percent,
 } from "lucide-react"
 
 type Venda = {
@@ -120,6 +121,7 @@ export default function Dashboard() {
   const [lucroPrincipal, setLucroPrincipal] = useState(0)
   const [lucroComparacao, setLucroComparacao] = useState(0)
   const [faturamentoComparacao, setFaturamentoComparacao] = useState(0)
+  const [margemMediaPeriodo, setMargemMediaPeriodo] = useState(0)
   const [produtosVendidosPeriodo, setProdutosVendidosPeriodo] = useState(0)
   const [estoqueBaixo, setEstoqueBaixo] = useState(0)
   const [pedidosPendentes, setPedidosPendentes] = useState(0)
@@ -333,10 +335,13 @@ export default function Dashboard() {
       return soma + (Number(venda.valor_total) - custoUnitario * Number(venda.quantidade))
     }, 0)
 
+    const margemMedia = totalAtual > 0 ? (lucroAtual / totalAtual) * 100 : 0
+
     setFaturamentoPrincipal(totalAtual)
     setFaturamentoComparacao(totalComparacao)
     setLucroPrincipal(lucroAtual)
     setLucroComparacao(lucroAnterior)
+    setMargemMediaPeriodo(margemMedia)
 
     setProdutosVendidosPeriodo(
       vendasPeriodo.reduce((soma, v) => soma + Number(v.quantidade), 0)
@@ -486,29 +491,12 @@ export default function Dashboard() {
     linhas.push(`"ModaGest Dashboard"`)
     linhas.push(`"Período";"${periodo}"`)
     linhas.push("")
-
     linhas.push(`"RESUMO"`)
     linhas.push(`"Faturamento do período";"${faturamentoPrincipal.toFixed(2)}"`)
     linhas.push(`"Lucro do período";"${lucroPrincipal.toFixed(2)}"`)
+    linhas.push(`"Margem média";"${margemMediaPeriodo.toFixed(1)}%"`)
     linhas.push(`"Comparação faturamento";"${faturamentoComparacao.toFixed(2)}"`)
     linhas.push(`"Comparação lucro";"${lucroComparacao.toFixed(2)}"`)
-    linhas.push(`"Itens vendidos";"${produtosVendidosPeriodo}"`)
-    linhas.push("")
-
-    linhas.push(`"RECEITA POR DIA"`)
-    linhas.push(`"Dia";"Total"`)
-    graficoDias.forEach((item) => {
-      linhas.push(`"${item.dia}";"${item.total.toFixed(2)}"`)
-    })
-    linhas.push("")
-
-    linhas.push(`"PRODUTOS MAIS VENDIDOS"`)
-    linhas.push(`"Produto";"Marca";"Categoria";"Quantidade"`)
-    rankingProdutos.forEach((item) => {
-      linhas.push(
-        `"${item.nome.replace(/"/g, '""')}";"${item.marca.replace(/"/g, '""')}";"${item.categoria.replace(/"/g, '""')}";"${item.quantidade}"`
-      )
-    })
 
     const conteudo = linhas.join("\n")
     const blob = new Blob([conteudo], { type: "text/csv;charset=utf-8;" })
@@ -551,6 +539,7 @@ export default function Dashboard() {
       body: [
         ["Faturamento do período", `R$ ${faturamentoPrincipal.toFixed(2)}`],
         ["Lucro do período", `R$ ${lucroPrincipal.toFixed(2)}`],
+        ["Margem média", `${margemMediaPeriodo.toFixed(1)}%`],
         ["Comparação faturamento", `R$ ${faturamentoComparacao.toFixed(2)}`],
         ["Comparação lucro", `R$ ${lucroComparacao.toFixed(2)}`],
         ["Itens vendidos", String(produtosVendidosPeriodo)],
@@ -636,6 +625,19 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
+              <p className="metric-label">Margem média</p>
+              <p className="metric-value">{margemMediaPeriodo.toFixed(1)}%</p>
+            </div>
+            <div className="metric-icon-box purple">
+              <Percent size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Lucro médio sobre vendas</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
               <p className="metric-label">Itens vendidos</p>
               <p className="metric-value">{produtosVendidosPeriodo}</p>
             </div>
@@ -670,19 +672,6 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="metric-helper">Aguardando conclusão</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label">Pedidos recebidos</p>
-              <p className="metric-value">{pedidosRecebidos}</p>
-            </div>
-            <div className="metric-icon-box gray">
-              <PackageCheck size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Reposições concluídas</div>
         </div>
       </div>
 

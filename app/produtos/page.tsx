@@ -296,20 +296,23 @@ export default function Produtos() {
               <th style={th}>Estoque</th>
               <th style={th}>Custo</th>
               <th style={th}>Preço</th>
+              <th style={th}>Lucro</th>
               <th style={th}>Margem</th>
+              <th style={th}>Markup</th>
               <th style={th}>Ações</th>
             </tr>
           </thead>
 
           <tbody>
             {carregando ? (
-              <TableSkeleton rows={6} cols={11} />
+              <TableSkeleton rows={6} cols={13} />
             ) : produtosFiltrados.length > 0 ? (
               produtosFiltrados.map((p) => {
-                const margem =
-                  Number(p.preco) > 0
-                    ? ((Number(p.preco) - Number(p.custo || 0)) / Number(p.preco)) * 100
-                    : 0
+                const preco = Number(p.preco)
+                const custo = Number(p.custo || 0)
+                const lucro = preco - custo
+                const margem = preco > 0 ? (lucro / preco) * 100 : 0
+                const markup = custo > 0 ? (lucro / custo) * 100 : 0
 
                 return (
                   <tr key={p.id}>
@@ -329,9 +332,11 @@ export default function Produtos() {
                     <td style={td}>{p.tipo || "-"}</td>
                     <td style={td}>{p.unidade || "-"}</td>
                     <td style={td}>{p.estoque}</td>
-                    <td style={td}>R$ {Number(p.custo || 0).toFixed(2)}</td>
-                    <td style={td}>R$ {Number(p.preco).toFixed(2)}</td>
+                    <td style={td}>R$ {custo.toFixed(2)}</td>
+                    <td style={td}>R$ {preco.toFixed(2)}</td>
+                    <td style={td}>R$ {lucro.toFixed(2)}</td>
                     <td style={td}>{margem.toFixed(1)}%</td>
+                    <td style={td}>{markup.toFixed(1)}%</td>
                     <td style={td}>
                       <div style={acoesTabela}>
                         <button
@@ -353,7 +358,7 @@ export default function Produtos() {
               })
             ) : (
               <tr>
-                <td style={tdVazio} colSpan={11}>
+                <td style={tdVazio} colSpan={13}>
                   Nenhum produto encontrado.
                 </td>
               </tr>
