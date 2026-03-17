@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 
 type MovimentoBruto = {
@@ -13,10 +13,18 @@ type MovimentoBruto = {
     | {
         nome: string
         sku: string
+        marca: string | null
+        categoria: string | null
+        tipo: string | null
+        unidade: string | null
       }
     | {
         nome: string
         sku: string
+        marca: string | null
+        categoria: string | null
+        tipo: string | null
+        unidade: string | null
       }[]
     | null
 }
@@ -29,11 +37,17 @@ type Movimento = {
   created_at: string
   nomeProduto: string
   skuProduto: string
+  marca: string
+  categoria: string
+  tipoProduto: string
+  unidade: string
 }
 
 export default function Estoque() {
   const [movimentos, setMovimentos] = useState<Movimento[]>([])
   const [mensagem, setMensagem] = useState("")
+  const [busca, setBusca] = useState("")
+  const [filtroTipo, setFiltroTipo] = useState("Todos")
 
   useEffect(() => {
     carregarMovimentos()
@@ -61,7 +75,11 @@ export default function Estoque() {
         created_at,
         products (
           nome,
-          sku
+          sku,
+          marca,
+          categoria,
+          tipo,
+          unidade
         )
       `)
       .eq("user_id", user.id)
@@ -87,6 +105,10 @@ export default function Estoque() {
         created_at: item.created_at,
         nomeProduto: produto?.nome || "Produto removido",
         skuProduto: produto?.sku || "-",
+        marca: produto?.marca || "-",
+        categoria: produto?.categoria || "-",
+        tipoProduto: produto?.tipo || "-",
+        unidade: produto?.unidade || "un",
       }
     })
 
@@ -105,49 +127,124 @@ export default function Estoque() {
     return tipo
   }
 
+  const movimentosFiltrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase()
+
+    return movimentos.filter((item) => {
+      const texto =
+        [
+          item.nomeProduto,
+          item.skuProduto,
+          item.marca,
+          item.categoria,
+          item.tipoProduto,
+          item.motivo,
+        ]
+          .join(" ")
+          .toLowerCase()
+
+      const passouBusca = !termo || texto.includes(termo)
+      const passouTipo = filtroTipo === "Todos" || item.tipo === filtroTipo
+
+      return passouBusca && passouTipo
+    })
+  }, [movimentos, busca, filtroTipo])
+
   return (
     <div>
-      <h2 style={{ fontSize: 22, fontWeight: 600 }}>Movimentação de Estoque</h2>
-
-      <p style={{ color: "#6b7280", marginBottom: 20 }}>
-        Histórico de entradas e saídas de produtos
+      <h2 className="page-title">Movimentação de Estoque</h2>
+      <p className="page-subtitle">
+        Histórico de entradas e saídas dos produtos.
       </p>
 
       {mensagem && <p>{mensagem}</p>}
 
-      <table style={tabela}>
-        <thead>
-          <tr>
-            <th style={th}>Produto</th>
-            <th style={th}>SKU</th>
-            <th style={th}>Tipo</th>
-            <th style={th}>Quantidade</th>
-            <th style={th}>Motivo</th>
-            <th style={th}>Data</th>
-          </tr>
-        </thead>
+      <div className="table-toolbar" style={{ marginTop: 20 }}>
+        <input
+          placeholder="Buscar por produto, SKU, marca, categoria, tipo ou motivo"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          style={{ maxWidth: "420px" }}
+        />
 
-        <tbody>
-          {movimentos.map((m) => (
-            <tr key={m.id}>
-              <td style={td}>{m.nomeProduto}</td>
-              <td style={td}>{m.skuProduto}</td>
-              <td style={td}>{formatarTipo(m.tipo)}</td>
-              <td style={td}>{m.quantidade}</td>
-              <td style={td}>{m.motivo}</td>
-              <td style={td}>{formatarData(m.created_at)}</td>
-            </tr>
-          ))}
+        <select
+          value={filtroTipo}
+          onChange={(e) => setFiltroTipo(e.target.value)}
+          style={{ maxWidth: "220px" }}
+        >
+          <option value="Todos">Todos os tipos</option>
+          <option value="entrada">Entrada</option>
+          <option value="saida">Saída</option>
+          <option value="cancelamento">Cancelamento</option>
+          <option value="ajuste">Ajuste</option>
+        </select>
 
-          {movimentos.length === 0 && (
+        <span className="info-muted">{movimentosFiltrados.length} movimentação(ões)</span>
+      </div>
+
+      <div className="data-table-wrap">
+        <table style={tabela}>
+          <thead>
             <tr>
-              <td style={tdVazio} colSpan={6}>
-                Nenhuma movimentação encontrada.
-              </td>
+              <th style={th}>Produto</th>
+              <th style={th}>Detalhes</th>
+              <th style={th}>Tipo</th>
+              <th style={th}>Quantidade</th>
+              <th style={th}>Motivo</th>
+              <th style={th}>Data</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {movimentosFiltrados.map((m) => (
+              <tr key={m.id}>
+                <td style={td}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <strong>{m.nomeProduto}</strong>
+                    <span style={{ fontSize: 12, color: "#6b7280" }}>{m.skuProduto}</span>
+                  </div>
+                </td>
+                <td style={td}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span>{m.marca}</span>
+                    <span style={{ fontSize: 12, color: "#6b7280" }}>
+                      {[m.categoria, m.tipoProduto, m.unidade].filter(Boolean).join(" • ")}
+                    </span>
+                  </div>
+                </td>
+                <td style={td}>
+                  <span
+                    className={
+                      m.tipo === "entrada"
+                        ? "status-pill status-green"
+                        : m.tipo === "saida"
+                        ? "status-pill status-red"
+                        : m.tipo === "cancelamento"
+                        ? "status-pill status-blue"
+                        : "status-pill status-yellow"
+                    }
+                  >
+                    {formatarTipo(m.tipo)}
+                  </span>
+                </td>
+                <td style={td}>
+                  {m.quantidade} {m.unidade}
+                </td>
+                <td style={td}>{m.motivo}</td>
+                <td style={td}>{formatarData(m.created_at)}</td>
+              </tr>
+            ))}
+
+            {movimentosFiltrados.length === 0 && (
+              <tr>
+                <td style={tdVazio} colSpan={6}>
+                  Nenhuma movimentação encontrada.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -167,6 +264,7 @@ const th = {
 const td = {
   borderBottom: "1px solid #eee",
   padding: "10px",
+  verticalAlign: "top" as const,
 }
 
 const tdVazio = {

@@ -20,6 +20,10 @@ type Produto = {
   id: number
   nome: string
   sku: string
+  marca: string | null
+  categoria: string | null
+  tipo: string | null
+  unidade: string | null
   estoque: number
   user_id: string
 }
@@ -78,7 +82,7 @@ export default function Pedidos() {
 
     const { data, error } = await supabase
       .from("products")
-      .select("id, nome, sku, estoque, user_id")
+      .select("id, nome, sku, marca, categoria, tipo, unidade, estoque, user_id")
       .eq("user_id", user.id)
       .order("nome", { ascending: true })
 
@@ -107,6 +111,10 @@ export default function Pedidos() {
     setModalAberto(false)
   }
 
+  function produtoSelecionadoAtual() {
+    return produtos.find((p) => p.id === Number(productId)) || null
+  }
+
   async function salvarPedido() {
     setMensagem("")
 
@@ -129,7 +137,7 @@ export default function Pedidos() {
       return
     }
 
-    const produtoSelecionado = produtos.find((p) => p.id === Number(productId))
+    const produtoSelecionado = produtoSelecionadoAtual()
 
     if (!produtoSelecionado) {
       setMensagem("Produto não encontrado.")
@@ -281,25 +289,35 @@ export default function Pedidos() {
     return data.toLocaleString("pt-BR")
   }
 
-  function nomeProdutoDoPedido(pedido: Pedido) {
+  function produtoDoPedido(pedido: Pedido) {
     if (pedido.product_id) {
       const produtoRelacionado = produtos.find((p) => p.id === pedido.product_id)
-      if (produtoRelacionado) return produtoRelacionado.nome
+      if (produtoRelacionado) return produtoRelacionado
     }
-    return pedido.produto || "Produto não encontrado"
+    return null
   }
 
   const pedidosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
 
     return pedidos.filter((pedido) => {
-      const nomeProduto = nomeProdutoDoPedido(pedido).toLowerCase()
+      const produtoRelacionado = produtoDoPedido(pedido)
 
-      const passouBusca =
-        !termo ||
-        nomeProduto.includes(termo) ||
-        (pedido.fornecedor || "").toLowerCase().includes(termo)
+      const textoProduto =
+        [
+          produtoRelacionado?.nome,
+          produtoRelacionado?.sku,
+          produtoRelacionado?.marca,
+          produtoRelacionado?.categoria,
+          produtoRelacionado?.tipo,
+          pedido.produto,
+          pedido.fornecedor,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
 
+      const passouBusca = !termo || textoProduto.includes(termo)
       const passouStatus =
         filtroStatus === "Todos" || pedido.status === filtroStatus
 
@@ -322,7 +340,7 @@ export default function Pedidos() {
 
       <div className="table-toolbar">
         <input
-          placeholder="Buscar por produto ou fornecedor"
+          placeholder="Buscar por produto, marca, categoria, tipo ou fornecedor"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           style={{ maxWidth: "420px" }}
@@ -349,6 +367,7 @@ export default function Pedidos() {
           <thead>
             <tr>
               <th style={th}>Produto</th>
+              <th style={th}>Detalhes</th>
               <th style={th}>Fornecedor</th>
               <th style={th}>Quantidade</th>
               <th style={th}>Status</th>
@@ -359,62 +378,85 @@ export default function Pedidos() {
           </thead>
 
           <tbody>
-            {pedidosFiltrados.map((pedido) => (
-              <tr key={pedido.id}>
-                <td style={td}>{nomeProdutoDoPedido(pedido)}</td>
-                <td style={td}>{pedido.fornecedor || "-"}</td>
-                <td style={td}>{pedido.quantidade}</td>
-                <td style={td}>
-                  <span
-                    className={
-                      pedido.status === "Recebido"
-                        ? "status-pill status-green"
-                        : pedido.status === "Cancelado"
-                        ? "status-pill status-red"
-                        : pedido.status === "Enviado"
-                        ? "status-pill status-blue"
-                        : pedido.status === "Encomendado"
-                        ? "status-pill status-yellow"
-                        : "status-pill status-gray"
-                    }
-                  >
-                    {pedido.status}
-                  </span>
-                </td>
-                <td style={td}>
-                  <span
-                    className={
-                      pedido.estoque_lancado
-                        ? "status-pill status-green"
-                        : "status-pill status-gray"
-                    }
-                  >
-                    {pedido.estoque_lancado ? "Sim" : "Não"}
-                  </span>
-                </td>
-                <td style={td}>{formatarData(pedido.created_at)}</td>
-                <td style={td}>
-                  <div style={acoesTabela}>
-                    <button
-                      onClick={() => editarPedido(pedido)}
-                      className="btn btn-success btn-sm"
+            {pedidosFiltrados.map((pedido) => {
+              const produtoRelacionado = produtoDoPedido(pedido)
+
+              return (
+                <tr key={pedido.id}>
+                  <td style={td}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <strong>{produtoRelacionado?.nome || pedido.produto}</strong>
+                      <span style={{ fontSize: 12, color: "#6b7280" }}>
+                        {produtoRelacionado?.sku || "-"}
+                      </span>
+                    </div>
+                  </td>
+                  <td style={td}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <span>{produtoRelacionado?.marca || "-"}</span>
+                      <span style={{ fontSize: 12, color: "#6b7280" }}>
+                        {[produtoRelacionado?.categoria, produtoRelacionado?.tipo, produtoRelacionado?.unidade]
+                          .filter(Boolean)
+                          .join(" • ") || "-"}
+                      </span>
+                    </div>
+                  </td>
+                  <td style={td}>{pedido.fornecedor || "-"}</td>
+                  <td style={td}>
+                    {pedido.quantidade} {produtoRelacionado?.unidade || "un"}
+                  </td>
+                  <td style={td}>
+                    <span
+                      className={
+                        pedido.status === "Recebido"
+                          ? "status-pill status-green"
+                          : pedido.status === "Cancelado"
+                          ? "status-pill status-red"
+                          : pedido.status === "Enviado"
+                          ? "status-pill status-blue"
+                          : pedido.status === "Encomendado"
+                          ? "status-pill status-yellow"
+                          : "status-pill status-gray"
+                      }
                     >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => excluirPedido(pedido.id)}
-                      className="btn btn-danger btn-sm"
+                      {pedido.status}
+                    </span>
+                  </td>
+                  <td style={td}>
+                    <span
+                      className={
+                        pedido.estoque_lancado
+                          ? "status-pill status-green"
+                          : "status-pill status-gray"
+                      }
                     >
-                      Excluir
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {pedido.estoque_lancado ? "Sim" : "Não"}
+                    </span>
+                  </td>
+                  <td style={td}>{formatarData(pedido.created_at)}</td>
+                  <td style={td}>
+                    <div style={acoesTabela}>
+                      <button
+                        onClick={() => editarPedido(pedido)}
+                        className="btn btn-success btn-sm"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => excluirPedido(pedido.id)}
+                        className="btn btn-danger btn-sm"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
 
             {pedidosFiltrados.length === 0 && (
               <tr>
-                <td style={tdVazio} colSpan={7}>
+                <td style={tdVazio} colSpan={8}>
                   Nenhum pedido encontrado.
                 </td>
               </tr>
@@ -447,6 +489,7 @@ export default function Pedidos() {
               {produtos.map((produto) => (
                 <option key={produto.id} value={produto.id}>
                   {produto.nome} - {produto.sku}
+                  {produto.marca ? ` - ${produto.marca}` : ""}
                 </option>
               ))}
             </select>
@@ -472,6 +515,19 @@ export default function Pedidos() {
               <option value="Cancelado">Cancelado</option>
             </select>
           </div>
+
+          {productId && (
+            <div style={{ marginTop: 16, fontSize: 14, color: "#6b7280" }}>
+              Produto selecionado:{" "}
+              <strong style={{ color: "inherit" }}>
+                {produtoSelecionadoAtual()?.nome}
+              </strong>
+              {" • "}
+              {[produtoSelecionadoAtual()?.marca, produtoSelecionadoAtual()?.categoria, produtoSelecionadoAtual()?.tipo]
+                .filter(Boolean)
+                .join(" • ")}
+            </div>
+          )}
         </>
       </AnimatedModal>
     </div>
@@ -497,6 +553,7 @@ const th = {
 const td = {
   borderBottom: "1px solid #e5e7eb",
   padding: "12px",
+  verticalAlign: "top" as const,
 }
 
 const tdVazio = {

@@ -10,6 +10,10 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from "recharts"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -41,6 +45,10 @@ type Produto = {
   nome: string
   sku: string
   estoque: number
+  marca: string | null
+  categoria: string | null
+  tipo: string | null
+  unidade: string | null
 }
 
 type Cliente = {
@@ -55,6 +63,8 @@ type VendaRecente = {
   quantidade: number
   valorTotal: number
   created_at: string
+  categoria: string
+  marca: string
 }
 
 type GraficoDia = {
@@ -65,6 +75,13 @@ type GraficoDia = {
 type ProdutoRanking = {
   nome: string
   quantidade: number
+  marca: string
+  categoria: string
+}
+
+type CategoriaGrafico = {
+  name: string
+  value: number
 }
 
 type TrendInfo = {
@@ -79,6 +96,8 @@ type Loja = {
   nome_loja?: string | null
   logo_url?: string | null
 }
+
+const CORES = ["#2563eb", "#059669", "#dc2626", "#d97706", "#7c3aed", "#0891b2"]
 
 const periodos: { value: Periodo; label: string }[] = [
   { value: "hoje", label: "Hoje" },
@@ -102,6 +121,7 @@ export default function Dashboard() {
   const [ultimasVendas, setUltimasVendas] = useState<VendaRecente[]>([])
   const [graficoDias, setGraficoDias] = useState<GraficoDia[]>([])
   const [rankingProdutos, setRankingProdutos] = useState<ProdutoRanking[]>([])
+  const [graficoCategorias, setGraficoCategorias] = useState<CategoriaGrafico[]>([])
   const [mensagem, setMensagem] = useState("")
   const [carregando, setCarregando] = useState(true)
 
@@ -163,7 +183,7 @@ export default function Dashboard() {
 
     const { data: produtos } = await supabase
       .from("products")
-      .select("id, nome, sku, estoque")
+      .select("id, nome, sku, estoque, marca, categoria, tipo, unidade")
       .eq("user_id", user.id)
 
     const { data: clientes } = await supabase
@@ -323,6 +343,8 @@ export default function Dashboard() {
         quantidade: venda.quantidade,
         valorTotal: Number(venda.valor_total),
         created_at: venda.created_at,
+        categoria: produto?.categoria || "-",
+        marca: produto?.marca || "-",
       }
     })
 
@@ -354,26 +376,42 @@ export default function Dashboard() {
     setGraficoDias(diasBase)
 
     const mapaProdutos = new Map<number, ProdutoRanking>()
+    const mapaCategorias = new Map<string, number>()
 
     vendasPeriodo.forEach((venda) => {
       const produto = produtosLista.find((p) => p.id === venda.product_id)
       const nome = produto?.nome || "Produto removido"
+      const marca = produto?.marca || "-"
+      const categoria = produto?.categoria || "Sem categoria"
 
       if (!mapaProdutos.has(venda.product_id)) {
         mapaProdutos.set(venda.product_id, {
           nome,
           quantidade: 0,
+          marca,
+          categoria,
         })
       }
 
       mapaProdutos.get(venda.product_id)!.quantidade += Number(venda.quantidade)
+
+      mapaCategorias.set(
+        categoria,
+        (mapaCategorias.get(categoria) || 0) + Number(venda.valor_total)
+      )
     })
 
     const ranking = Array.from(mapaProdutos.values())
       .sort((a, b) => b.quantidade - a.quantidade)
       .slice(0, 5)
 
+    const categoriasGrafico = Array.from(mapaCategorias.entries()).map(([name, value]) => ({
+      name,
+      value,
+    }))
+
     setRankingProdutos(ranking)
+    setGraficoCategorias(categoriasGrafico)
   }
 
   function formatarData(dataIso: string) {
@@ -454,17 +492,26 @@ export default function Dashboard() {
     linhas.push("")
 
     linhas.push(`"PRODUTOS MAIS VENDIDOS"`)
-    linhas.push(`"Produto";"Quantidade"`)
+    linhas.push(`"Produto";"Marca";"Categoria";"Quantidade"`)
     rankingProdutos.forEach((item) => {
-      linhas.push(`"${item.nome.replace(/"/g, '""')}";"${item.quantidade}"`)
+      linhas.push(
+        `"${item.nome.replace(/"/g, '""')}";"${item.marca.replace(/"/g, '""')}";"${item.categoria.replace(/"/g, '""')}";"${item.quantidade}"`
+      )
+    })
+    linhas.push("")
+
+    linhas.push(`"RECEITA POR CATEGORIA"`)
+    linhas.push(`"Categoria";"Receita"`)
+    graficoCategorias.forEach((item) => {
+      linhas.push(`"${item.name.replace(/"/g, '""')}";"${item.value.toFixed(2)}"`)
     })
     linhas.push("")
 
     linhas.push(`"ÚLTIMAS VENDAS"`)
-    linhas.push(`"Cliente";"Produto";"Quantidade";"Valor";"Data"`)
+    linhas.push(`"Cliente";"Produto";"Marca";"Categoria";"Quantidade";"Valor";"Data"`)
     ultimasVendas.forEach((item) => {
       linhas.push(
-        `"${item.nomeCliente.replace(/"/g, '""')}";"${item.nomeProduto.replace(/"/g, '""')}";"${item.quantidade}";"${item.valorTotal.toFixed(2)}";"${formatarData(item.created_at)}"`
+        `"${item.nomeCliente.replace(/"/g, '""')}";"${item.nomeProduto.replace(/"/g, '""')}";"${item.marca.replace(/"/g, '""')}";"${item.categoria.replace(/"/g, '""')}";"${item.quantidade}";"${item.valorTotal.toFixed(2)}";"${formatarData(item.created_at)}"`
       )
     })
 
@@ -536,8 +583,13 @@ export default function Dashboard() {
 
     autoTable(doc, {
       startY: (doc as any).lastAutoTable.finalY + 10,
-      head: [["Produto", "Quantidade"]],
-      body: rankingProdutos.map((item) => [item.nome, String(item.quantidade)]),
+      head: [["Produto", "Marca", "Categoria", "Quantidade"]],
+      body: rankingProdutos.map((item) => [
+        item.nome,
+        item.marca,
+        item.categoria,
+        String(item.quantidade),
+      ]),
       styles: {
         fontSize: 10,
       },
@@ -548,10 +600,27 @@ export default function Dashboard() {
 
     autoTable(doc, {
       startY: (doc as any).lastAutoTable.finalY + 10,
-      head: [["Cliente", "Produto", "Quantidade", "Valor", "Data"]],
+      head: [["Categoria", "Receita"]],
+      body: graficoCategorias.map((item) => [
+        item.name,
+        `R$ ${item.value.toFixed(2)}`,
+      ]),
+      styles: {
+        fontSize: 10,
+      },
+      headStyles: {
+        fillColor: [8, 145, 178],
+      },
+    })
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [["Cliente", "Produto", "Marca", "Categoria", "Quantidade", "Valor", "Data"]],
       body: ultimasVendas.map((item) => [
         item.nomeCliente,
         item.nomeProduto,
+        item.marca,
+        item.categoria,
         String(item.quantidade),
         `R$ ${item.valorTotal.toFixed(2)}`,
         formatarData(item.created_at),
@@ -726,6 +795,38 @@ export default function Dashboard() {
         <div className="chart-shell">
           <div className="chart-header-row">
             <div>
+              <h3 className="dashboard-block-title">Receita por categoria</h3>
+              <p className="dashboard-block-subtitle">Distribuição por categoria</p>
+            </div>
+            <span className="chart-badge">Categorias</span>
+          </div>
+
+          <div style={{ width: "100%", height: 320 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={graficoCategorias}
+                  dataKey="value"
+                  nameKey="name"
+                  outerRadius={100}
+                  label
+                >
+                  {graficoCategorias.map((_, index) => (
+                    <Cell key={index} fill={CORES[index % CORES.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="dashboard-two-columns" style={{ marginBottom: 24 }}>
+        <div className="chart-shell">
+          <div className="chart-header-row">
+            <div>
               <h3 className="dashboard-block-title">Produtos mais vendidos</h3>
               <p className="dashboard-block-subtitle">Ranking do período</p>
             </div>
@@ -734,8 +835,15 @@ export default function Dashboard() {
 
           <div className="bar-list">
             {rankingProdutos.map((item) => (
-              <div key={item.nome} className="bar-list-item">
-                <div className="bar-list-label">{item.nome}</div>
+              <div key={`${item.nome}-${item.marca}`} className="bar-list-item">
+                <div className="bar-list-label">
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span>{item.nome}</span>
+                    <span style={{ fontSize: 12, color: "#6b7280" }}>
+                      {[item.marca, item.categoria].filter(Boolean).join(" • ")}
+                    </span>
+                  </div>
+                </div>
 
                 <div className="bar-list-track">
                   <div
@@ -746,7 +854,7 @@ export default function Dashboard() {
                   />
                 </div>
 
-                <div className="bar-list-value">{item.quantidade} un.</div>
+                <div className="bar-list-value">{item.quantidade}</div>
               </div>
             ))}
 
@@ -755,55 +863,64 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-      </div>
 
-      <div className="section-card">
-        <h3 className="dashboard-block-title">Últimas vendas</h3>
-        <p className="dashboard-block-subtitle">
-          As 5 movimentações mais recentes do período
-        </p>
+        <div className="section-card">
+          <h3 className="dashboard-block-title">Últimas vendas</h3>
+          <p className="dashboard-block-subtitle">
+            As 5 movimentações mais recentes do período
+          </p>
 
-        <div className="data-table-wrap" style={{ marginTop: 16 }}>
-          <table
-            className="premium-table"
-            style={{ width: "100%", borderCollapse: "collapse" }}
-          >
-            <thead>
-              <tr>
-                <th style={th}>Cliente</th>
-                <th style={th}>Produto</th>
-                <th style={th}>Qtd.</th>
-                <th style={th}>Valor</th>
-                <th style={th}>Data</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {carregando ? (
+          <div className="data-table-wrap" style={{ marginTop: 16 }}>
+            <table
+              className="premium-table"
+              style={{ width: "100%", borderCollapse: "collapse" }}
+            >
+              <thead>
                 <tr>
-                  <td colSpan={5} style={{ padding: 20 }}>
-                    Carregando...
-                  </td>
+                  <th style={th}>Cliente</th>
+                  <th style={th}>Produto</th>
+                  <th style={th}>Detalhes</th>
+                  <th style={th}>Qtd.</th>
+                  <th style={th}>Valor</th>
+                  <th style={th}>Data</th>
                 </tr>
-              ) : ultimasVendas.length > 0 ? (
-                ultimasVendas.map((venda) => (
-                  <tr key={venda.id}>
-                    <td style={td}>{venda.nomeCliente}</td>
-                    <td style={td}>{venda.nomeProduto}</td>
-                    <td style={td}>{venda.quantidade}</td>
-                    <td style={td}>R$ {venda.valorTotal.toFixed(2)}</td>
-                    <td style={td}>{formatarData(venda.created_at)}</td>
+              </thead>
+
+              <tbody>
+                {carregando ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: 20 }}>
+                      Carregando...
+                    </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td style={tdVazio} colSpan={5}>
-                    Nenhuma venda encontrada.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                ) : ultimasVendas.length > 0 ? (
+                  ultimasVendas.map((venda) => (
+                    <tr key={venda.id}>
+                      <td style={td}>{venda.nomeCliente}</td>
+                      <td style={td}>{venda.nomeProduto}</td>
+                      <td style={td}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span>{venda.marca}</span>
+                          <span style={{ fontSize: 12, color: "#6b7280" }}>
+                            {venda.categoria}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={td}>{venda.quantidade}</td>
+                      <td style={td}>R$ {venda.valorTotal.toFixed(2)}</td>
+                      <td style={td}>{formatarData(venda.created_at)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td style={tdVazio} colSpan={6}>
+                      Nenhuma venda encontrada.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -819,6 +936,7 @@ const th = {
 const td = {
   borderBottom: "1px solid #e5e7eb",
   padding: "12px",
+  verticalAlign: "top" as const,
 }
 
 const tdVazio = {
