@@ -16,6 +16,7 @@ type Produto = {
   cor: string | null
   tamanho: string | null
   estoque: number
+  estoque_minimo: number
   custo: number
   preco: number
   user_id: string
@@ -41,6 +42,7 @@ export default function Produtos() {
   const [cor, setCor] = useState("")
   const [tamanho, setTamanho] = useState("")
   const [estoque, setEstoque] = useState("")
+  const [estoqueMinimo, setEstoqueMinimo] = useState("")
   const [custo, setCusto] = useState("")
   const [preco, setPreco] = useState("")
   const [idEmEdicao, setIdEmEdicao] = useState<number | null>(null)
@@ -106,6 +108,7 @@ export default function Produtos() {
     setCor("")
     setTamanho("")
     setEstoque("")
+    setEstoqueMinimo("")
     setCusto("")
     setPreco("")
     setIdEmEdicao(null)
@@ -145,21 +148,24 @@ export default function Produtos() {
       return
     }
 
+    const payload = {
+      nome,
+      marca: marca || null,
+      categoria,
+      tipo,
+      unidade,
+      cor: cor || null,
+      tamanho: tamanho || null,
+      estoque: Number(estoque),
+      estoque_minimo: Number(estoqueMinimo || 0),
+      custo: Number(custo),
+      preco: Number(preco),
+    }
+
     if (idEmEdicao) {
       const { error } = await supabase
         .from("products")
-        .update({
-          nome,
-          marca: marca || null,
-          categoria,
-          tipo,
-          unidade,
-          cor: cor || null,
-          tamanho: tamanho || null,
-          estoque: Number(estoque),
-          custo: Number(custo),
-          preco: Number(preco),
-        })
+        .update(payload)
         .eq("id", idEmEdicao)
         .eq("user_id", user.id)
 
@@ -176,16 +182,7 @@ export default function Produtos() {
     const { error } = await supabase.from("products").insert([
       {
         sku: gerarSku(nome, categoria, tipo),
-        nome,
-        marca: marca || null,
-        categoria,
-        tipo,
-        unidade,
-        cor: cor || null,
-        tamanho: tamanho || null,
-        estoque: Number(estoque),
-        custo: Number(custo),
-        preco: Number(preco),
+        ...payload,
         user_id: user.id,
       },
     ])
@@ -209,6 +206,7 @@ export default function Produtos() {
     setCor(produto.cor || "")
     setTamanho(produto.tamanho || "")
     setEstoque(String(produto.estoque))
+    setEstoqueMinimo(String(produto.estoque_minimo ?? 0))
     setCusto(String(produto.custo ?? 0))
     setPreco(String(produto.preco))
     setModalAberto(true)
@@ -294,6 +292,8 @@ export default function Produtos() {
               <th style={th}>Tipo</th>
               <th style={th}>Unidade</th>
               <th style={th}>Estoque</th>
+              <th style={th}>Mínimo</th>
+              <th style={th}>Status</th>
               <th style={th}>Custo</th>
               <th style={th}>Preço</th>
               <th style={th}>Lucro</th>
@@ -305,7 +305,7 @@ export default function Produtos() {
 
           <tbody>
             {carregando ? (
-              <TableSkeleton rows={6} cols={13} />
+              <TableSkeleton rows={6} cols={15} />
             ) : produtosFiltrados.length > 0 ? (
               produtosFiltrados.map((p) => {
                 const preco = Number(p.preco)
@@ -313,6 +313,8 @@ export default function Produtos() {
                 const lucro = preco - custo
                 const margem = preco > 0 ? (lucro / preco) * 100 : 0
                 const markup = custo > 0 ? (lucro / custo) * 100 : 0
+                const estoqueBaixo =
+                  Number(p.estoque) <= Number(p.estoque_minimo || 0)
 
                 return (
                   <tr key={p.id}>
@@ -332,6 +334,18 @@ export default function Produtos() {
                     <td style={td}>{p.tipo || "-"}</td>
                     <td style={td}>{p.unidade || "-"}</td>
                     <td style={td}>{p.estoque}</td>
+                    <td style={td}>{p.estoque_minimo ?? 0}</td>
+                    <td style={td}>
+                      <span
+                        className={
+                          estoqueBaixo
+                            ? "status-pill status-red"
+                            : "status-pill status-green"
+                        }
+                      >
+                        {estoqueBaixo ? "Baixo" : "OK"}
+                      </span>
+                    </td>
                     <td style={td}>R$ {custo.toFixed(2)}</td>
                     <td style={td}>R$ {preco.toFixed(2)}</td>
                     <td style={td}>R$ {lucro.toFixed(2)}</td>
@@ -358,7 +372,7 @@ export default function Produtos() {
               })
             ) : (
               <tr>
-                <td style={tdVazio} colSpan={13}>
+                <td style={tdVazio} colSpan={15}>
                   Nenhum produto encontrado.
                 </td>
               </tr>
@@ -429,6 +443,13 @@ export default function Produtos() {
               type="number"
               value={estoque}
               onChange={(e) => setEstoque(e.target.value)}
+            />
+
+            <input
+              placeholder="Estoque mínimo"
+              type="number"
+              value={estoqueMinimo}
+              onChange={(e) => setEstoqueMinimo(e.target.value)}
             />
 
             <input
