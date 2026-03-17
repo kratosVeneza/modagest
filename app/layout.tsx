@@ -1,40 +1,50 @@
 "use client"
 
 import "./globals.css"
-import PageTransition from "./components/PageTransition"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useRouter, usePathname } from "next/navigation"
 import HeaderLoja from "./components/HeaderLoja"
 import UserProfile from "./components/UserProfile"
 import ThemeToggle from "./components/ThemeToggle"
+import PageTransition from "./components/PageTransition"
 import {
-  House,
   LayoutDashboard,
   Package,
-  ShoppingCart,
-  ClipboardList,
-  ReceiptText,
-  Users,
-  Wallet,
-  Store,
-  LogIn,
-  LogOut,
   Boxes,
+  ShoppingCart,
+  Wallet,
+  Users,
+  ClipboardList,
+  Store,
+  LogOut,
 } from "lucide-react"
 
-const menuItems = [
-  { href: "/", label: "Início", icon: House },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/produtos", label: "Produtos", icon: Package },
-  { href: "/estoque", label: "Estoque", icon: Boxes },
-  { href: "/vendas", label: "Vendas", icon: Wallet },
-  { href: "/pedidos", label: "Pedidos", icon: ShoppingCart },
-  { href: "/historico-vendas", label: "Histórico de Vendas", icon: ReceiptText },
-  { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/financeiro", label: "Financeiro", icon: ClipboardList },
-  { href: "/loja", label: "Minha Loja", icon: Store },
-  { href: "/login", label: "Login", icon: LogIn },
+const menuGroups = [
+  {
+    title: "Visão geral",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    title: "Operação",
+    items: [
+      { href: "/produtos", label: "Produtos", icon: Package },
+      { href: "/estoque", label: "Estoque", icon: Boxes },
+      { href: "/pedidos", label: "Pedidos", icon: ShoppingCart },
+      { href: "/vendas", label: "Vendas", icon: Wallet },
+    ],
+  },
+  {
+    title: "Gestão",
+    items: [
+      { href: "/clientes", label: "Clientes", icon: Users },
+      { href: "/financeiro", label: "Financeiro", icon: ClipboardList },
+      { href: "/historico-vendas", label: "Histórico de Vendas", icon: ClipboardList },
+      { href: "/loja", label: "Minha Loja", icon: Store },
+    ],
+  },
 ]
 
 export default function RootLayout({
@@ -64,23 +74,42 @@ export default function RootLayout({
             </div>
 
             <nav className="sidebar-nav">
-              {menuItems.map((item) => {
-                const ativo = pathname === item.href
-                const Icon = item.icon
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`menu-link ${ativo ? "menu-link-active" : ""}`}
+              {menuGroups.map((group) => (
+                <div key={group.title} style={{ marginBottom: "18px" }}>
+                  <p
+                    style={{
+                      margin: "0 0 10px 6px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      letterSpacing: "0.04em",
+                      textTransform: "uppercase",
+                      color: "#94a3b8",
+                    }}
                   >
-                    <span className="menu-icon">
-                      <Icon size={18} strokeWidth={2.2} />
-                    </span>
-                    <span>{item.label}</span>
-                  </Link>
-                )
-              })}
+                    {group.title}
+                  </p>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {group.items.map((item) => {
+                      const ativo = pathname === item.href
+                      const Icon = item.icon
+
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={`menu-link ${ativo ? "menu-link-active" : ""}`}
+                        >
+                          <span className="menu-icon">
+                            <Icon size={18} strokeWidth={2.2} />
+                          </span>
+                          <span>{item.label}</span>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
 
               <button onClick={sair} className="menu-link-danger">
                 <span className="menu-icon">
@@ -92,7 +121,7 @@ export default function RootLayout({
           </aside>
 
           <main className="main-area">
-           <header className="soft-card top-bar">
+            <header className="soft-card top-bar">
               <div className="top-bar-content">
                 <div className="top-bar-left">
                   <HeaderLoja />
@@ -109,8 +138,8 @@ export default function RootLayout({
             </header>
 
             <section>
-  <PageTransition>{children}</PageTransition>
-</section>
+              <PageTransition>{children}</PageTransition>
+            </section>
           </main>
         </div>
       </body>
