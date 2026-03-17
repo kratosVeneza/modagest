@@ -11,6 +11,9 @@ type Produto = {
   estoque: number
   preco: number
   user_id: string
+  unidade?: string | null
+  marca?: string | null
+  categoria?: string | null
 }
 
 type Cliente = {
@@ -25,6 +28,7 @@ export default function Vendas() {
   const [clienteId, setClienteId] = useState("")
   const [quantidade, setQuantidade] = useState("")
   const [mensagem, setMensagem] = useState("")
+  const [mensagemSucesso, setMensagemSucesso] = useState("")
   const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
@@ -93,6 +97,7 @@ export default function Vendas() {
 
   async function registrarVenda() {
     setMensagem("")
+    setMensagemSucesso("")
 
     const {
       data: { user },
@@ -179,8 +184,14 @@ export default function Vendas() {
     setClienteId("")
     setQuantidade("")
     setSalvando(false)
-    setMensagem("Venda registrada com sucesso.")
-    carregarProdutos()
+    setMensagem("")
+    setMensagemSucesso("Venda cadastrada")
+
+    setTimeout(() => {
+      setMensagemSucesso("")
+    }, 2500)
+
+    await carregarProdutos()
   }
 
   return (
@@ -190,7 +201,39 @@ export default function Vendas() {
         Registre vendas e baixe o estoque automaticamente.
       </p>
 
-      {mensagem && <p style={{ marginTop: "16px" }}>{mensagem}</p>}
+      {mensagem && (
+        <div
+          style={{
+            marginTop: 16,
+            marginBottom: 16,
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: "#fef2f2",
+            color: "#991b1b",
+            border: "1px solid #fecaca",
+            fontWeight: 600,
+          }}
+        >
+          {mensagem}
+        </div>
+      )}
+
+      {mensagemSucesso && (
+        <div
+          style={{
+            marginTop: 16,
+            marginBottom: 16,
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: "#ecfdf5",
+            color: "#065f46",
+            border: "1px solid #a7f3d0",
+            fontWeight: 600,
+          }}
+        >
+          {mensagemSucesso}
+        </div>
+      )}
 
       <div className="grid-2" style={{ marginTop: "20px", alignItems: "start" }}>
         <div className="section-card">
