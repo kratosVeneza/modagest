@@ -256,6 +256,12 @@ export default function Produtos() {
     })
   }, [produtos, busca])
 
+  const custoPreview = Number(custo || 0)
+  const precoPreview = Number(preco || 0)
+  const lucroPreview = precoPreview - custoPreview
+  const margemPreview = precoPreview > 0 ? (lucroPreview / precoPreview) * 100 : 0
+  const markupPreview = custoPreview > 0 ? (lucroPreview / custoPreview) * 100 : 0
+
   return (
     <div>
       <h2 className="page-title">Produtos</h2>
@@ -480,6 +486,49 @@ export default function Produtos() {
               onChange={(e) => setTamanho(e.target.value)}
             />
           </div>
+
+          <div
+            style={{
+              marginTop: 18,
+              padding: "14px",
+              borderRadius: "14px",
+              border: "1px solid #e5e7eb",
+              background: "#f8fafc",
+            }}
+          >
+            <div
+              style={{
+                marginBottom: 10,
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              Prévia da precificação
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                gap: "10px",
+              }}
+            >
+              <div style={previewItem}>
+                <span style={previewLabel}>Lucro</span>
+                <strong>R$ {lucroPreview.toFixed(2)}</strong>
+              </div>
+
+              <div style={previewItem}>
+                <span style={previewLabel}>Margem</span>
+                <strong>{margemPreview.toFixed(1)}%</strong>
+              </div>
+
+              <div style={previewItem}>
+                <span style={previewLabel}>Markup</span>
+                <strong>{markupPreview.toFixed(1)}%</strong>
+              </div>
+            </div>
+          </div>
         </>
       </AnimatedModal>
     </div>
@@ -512,4 +561,19 @@ const tdVazio = {
   padding: "20px",
   textAlign: "center" as const,
   color: "#6b7280",
+}
+
+const previewItem = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: "4px",
+  padding: "10px 12px",
+  borderRadius: "10px",
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+}
+
+const previewLabel = {
+  fontSize: "12px",
+  color: "#64748b",
 }
