@@ -30,6 +30,7 @@ import {
   BadgeDollarSign,
   Percent,
   AlertTriangle,
+  Wallet,
 } from "lucide-react"
 
 type Venda = {
@@ -40,6 +41,14 @@ type Venda = {
   valor_total: number
   created_at: string
   status?: string
+}
+
+type Pagamento = {
+  id: number
+  sale_id: number
+  valor: number
+  forma_pagamento: string
+  created_at: string
 }
 
 type Produto = {
@@ -67,7 +76,8 @@ type VendaRecente = {
   nomeCliente: string
   quantidade: number
   valorTotal: number
-  lucroTotal: number
+  valorRecebido: number
+  valorEmAberto: number
   created_at: string
   categoria: string
   marca: string
@@ -86,6 +96,11 @@ type ProdutoRanking = {
 }
 
 type CategoriaGrafico = {
+  name: string
+  value: number
+}
+
+type FormaPagamentoGrafico = {
   name: string
   value: number
 }
@@ -114,13 +129,15 @@ const periodos: { value: Periodo; label: string }[] = [
 
 export default function Dashboard() {
   const [todasVendas, setTodasVendas] = useState<Venda[]>([])
+  const [todosPagamentos, setTodosPagamentos] = useState<Pagamento[]>([])
   const [produtosLista, setProdutosLista] = useState<Produto[]>([])
   const [clientesLista, setClientesLista] = useState<Cliente[]>([])
   const [periodo, setPeriodo] = useState<Periodo>("7dias")
 
   const [faturamentoPrincipal, setFaturamentoPrincipal] = useState(0)
-  const [lucroPrincipal, setLucroPrincipal] = useState(0)
-  const [lucroComparacao, setLucroComparacao] = useState(0)
+  const [recebidoPrincipal, setRecebidoPrincipal] = useState(0)
+  const [emAbertoPrincipal, setEmAbertoPrincipal] = useState(0)
+  const [recebidoComparacao, setRecebidoComparacao] = useState(0)
   const [faturamentoComparacao, setFaturamentoComparacao] = useState(0)
   const [margemMediaPeriodo, setMargemMediaPeriodo] = useState(0)
   const [produtosVendidosPeriodo, setProdutosVendidosPeriodo] = useState(0)
@@ -130,6 +147,7 @@ export default function Dashboard() {
   const [graficoDias, setGraficoDias] = useState<GraficoDia[]>([])
   const [rankingProdutos, setRankingProdutos] = useState<ProdutoRanking[]>([])
   const [graficoCategorias, setGraficoCategorias] = useState<CategoriaGrafico[]>([])
+  const [graficoFormasPagamento, setGraficoFormasPagamento] = useState<FormaPagamentoGrafico[]>([])
   const [produtosAbaixoDoMinimo, setProdutosAbaixoDoMinimo] = useState<Produto[]>([])
   const [mensagem, setMensagem] = useState("")
   const [carregando, setCarregando] = useState(true)
@@ -142,10 +160,10 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    if (todasVendas.length > 0 || produtosLista.length > 0) {
+    if (todasVendas.length > 0 || produtosLista.length > 0 || todosPagamentos.length >= 0) {
       recalcularDashboard()
     }
-  }, [periodo, todasVendas, produtosLista, clientesLista])
+  }, [periodo, todasVendas, todosPagamentos, produtosLista, clientesLista])
 
   async function carregarDashboard() {
     setCarregando(true)
@@ -185,6 +203,18 @@ export default function Dashboard() {
       return
     }
 
+    const { data: pagamentosData, error: pagamentosError } = await supabase
+      .from("sale_payments")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+
+    if (pagamentosError) {
+      setMensagem("Erro ao carregar pagamentos do dashboard.")
+      setCarregando(false)
+      return
+    }
+
     const { data: produtos } = await supabase
       .from("products")
       .select("id, nome, sku, estoque, estoque_minimo, marca, categoria, tipo, unidade, custo, preco")
@@ -204,6 +234,7 @@ export default function Dashboard() {
     const produtosTipados = (produtos ?? []) as Produto[]
 
     setTodasVendas((vendasAtivas ?? []) as Venda[])
+    setTodosPagamentos((pagamentosData ?? []) as Pagamento[])
     setProdutosLista(produtosTipados)
     setClientesLista((clientes ?? []) as Cliente[])
 
@@ -321,27 +352,48 @@ export default function Dashboard() {
       return data >= inicioComparacao && data <= fimComparacao
     })
 
+    const pagamentosPeriodo = todosPagamentos.filter((p) => {
+      const data = new Date(p.created_at)
+      return data >= inicioAtual && data <= fimAtual
+    })
+
+    const pagamentosComparacao = todosPagamentos.filter((p) => {
+      const data = new Date(p.created_at)
+      return data >= inicioComparacao && data <= fimComparacao
+    })
+
     const totalAtual = vendasPeriodo.reduce((soma, v) => soma + Number(v.valor_total), 0)
     const totalComparacao = vendasComparacao.reduce((soma, v) => soma + Number(v.valor_total), 0)
 
-    const lucroAtual = vendasPeriodo.reduce((soma, venda) => {
-      const produto = produtosLista.find((p) => p.id === venda.product_id)
-      const custoUnitario = Number(produto?.custo || 0)
-      return soma + (Number(venda.valor_total) - custoUnitario * Number(venda.quantidade))
+    const recebidoAtual = pagamentosPeriodo.reduce((soma, p) => soma + Number(p.valor), 0)
+    const recebidoAnterior = pagamentosComparacao.reduce((soma, p) => soma + Number(p.valor), 0)
+
+    const recebidoPorVendaPeriodo = vendasPeriodo.reduce((soma, venda) => {
+      const recebidoVenda = todosPagamentos
+        .filter((p) => p.sale_id === venda.id)
+        .reduce((acc, item) => acc + Number(item.valor), 0)
+      return soma + recebidoVenda
     }, 0)
 
-    const lucroAnterior = vendasComparacao.reduce((soma, venda) => {
+    const emAberto = Math.max(totalAtual - recebidoPorVendaPeriodo, 0)
+
+    const lucroRecebidoAtual = pagamentosPeriodo.reduce((soma, pagamento) => {
+      const venda = todasVendas.find((v) => v.id === pagamento.sale_id)
+      if (!venda) return soma
       const produto = produtosLista.find((p) => p.id === venda.product_id)
       const custoUnitario = Number(produto?.custo || 0)
-      return soma + (Number(venda.valor_total) - custoUnitario * Number(venda.quantidade))
+      const proporcao = Number(venda.valor_total) > 0 ? Number(pagamento.valor) / Number(venda.valor_total) : 0
+      const custoProporcional = custoUnitario * Number(venda.quantidade) * proporcao
+      return soma + (Number(pagamento.valor) - custoProporcional)
     }, 0)
 
-    const margemMedia = totalAtual > 0 ? (lucroAtual / totalAtual) * 100 : 0
+    const margemMedia = recebidoAtual > 0 ? (lucroRecebidoAtual / recebidoAtual) * 100 : 0
 
     setFaturamentoPrincipal(totalAtual)
     setFaturamentoComparacao(totalComparacao)
-    setLucroPrincipal(lucroAtual)
-    setLucroComparacao(lucroAnterior)
+    setRecebidoPrincipal(recebidoAtual)
+    setRecebidoComparacao(recebidoAnterior)
+    setEmAbertoPrincipal(emAberto)
     setMargemMediaPeriodo(margemMedia)
 
     setProdutosVendidosPeriodo(
@@ -351,7 +403,8 @@ export default function Dashboard() {
     const recentes = vendasPeriodo.slice(0, 5).map((venda) => {
       const produto = produtosLista.find((p) => p.id === venda.product_id)
       const cliente = clientesLista.find((c) => c.id === venda.customer_id)
-      const custoUnitario = Number(produto?.custo || 0)
+      const pagamentosDaVenda = todosPagamentos.filter((p) => p.sale_id === venda.id)
+      const valorRecebido = pagamentosDaVenda.reduce((s, p) => s + Number(p.valor), 0)
 
       return {
         id: venda.id,
@@ -359,7 +412,8 @@ export default function Dashboard() {
         nomeCliente: cliente?.nome || "Sem cliente",
         quantidade: venda.quantidade,
         valorTotal: Number(venda.valor_total),
-        lucroTotal: Number(venda.valor_total) - custoUnitario * Number(venda.quantidade),
+        valorRecebido,
+        valorEmAberto: Math.max(Number(venda.valor_total) - valorRecebido, 0),
         created_at: venda.created_at,
         categoria: produto?.categoria || "-",
         marca: produto?.marca || "-",
@@ -381,19 +435,20 @@ export default function Dashboard() {
       })
     }
 
-    vendasPeriodo.forEach((venda) => {
-      const chave = new Date(venda.created_at).toLocaleDateString("pt-BR", {
+    pagamentosPeriodo.forEach((pagamento) => {
+      const chave = new Date(pagamento.created_at).toLocaleDateString("pt-BR", {
         day: "2-digit",
         month: "2-digit",
       })
       const item = diasBase.find((d) => d.dia === chave)
-      if (item) item.total += Number(venda.valor_total)
+      if (item) item.total += Number(pagamento.valor)
     })
 
     setGraficoDias(diasBase)
 
     const mapaProdutos = new Map<number, ProdutoRanking>()
     const mapaCategorias = new Map<string, number>()
+    const mapaFormas = new Map<string, number>()
 
     vendasPeriodo.forEach((venda) => {
       const produto = produtosLista.find((p) => p.id === venda.product_id)
@@ -417,12 +472,23 @@ export default function Dashboard() {
       )
     })
 
+    pagamentosPeriodo.forEach((pagamento) => {
+      mapaFormas.set(
+        pagamento.forma_pagamento,
+        (mapaFormas.get(pagamento.forma_pagamento) || 0) + Number(pagamento.valor)
+      )
+    })
+
     setRankingProdutos(
       Array.from(mapaProdutos.values()).sort((a, b) => b.quantidade - a.quantidade).slice(0, 5)
     )
 
     setGraficoCategorias(
       Array.from(mapaCategorias.entries()).map(([name, value]) => ({ name, value }))
+    )
+
+    setGraficoFormasPagamento(
+      Array.from(mapaFormas.entries()).map(([name, value]) => ({ name, value }))
     )
   }
 
@@ -464,14 +530,14 @@ export default function Dashboard() {
     }
   }
 
-  const tendenciaFaturamento = useMemo(
+  const tendenciaVendido = useMemo(
     () => calcularTendencia(faturamentoPrincipal, faturamentoComparacao),
     [faturamentoPrincipal, faturamentoComparacao]
   )
 
-  const tendenciaLucro = useMemo(
-    () => calcularTendencia(lucroPrincipal, lucroComparacao),
-    [lucroPrincipal, lucroComparacao]
+  const tendenciaRecebido = useMemo(
+    () => calcularTendencia(recebidoPrincipal, recebidoComparacao),
+    [recebidoPrincipal, recebidoComparacao]
   )
 
   const maiorRanking = useMemo(
@@ -492,55 +558,35 @@ export default function Dashboard() {
     linhas.push(`"ModaGest Dashboard"`)
     linhas.push(`"Período";"${periodo}"`)
     linhas.push("")
-
     linhas.push(`"RESUMO"`)
-    linhas.push(`"Faturamento do período";"${faturamentoPrincipal.toFixed(2)}"`)
-    linhas.push(`"Lucro do período";"${lucroPrincipal.toFixed(2)}"`)
-    linhas.push(`"Margem média";"${margemMediaPeriodo.toFixed(1)}%"`)
-    linhas.push(`"Comparação faturamento";"${faturamentoComparacao.toFixed(2)}"`)
-    linhas.push(`"Comparação lucro";"${lucroComparacao.toFixed(2)}"`)
+    linhas.push(`"Total vendido";"${faturamentoPrincipal.toFixed(2)}"`)
+    linhas.push(`"Total recebido";"${recebidoPrincipal.toFixed(2)}"`)
+    linhas.push(`"Total em aberto";"${emAbertoPrincipal.toFixed(2)}"`)
+    linhas.push(`"Margem média recebida";"${margemMediaPeriodo.toFixed(1)}%"`)
     linhas.push(`"Itens vendidos";"${produtosVendidosPeriodo}"`)
     linhas.push(`"Produtos com estoque baixo";"${estoqueBaixo}"`)
     linhas.push(`"Pedidos pendentes";"${pedidosPendentes}"`)
     linhas.push("")
 
-    linhas.push(`"RECEITA POR DIA"`)
+    linhas.push(`"RECEBIDO POR DIA"`)
     linhas.push(`"Dia";"Total"`)
     graficoDias.forEach((item) => {
       linhas.push(`"${item.dia}";"${item.total.toFixed(2)}"`)
     })
     linhas.push("")
 
-    linhas.push(`"PRODUTOS MAIS VENDIDOS"`)
-    linhas.push(`"Produto";"Marca";"Categoria";"Quantidade"`)
-    rankingProdutos.forEach((item) => {
-      linhas.push(
-        `"${item.nome.replace(/"/g, '""')}";"${item.marca.replace(/"/g, '""')}";"${item.categoria.replace(/"/g, '""')}";"${item.quantidade}"`
-      )
-    })
-    linhas.push("")
-
-    linhas.push(`"RECEITA POR CATEGORIA"`)
-    linhas.push(`"Categoria";"Receita"`)
-    graficoCategorias.forEach((item) => {
+    linhas.push(`"RECEBIDO POR FORMA"`)
+    linhas.push(`"Forma";"Valor"`)
+    graficoFormasPagamento.forEach((item) => {
       linhas.push(`"${item.name.replace(/"/g, '""')}";"${item.value.toFixed(2)}"`)
     })
     linhas.push("")
 
-    linhas.push(`"PRODUTOS ABAIXO DO MÍNIMO"`)
-    linhas.push(`"Produto";"SKU";"Estoque";"Mínimo"`)
-    produtosAbaixoDoMinimo.forEach((item) => {
-      linhas.push(
-        `"${item.nome.replace(/"/g, '""')}";"${item.sku.replace(/"/g, '""')}";"${item.estoque}";"${item.estoque_minimo || 0}"`
-      )
-    })
-    linhas.push("")
-
     linhas.push(`"ÚLTIMAS VENDAS"`)
-    linhas.push(`"Cliente";"Produto";"Marca";"Categoria";"Quantidade";"Valor";"Lucro";"Data"`)
+    linhas.push(`"Cliente";"Produto";"Valor";"Recebido";"Em Aberto";"Data"`)
     ultimasVendas.forEach((item) => {
       linhas.push(
-        `"${item.nomeCliente.replace(/"/g, '""')}";"${item.nomeProduto.replace(/"/g, '""')}";"${item.marca.replace(/"/g, '""')}";"${item.categoria.replace(/"/g, '""')}";"${item.quantidade}";"${item.valorTotal.toFixed(2)}";"${item.lucroTotal.toFixed(2)}";"${formatarData(item.created_at)}"`
+        `"${item.nomeCliente.replace(/"/g, '""')}";"${item.nomeProduto.replace(/"/g, '""')}";"${item.valorTotal.toFixed(2)}";"${item.valorRecebido.toFixed(2)}";"${item.valorEmAberto.toFixed(2)}";"${formatarData(item.created_at)}"`
       )
     })
 
@@ -582,27 +628,15 @@ export default function Dashboard() {
       startY: startY + 8,
       head: [["Resumo", "Valor"]],
       body: [
-        ["Faturamento do período", `R$ ${faturamentoPrincipal.toFixed(2)}`],
-        ["Lucro do período", `R$ ${lucroPrincipal.toFixed(2)}`],
-        ["Margem média", `${margemMediaPeriodo.toFixed(1)}%`],
+        ["Total vendido", `R$ ${faturamentoPrincipal.toFixed(2)}`],
+        ["Total recebido", `R$ ${recebidoPrincipal.toFixed(2)}`],
+        ["Total em aberto", `R$ ${emAbertoPrincipal.toFixed(2)}`],
+        ["Margem média recebida", `${margemMediaPeriodo.toFixed(1)}%`],
         ["Produtos com estoque baixo", String(estoqueBaixo)],
         ["Pedidos pendentes", String(pedidosPendentes)],
       ],
       styles: { fontSize: 10 },
       headStyles: { fillColor: [37, 99, 235] },
-    })
-
-    autoTable(doc, {
-      startY: (doc as any).lastAutoTable.finalY + 10,
-      head: [["Produto", "SKU", "Estoque", "Mínimo"]],
-      body: produtosAbaixoDoMinimo.map((item) => [
-        item.nome,
-        item.sku,
-        String(item.estoque),
-        String(item.estoque_minimo || 0),
-      ]),
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [220, 38, 38] },
     })
 
     doc.save(`dashboard_${periodo}.pdf`)
@@ -611,7 +645,7 @@ export default function Dashboard() {
   return (
     <div>
       <h2 className="page-title">Dashboard</h2>
-      <p className="page-subtitle">Resumo geral da operação da sua loja.</p>
+      <p className="page-subtitle">Resumo de vendas, recebimentos e saldo em aberto.</p>
 
       {mensagem && <p>{mensagem}</p>}
 
@@ -666,7 +700,7 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Faturamento</p>
+              <p className="metric-label">Total vendido</p>
               <p className="metric-value">R$ {faturamentoPrincipal.toFixed(2)}</p>
             </div>
             <div className="metric-icon-box">
@@ -674,9 +708,9 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="trend-row">
-            <span className={`trend-pill trend-${tendenciaFaturamento.variant}`}>
-              {tendenciaFaturamento.icon}
-              {tendenciaFaturamento.label}
+            <span className={`trend-pill trend-${tendenciaVendido.variant}`}>
+              {tendenciaVendido.icon}
+              {tendenciaVendido.label}
             </span>
             <span className="metric-helper">{textoComparacao}</span>
           </div>
@@ -685,17 +719,17 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Lucro</p>
-              <p className="metric-value">R$ {lucroPrincipal.toFixed(2)}</p>
+              <p className="metric-label">Total recebido</p>
+              <p className="metric-value">R$ {recebidoPrincipal.toFixed(2)}</p>
             </div>
             <div className="metric-icon-box green">
-              <BadgeDollarSign size={20} />
+              <Wallet size={20} />
             </div>
           </div>
           <div className="trend-row">
-            <span className={`trend-pill trend-${tendenciaLucro.variant}`}>
-              {tendenciaLucro.icon}
-              {tendenciaLucro.label}
+            <span className={`trend-pill trend-${tendenciaRecebido.variant}`}>
+              {tendenciaRecebido.icon}
+              {tendenciaRecebido.label}
             </span>
             <span className="metric-helper">{textoComparacao}</span>
           </div>
@@ -704,14 +738,27 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Margem média</p>
+              <p className="metric-label">Em aberto</p>
+              <p className="metric-value">R$ {emAbertoPrincipal.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box red">
+              <BadgeDollarSign size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Saldo a receber das vendas do período</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label">Margem média recebida</p>
               <p className="metric-value">{margemMediaPeriodo.toFixed(1)}%</p>
             </div>
             <div className="metric-icon-box purple">
               <Percent size={20} />
             </div>
           </div>
-          <div className="metric-helper">Lucro médio sobre vendas</div>
+          <div className="metric-helper">Sobre os valores recebidos</div>
         </div>
 
         <div className="metric-card">
@@ -739,38 +786,25 @@ export default function Dashboard() {
           </div>
           <div className="metric-helper">Produtos no limite mínimo</div>
         </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label">Pedidos pendentes</p>
-              <p className="metric-value">{pedidosPendentes}</p>
-            </div>
-            <div className="metric-icon-box red">
-              <PackageOpen size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Aguardando conclusão</div>
-        </div>
       </div>
 
       <div className="dashboard-two-columns" style={{ marginBottom: 24 }}>
         <div className="chart-shell">
           <div className="chart-header-row">
             <div>
-              <h3 className="dashboard-block-title">Receita por dia</h3>
-              <p className="dashboard-block-subtitle">Evolução do período selecionado</p>
+              <h3 className="dashboard-block-title">Recebido por dia</h3>
+              <p className="dashboard-block-subtitle">Entradas reais de caixa</p>
             </div>
-            <span className="chart-badge">Filtro ativo</span>
+            <span className="chart-badge">Pagamentos</span>
           </div>
 
           <div style={{ width: "100%", height: 320 }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={graficoDias}>
                 <defs>
-                  <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0.03} />
+                  <linearGradient id="colorRecebido" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#059669" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#059669" stopOpacity={0.03} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -780,10 +814,10 @@ export default function Dashboard() {
                 <Area
                   type="monotone"
                   dataKey="total"
-                  stroke="#2563eb"
+                  stroke="#059669"
                   strokeWidth={3}
                   fillOpacity={1}
-                  fill="url(#colorReceita)"
+                  fill="url(#colorRecebido)"
                   isAnimationActive
                 />
               </AreaChart>
@@ -794,17 +828,17 @@ export default function Dashboard() {
         <div className="chart-shell">
           <div className="chart-header-row">
             <div>
-              <h3 className="dashboard-block-title">Receita por categoria</h3>
-              <p className="dashboard-block-subtitle">Distribuição por categoria</p>
+              <h3 className="dashboard-block-title">Recebido por forma</h3>
+              <p className="dashboard-block-subtitle">Distribuição por pagamento</p>
             </div>
-            <span className="chart-badge">Categorias</span>
+            <span className="chart-badge">Financeiro</span>
           </div>
 
           <div style={{ width: "100%", height: 320 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={graficoCategorias} dataKey="value" nameKey="name" outerRadius={100} label>
-                  {graficoCategorias.map((_, index) => (
+                <Pie data={graficoFormasPagamento} dataKey="value" nameKey="name" outerRadius={100} label>
+                  {graficoFormasPagamento.map((_, index) => (
                     <Cell key={index} fill={CORES[index % CORES.length]} />
                   ))}
                 </Pie>
@@ -855,7 +889,7 @@ export default function Dashboard() {
 
         <div className="section-card">
           <h3 className="dashboard-block-title">Últimas vendas</h3>
-          <p className="dashboard-block-subtitle">As 5 movimentações mais recentes do período</p>
+          <p className="dashboard-block-subtitle">Vendido, recebido e em aberto</p>
 
           <div className="data-table-wrap" style={{ marginTop: 16 }}>
             <table className="premium-table" style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -863,10 +897,9 @@ export default function Dashboard() {
                 <tr>
                   <th style={th}>Cliente</th>
                   <th style={th}>Produto</th>
-                  <th style={th}>Detalhes</th>
-                  <th style={th}>Qtd.</th>
-                  <th style={th}>Valor</th>
-                  <th style={th}>Lucro</th>
+                  <th style={th}>Vendido</th>
+                  <th style={th}>Recebido</th>
+                  <th style={th}>Em aberto</th>
                   <th style={th}>Data</th>
                 </tr>
               </thead>
@@ -874,7 +907,7 @@ export default function Dashboard() {
               <tbody>
                 {carregando ? (
                   <tr>
-                    <td colSpan={7} style={{ padding: 20 }}>
+                    <td colSpan={6} style={{ padding: 20 }}>
                       Carregando...
                     </td>
                   </tr>
@@ -883,23 +916,15 @@ export default function Dashboard() {
                     <tr key={venda.id}>
                       <td style={td}>{venda.nomeCliente}</td>
                       <td style={td}>{venda.nomeProduto}</td>
-                      <td style={td}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span>{venda.marca}</span>
-                          <span style={{ fontSize: 12, color: "#6b7280" }}>
-                            {venda.categoria}
-                          </span>
-                        </div>
-                      </td>
-                      <td style={td}>{venda.quantidade}</td>
                       <td style={td}>R$ {venda.valorTotal.toFixed(2)}</td>
-                      <td style={td}>R$ {venda.lucroTotal.toFixed(2)}</td>
+                      <td style={td}>R$ {venda.valorRecebido.toFixed(2)}</td>
+                      <td style={td}>R$ {venda.valorEmAberto.toFixed(2)}</td>
                       <td style={td}>{formatarData(venda.created_at)}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td style={tdVazio} colSpan={7}>
+                    <td style={tdVazio} colSpan={6}>
                       Nenhuma venda encontrada.
                     </td>
                   </tr>
@@ -930,4 +955,4 @@ const tdVazio = {
   padding: "20px",
   textAlign: "center" as const,
   color: "#6b7280",
-} 
+}

@@ -21,6 +21,15 @@ type Cliente = {
   nome: string
 }
 
+const formasPagamento = [
+  "Dinheiro",
+  "Pix",
+  "Cartão de débito",
+  "Cartão de crédito",
+  "Transferência",
+  "Outro",
+]
+
 export default function Vendas() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -30,6 +39,10 @@ export default function Vendas() {
   const [mensagem, setMensagem] = useState("")
   const [mensagemSucesso, setMensagemSucesso] = useState("")
   const [salvando, setSalvando] = useState(false)
+
+  const [valorRecebidoInicial, setValorRecebidoInicial] = useState("")
+  const [formaPagamentoInicial, setFormaPagamentoInicial] = useState("Pix")
+  const [observacaoPagamentoInicial, setObservacaoPagamentoInicial] = useState("")
 
   useEffect(() => {
     carregarProdutos()
@@ -87,9 +100,11 @@ export default function Vendas() {
   }, [clientes, clienteId])
 
   const quantidadeNumero = Number(quantidade || 0)
-
   const valorUnitario = produtoSelecionado ? Number(produtoSelecionado.preco) : 0
   const valorTotal = valorUnitario * (quantidadeNumero > 0 ? quantidadeNumero : 0)
+  const recebidoInicial = Number(valorRecebidoInicial || 0)
+  const saldoRestante = valorTotal - recebidoInicial
+
   const estoqueRestante =
     produtoSelecionado && quantidadeNumero > 0
       ? produtoSelecionado.estoque - quantidadeNumero
@@ -132,6 +147,16 @@ export default function Vendas() {
       return
     }
 
+    if (recebidoInicial < 0) {
+      setMensagem("O valor recebido inicial não pode ser negativo.")
+      return
+    }
+
+    if (recebidoInicial > valorTotal) {
+      setMensagem("O valor recebido inicial não pode ser maior que o valor total.")
+      return
+    }
+
     setSalvando(true)
 
     const novoEstoque = produto.estoque - qtd
@@ -143,6 +168,7 @@ export default function Vendas() {
       valor_total: number
       user_id: string
       customer_id?: number | null
+      status?: string
     } = {
       product_id: produto.id,
       quantidade: qtd,
@@ -150,14 +176,37 @@ export default function Vendas() {
       valor_total: Number(produto.preco) * qtd,
       user_id: user.id,
       customer_id: clienteId ? Number(clienteId) : null,
+      status: "Ativa",
     }
 
-    const { error: erroVenda } = await supabase.from("sales").insert([payload])
+    const { data: vendaCriada, error: erroVenda } = await supabase
+      .from("sales")
+      .insert([payload])
+      .select("id")
+      .single()
 
-    if (erroVenda) {
+    if (erroVenda || !vendaCriada) {
       setSalvando(false)
       setMensagem("Erro ao registrar venda.")
       return
+    }
+
+    if (recebidoInicial > 0) {
+      const { error: erroPagamento } = await supabase.from("sale_payments").insert([
+        {
+          sale_id: vendaCriada.id,
+          user_id: user.id,
+          valor: recebidoInicial,
+          forma_pagamento: formaPagamentoInicial,
+          observacao: observacaoPagamentoInicial || null,
+        },
+      ])
+
+      if (erroPagamento) {
+        setSalvando(false)
+        setMensagem("Venda criada, mas houve erro ao registrar o pagamento inicial.")
+        return
+      }
     }
 
     await registrarMovimentoEstoque({
@@ -183,6 +232,9 @@ export default function Vendas() {
     setProdutoId("")
     setClienteId("")
     setQuantidade("")
+    setValorRecebidoInicial("")
+    setFormaPagamentoInicial("Pix")
+    setObservacaoPagamentoInicial("")
     setSalvando(false)
     setMensagem("")
     setMensagemSucesso("Venda cadastrada")
@@ -198,7 +250,7 @@ export default function Vendas() {
     <div>
       <h2 className="page-title">Vendas</h2>
       <p className="page-subtitle">
-        Registre vendas e baixe o estoque automaticamente.
+        Registre vendas, pagamentos iniciais e baixe o estoque automaticamente.
       </p>
 
       {mensagem && (
@@ -264,6 +316,31 @@ export default function Vendas() {
               value={quantidade}
               onChange={(e) => setQuantidade(e.target.value)}
             />
+
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Valor recebido agora (opcional)"
+              value={valorRecebidoInicial}
+              onChange={(e) => setValorRecebidoInicial(e.target.value)}
+            />
+
+            <select
+              value={formaPagamentoInicial}
+              onChange={(e) => setFormaPagamentoInicial(e.target.value)}
+            >
+              {formasPagamento.map((forma) => (
+                <option key={forma} value={forma}>
+                  {forma}
+                </option>
+              ))}
+            </select>
+
+            <input
+              placeholder="Observação do pagamento (opcional)"
+              value={observacaoPagamentoInicial}
+              onChange={(e) => setObservacaoPagamentoInicial(e.target.value)}
+            />
           </div>
 
           <div style={{ marginTop: "18px" }}>
@@ -320,6 +397,16 @@ export default function Vendas() {
             >
               {produtoSelecionado ? estoqueRestante : 0}
             </strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Recebido agora</span>
+            <strong>R$ {recebidoInicial.toFixed(2)}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Saldo em aberto</span>
+            <strong>R$ {Math.max(saldoRestante, 0).toFixed(2)}</strong>
           </div>
 
           <div className="summary-box" style={totalBox}>

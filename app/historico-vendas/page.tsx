@@ -7,6 +7,7 @@ import autoTable from "jspdf-autotable"
 import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
+import AnimatedModal from "../components/AnimatedModal"
 
 type VendaBanco = {
   id: number
@@ -33,6 +34,15 @@ type ClienteBanco = {
   nome: string
 }
 
+type PagamentoBanco = {
+  id: number
+  sale_id: number
+  valor: number
+  forma_pagamento: string
+  observacao: string | null
+  created_at: string
+}
+
 type Loja = {
   nome_loja?: string | null
   logo_url?: string | null
@@ -45,13 +55,26 @@ type VendaExibicao = {
   quantidade: number
   valor_unitario: number
   valor_total: number
+  valor_recebido: number
+  valor_em_aberto: number
+  payment_status: "Pendente" | "Parcial" | "Recebida"
   created_at: string
   status: string
   estoque_devolvido: boolean
   nomeProduto: string
   skuProduto: string
   nomeCliente: string
+  pagamentos: PagamentoBanco[]
 }
+
+const formasPagamento = [
+  "Dinheiro",
+  "Pix",
+  "Cartão de débito",
+  "Cartão de crédito",
+  "Transferência",
+  "Outro",
+]
 
 export default function HistoricoVendas() {
   const [vendas, setVendas] = useState<VendaExibicao[]>([])
@@ -62,9 +85,25 @@ export default function HistoricoVendas() {
   const [nomeLoja, setNomeLoja] = useState("ModaGest")
   const [logoUrl, setLogoUrl] = useState("")
 
+  const [modalPagamentoAberto, setModalPagamentoAberto] = useState(false)
+  const [vendaSelecionada, setVendaSelecionada] = useState<VendaExibicao | null>(null)
+  const [valorPagamento, setValorPagamento] = useState("")
+  const [formaPagamento, setFormaPagamento] = useState("Pix")
+  const [observacaoPagamento, setObservacaoPagamento] = useState("")
+  const [salvandoPagamento, setSalvandoPagamento] = useState(false)
+
   useEffect(() => {
     carregarVendas()
   }, [])
+
+  function calcularStatusPagamento(
+    valorTotal: number,
+    valorRecebido: number
+  ): "Pendente" | "Parcial" | "Recebida" {
+    if (valorRecebido <= 0) return "Pendente"
+    if (valorRecebido >= valorTotal) return "Recebida"
+    return "Parcial"
+  }
 
   async function carregarVendas() {
     setMensagem("")
@@ -125,9 +164,21 @@ export default function HistoricoVendas() {
       return
     }
 
+    const { data: pagamentosData, error: erroPagamentos } = await supabase
+      .from("sale_payments")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+
+    if (erroPagamentos) {
+      setMensagem("Erro ao carregar pagamentos.")
+      return
+    }
+
     const vendasTipadas = (vendasData ?? []) as VendaBanco[]
     const produtosTipados = (produtosData ?? []) as ProdutoBanco[]
     const clientesTipados = (clientesData ?? []) as ClienteBanco[]
+    const pagamentosTipados = (pagamentosData ?? []) as PagamentoBanco[]
 
     const vendasFormatadas: VendaExibicao[] = vendasTipadas.map((venda) => {
       const produtoRelacionado = produtosTipados.find(
@@ -138,6 +189,17 @@ export default function HistoricoVendas() {
         (cliente) => cliente.id === venda.customer_id
       )
 
+      const pagamentosDaVenda = pagamentosTipados.filter(
+        (pagamento) => pagamento.sale_id === venda.id
+      )
+
+      const valorRecebido = pagamentosDaVenda.reduce(
+        (soma, item) => soma + Number(item.valor),
+        0
+      )
+
+      const valorEmAberto = Math.max(Number(venda.valor_total) - valorRecebido, 0)
+
       return {
         id: venda.id,
         product_id: venda.product_id,
@@ -145,12 +207,16 @@ export default function HistoricoVendas() {
         quantidade: venda.quantidade,
         valor_unitario: Number(venda.valor_unitario),
         valor_total: Number(venda.valor_total),
+        valor_recebido: valorRecebido,
+        valor_em_aberto: valorEmAberto,
+        payment_status: calcularStatusPagamento(Number(venda.valor_total), valorRecebido),
         created_at: venda.created_at,
         status: venda.status || "Ativa",
         estoque_devolvido: Boolean(venda.estoque_devolvido),
         nomeProduto: produtoRelacionado?.nome || "Produto removido",
         skuProduto: produtoRelacionado?.sku || "-",
         nomeCliente: clienteRelacionado?.nome || "Sem cliente",
+        pagamentos: pagamentosDaVenda,
       }
     })
 
@@ -224,7 +290,73 @@ export default function HistoricoVendas() {
     }
 
     setMensagem("Venda cancelada e estoque devolvido com sucesso.")
-    carregarVendas()
+    await carregarVendas()
+  }
+
+  function abrirModalPagamento(venda: VendaExibicao) {
+    setVendaSelecionada(venda)
+    setValorPagamento("")
+    setFormaPagamento("Pix")
+    setObservacaoPagamento("")
+    setModalPagamentoAberto(true)
+  }
+
+  function fecharModalPagamento() {
+    setVendaSelecionada(null)
+    setValorPagamento("")
+    setFormaPagamento("Pix")
+    setObservacaoPagamento("")
+    setModalPagamentoAberto(false)
+  }
+
+  async function salvarPagamento() {
+    if (!vendaSelecionada) return
+
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const valor = Number(valorPagamento || 0)
+
+    if (valor <= 0) {
+      setMensagem("Informe um valor de pagamento válido.")
+      return
+    }
+
+    if (valor > vendaSelecionada.valor_em_aberto) {
+      setMensagem("O pagamento não pode ser maior que o valor em aberto.")
+      return
+    }
+
+    setSalvandoPagamento(true)
+
+    const { error } = await supabase.from("sale_payments").insert([
+      {
+        sale_id: vendaSelecionada.id,
+        user_id: user.id,
+        valor,
+        forma_pagamento: formaPagamento,
+        observacao: observacaoPagamento || null,
+      },
+    ])
+
+    setSalvandoPagamento(false)
+
+    if (error) {
+      setMensagem("Erro ao registrar pagamento.")
+      return
+    }
+
+    fecharModalPagamento()
+    setMensagem("Pagamento adicionado com sucesso.")
+    await carregarVendas()
   }
 
   function formatarData(dataIso: string) {
@@ -260,6 +392,18 @@ export default function HistoricoVendas() {
       .reduce((soma, venda) => soma + Number(venda.valor_total), 0)
   }, [vendasFiltradas])
 
+  const totalRecebidoFiltrado = useMemo(() => {
+    return vendasFiltradas
+      .filter((venda) => venda.status !== "Cancelada")
+      .reduce((soma, venda) => soma + Number(venda.valor_recebido), 0)
+  }, [vendasFiltradas])
+
+  const totalEmAbertoFiltrado = useMemo(() => {
+    return vendasFiltradas
+      .filter((venda) => venda.status !== "Cancelada")
+      .reduce((soma, venda) => soma + Number(venda.valor_em_aberto), 0)
+  }, [vendasFiltradas])
+
   function exportarCSV() {
     if (vendasFiltradas.length === 0) {
       setMensagem("Não há vendas para exportar.")
@@ -273,7 +417,10 @@ export default function HistoricoVendas() {
       "Quantidade",
       "Valor Unitario",
       "Valor Total",
-      "Status",
+      "Recebido",
+      "Em Aberto",
+      "Situação Pagamento",
+      "Status Venda",
       "Data",
     ]
 
@@ -284,6 +431,9 @@ export default function HistoricoVendas() {
       String(venda.quantidade),
       venda.valor_unitario.toFixed(2),
       venda.valor_total.toFixed(2),
+      venda.valor_recebido.toFixed(2),
+      venda.valor_em_aberto.toFixed(2),
+      venda.payment_status,
       venda.status,
       formatarData(venda.created_at),
     ])
@@ -324,18 +474,21 @@ export default function HistoricoVendas() {
 
     doc.setFont("helvetica", "normal")
     doc.setFontSize(11)
-    doc.text(`Total no filtro: R$ ${totalFiltrado.toFixed(2)}`, 14, startY)
-    doc.text(`Quantidade de vendas: ${vendasFiltradas.length}`, 14, startY + 6)
+    doc.text(`Total vendido: R$ ${totalFiltrado.toFixed(2)}`, 14, startY)
+    doc.text(`Total recebido: R$ ${totalRecebidoFiltrado.toFixed(2)}`, 14, startY + 6)
+    doc.text(`Total em aberto: R$ ${totalEmAbertoFiltrado.toFixed(2)}`, 14, startY + 12)
 
     autoTable(doc, {
-      startY: startY + 14,
+      startY: startY + 20,
       head: [[
         "Cliente",
         "Produto",
         "SKU",
         "Quantidade",
-        "Valor Unit.",
         "Valor Total",
+        "Recebido",
+        "Em Aberto",
+        "Situação",
         "Status",
         "Data",
       ]],
@@ -344,8 +497,10 @@ export default function HistoricoVendas() {
         venda.nomeProduto,
         venda.skuProduto,
         String(venda.quantidade),
-        `R$ ${venda.valor_unitario.toFixed(2)}`,
         `R$ ${venda.valor_total.toFixed(2)}`,
+        `R$ ${venda.valor_recebido.toFixed(2)}`,
+        `R$ ${venda.valor_em_aberto.toFixed(2)}`,
+        venda.payment_status,
         venda.status,
         formatarData(venda.created_at),
       ]),
@@ -363,7 +518,7 @@ export default function HistoricoVendas() {
   return (
     <div>
       <h2 className="page-title">Histórico de Vendas</h2>
-      <p className="page-subtitle">Lista de vendas registradas no sistema.</p>
+      <p className="page-subtitle">Lista de vendas, recebimentos e saldos em aberto.</p>
 
       {mensagem && <p>{mensagem}</p>}
 
@@ -401,75 +556,162 @@ export default function HistoricoVendas() {
       </div>
 
       <div style={resumoBox}>
-        <span style={contadorResultados}>
-          {vendasFiltradas.length} venda(s)
-        </span>
-
+        <span style={contadorResultados}>{vendasFiltradas.length} venda(s)</span>
         <span style={totalResumo}>
-          Total no filtro: <strong>R$ {totalFiltrado.toFixed(2)}</strong>
+          Vendido: <strong>R$ {totalFiltrado.toFixed(2)}</strong>
+        </span>
+        <span style={totalResumo}>
+          Recebido: <strong>R$ {totalRecebidoFiltrado.toFixed(2)}</strong>
+        </span>
+        <span style={totalResumo}>
+          Em aberto: <strong>R$ {totalEmAbertoFiltrado.toFixed(2)}</strong>
         </span>
       </div>
 
-      <table style={tabela}>
-        <thead>
-          <tr>
-            <th style={th}>Cliente</th>
-            <th style={th}>Produto</th>
-            <th style={th}>SKU</th>
-            <th style={th}>Quantidade</th>
-            <th style={th}>Valor unitário</th>
-            <th style={th}>Valor total</th>
-            <th style={th}>Status</th>
-            <th style={th}>Data</th>
-            <th style={th}>Ações</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {vendasFiltradas.map((venda) => (
-            <tr key={venda.id}>
-              <td style={td}>{venda.nomeCliente}</td>
-              <td style={td}>{venda.nomeProduto}</td>
-              <td style={td}>{venda.skuProduto}</td>
-              <td style={td}>{venda.quantidade}</td>
-              <td style={td}>R$ {venda.valor_unitario.toFixed(2)}</td>
-              <td style={td}>R$ {venda.valor_total.toFixed(2)}</td>
-              <td style={td}>
-                <span
-                  className={
-                    venda.status === "Cancelada"
-                      ? "status-pill status-red"
-                      : "status-pill status-green"
-                  }
-                >
-                  {venda.status}
-                </span>
-              </td>
-              <td style={td}>{formatarData(venda.created_at)}</td>
-              <td style={td}>
-                {venda.status !== "Cancelada" ? (
-                  <button
-                    onClick={() => cancelarVenda(venda)}
-                    className="btn btn-danger btn-sm"
-                  >
-                    Cancelar venda
-                  </button>
-                ) : (
-                  <span style={textoCancelado}>Já cancelada</span>
-                )}
-              </td>
-            </tr>
-          ))}
-
-          {vendasFiltradas.length === 0 && (
+      <div className="data-table-wrap">
+        <table style={tabela}>
+          <thead>
             <tr>
-              <td style={tdVazio} colSpan={9}>
-                Nenhuma venda encontrada.
-              </td>
+              <th style={th}>Cliente</th>
+              <th style={th}>Produto</th>
+              <th style={th}>SKU</th>
+              <th style={th}>Qtd.</th>
+              <th style={th}>Valor total</th>
+              <th style={th}>Recebido</th>
+              <th style={th}>Em aberto</th>
+              <th style={th}>Situação</th>
+              <th style={th}>Status venda</th>
+              <th style={th}>Data</th>
+              <th style={th}>Ações</th>
             </tr>
+          </thead>
+
+          <tbody>
+            {vendasFiltradas.map((venda) => (
+              <tr key={venda.id}>
+                <td style={td}>{venda.nomeCliente}</td>
+                <td style={td}>{venda.nomeProduto}</td>
+                <td style={td}>{venda.skuProduto}</td>
+                <td style={td}>{venda.quantidade}</td>
+                <td style={td}>R$ {venda.valor_total.toFixed(2)}</td>
+                <td style={td}>R$ {venda.valor_recebido.toFixed(2)}</td>
+                <td style={td}>R$ {venda.valor_em_aberto.toFixed(2)}</td>
+                <td style={td}>
+                  <span
+                    className={
+                      venda.payment_status === "Recebida"
+                        ? "status-pill status-green"
+                        : venda.payment_status === "Parcial"
+                        ? "status-pill status-yellow"
+                        : "status-pill status-gray"
+                    }
+                  >
+                    {venda.payment_status}
+                  </span>
+                </td>
+                <td style={td}>
+                  <span
+                    className={
+                      venda.status === "Cancelada"
+                        ? "status-pill status-red"
+                        : "status-pill status-green"
+                    }
+                  >
+                    {venda.status}
+                  </span>
+                </td>
+                <td style={td}>{formatarData(venda.created_at)}</td>
+                <td style={td}>
+                  <div style={acoesTabela}>
+                    {venda.status !== "Cancelada" && venda.valor_em_aberto > 0 && (
+                      <button
+                        onClick={() => abrirModalPagamento(venda)}
+                        className="btn btn-primary btn-sm"
+                      >
+                        Adicionar pagamento
+                      </button>
+                    )}
+
+                    {venda.status !== "Cancelada" ? (
+                      <button
+                        onClick={() => cancelarVenda(venda)}
+                        className="btn btn-danger btn-sm"
+                      >
+                        Cancelar venda
+                      </button>
+                    ) : (
+                      <span style={textoCancelado}>Já cancelada</span>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+
+            {vendasFiltradas.length === 0 && (
+              <tr>
+                <td style={tdVazio} colSpan={11}>
+                  Nenhuma venda encontrada.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <AnimatedModal
+        open={modalPagamentoAberto}
+        onClose={fecharModalPagamento}
+        title="Adicionar pagamento"
+        footer={
+          <>
+            <button onClick={fecharModalPagamento} className="btn btn-secondary">
+              Cancelar
+            </button>
+            <button
+              onClick={salvarPagamento}
+              className="btn btn-primary"
+              disabled={salvandoPagamento}
+            >
+              {salvandoPagamento ? "Salvando..." : "Salvar pagamento"}
+            </button>
+          </>
+        }
+      >
+        <>
+          {vendaSelecionada && (
+            <div style={{ marginBottom: 16 }}>
+              <div><strong>Venda:</strong> {vendaSelecionada.nomeProduto}</div>
+              <div><strong>Total:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}</div>
+              <div><strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}</div>
+              <div><strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}</div>
+            </div>
           )}
-        </tbody>
-      </table>
+
+          <div className="grid-2">
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Valor do pagamento"
+              value={valorPagamento}
+              onChange={(e) => setValorPagamento(e.target.value)}
+            />
+
+            <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
+              {formasPagamento.map((forma) => (
+                <option key={forma} value={forma}>
+                  {forma}
+                </option>
+              ))}
+            </select>
+
+            <input
+              placeholder="Observação (opcional)"
+              value={observacaoPagamento}
+              onChange={(e) => setObservacaoPagamento(e.target.value)}
+            />
+          </div>
+        </>
+      </AnimatedModal>
     </div>
   )
 }
@@ -545,4 +787,10 @@ const totalResumo = {
 const textoCancelado = {
   color: "#6b7280",
   fontSize: "13px",
+}
+
+const acoesTabela = {
+  display: "flex",
+  gap: "8px",
+  flexWrap: "wrap" as const,
 }

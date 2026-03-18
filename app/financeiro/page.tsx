@@ -17,6 +17,15 @@ type Venda = {
   product_id: number
 }
 
+type Pagamento = {
+  id: number
+  sale_id: number
+  valor: number
+  forma_pagamento: string
+  observacao: string | null
+  created_at: string
+}
+
 type Cliente = {
   id: number
   nome: string
@@ -34,7 +43,8 @@ type VendaExibicao = {
   id: number
   quantidade: number
   valor_total: number
-  lucro_total: number
+  valor_recebido: number
+  valor_em_aberto: number
   created_at: string
   nomeCliente: string
   nomeProduto: string
@@ -48,11 +58,12 @@ type Loja = {
 }
 
 export default function Financeiro() {
-  const [faturamentoTotal, setFaturamentoTotal] = useState(0)
-  const [lucroTotal, setLucroTotal] = useState(0)
+  const [totalVendido, setTotalVendido] = useState(0)
+  const [totalRecebido, setTotalRecebido] = useState(0)
+  const [totalEmAberto, setTotalEmAberto] = useState(0)
   const [quantidadeVendida, setQuantidadeVendida] = useState(0)
-  const [ticketMedio, setTicketMedio] = useState(0)
-  const [margemMedia, setMargemMedia] = useState(0)
+  const [ticketMedioVendido, setTicketMedioVendido] = useState(0)
+  const [ticketMedioRecebido, setTicketMedioRecebido] = useState(0)
   const [ultimasVendas, setUltimasVendas] = useState<VendaExibicao[]>([])
   const [todasVendas, setTodasVendas] = useState<VendaExibicao[]>([])
   const [mensagem, setMensagem] = useState("")
@@ -99,6 +110,11 @@ export default function Financeiro() {
       return
     }
 
+    const { data: pagamentosData } = await supabase
+      .from("sale_payments")
+      .select("*")
+      .eq("user_id", user.id)
+
     const { data: clientesData } = await supabase
       .from("customers")
       .select("id, nome")
@@ -110,20 +126,22 @@ export default function Financeiro() {
       .eq("user_id", user.id)
 
     const vendas = (vendasData ?? []) as Venda[]
+    const pagamentos = (pagamentosData ?? []) as Pagamento[]
     const clientes = (clientesData ?? []) as Cliente[]
     const produtos = (produtosData ?? []) as Produto[]
 
     const vendasFormatadas: VendaExibicao[] = vendas.map((venda) => {
       const cliente = clientes.find((c) => c.id === venda.customer_id)
       const produto = produtos.find((p) => p.id === venda.product_id)
-      const custoUnitario = Number(produto?.custo || 0)
-      const lucro = Number(venda.valor_total) - custoUnitario * Number(venda.quantidade)
+      const pagamentosDaVenda = pagamentos.filter((p) => p.sale_id === venda.id)
+      const valorRecebido = pagamentosDaVenda.reduce((soma, item) => soma + Number(item.valor), 0)
 
       return {
         id: venda.id,
         quantidade: venda.quantidade,
         valor_total: Number(venda.valor_total),
-        lucro_total: lucro,
+        valor_recebido: valorRecebido,
+        valor_em_aberto: Math.max(Number(venda.valor_total) - valorRecebido, 0),
         created_at: venda.created_at,
         nomeCliente: cliente?.nome || "Sem cliente",
         nomeProduto: produto?.nome || "Produto removido",
@@ -132,29 +150,21 @@ export default function Financeiro() {
       }
     })
 
-    const totalFaturamento = vendasFormatadas.reduce(
-      (soma, venda) => soma + Number(venda.valor_total),
-      0
-    )
+    const vendido = vendasFormatadas.reduce((soma, venda) => soma + Number(venda.valor_total), 0)
+    const recebido = vendasFormatadas.reduce((soma, venda) => soma + Number(venda.valor_recebido), 0)
+    const emAberto = vendasFormatadas.reduce((soma, venda) => soma + Number(venda.valor_em_aberto), 0)
+    const totalQuantidade = vendas.reduce((soma, venda) => soma + Number(venda.quantidade), 0)
 
-    const totalLucro = vendasFormatadas.reduce(
-      (soma, venda) => soma + Number(venda.lucro_total),
-      0
-    )
+    const ticketVenda = vendas.length > 0 ? vendido / vendas.length : 0
+    const vendasComPagamento = vendasFormatadas.filter((item) => item.valor_recebido > 0).length
+    const ticketRecebimento = vendasComPagamento > 0 ? recebido / vendasComPagamento : 0
 
-    const totalQuantidade = vendas.reduce(
-      (soma, venda) => soma + Number(venda.quantidade),
-      0
-    )
-
-    const ticket = vendas.length > 0 ? totalFaturamento / vendas.length : 0
-    const margem = totalFaturamento > 0 ? (totalLucro / totalFaturamento) * 100 : 0
-
-    setFaturamentoTotal(totalFaturamento)
-    setLucroTotal(totalLucro)
+    setTotalVendido(vendido)
+    setTotalRecebido(recebido)
+    setTotalEmAberto(emAberto)
     setQuantidadeVendida(totalQuantidade)
-    setTicketMedio(ticket)
-    setMargemMedia(margem)
+    setTicketMedioVendido(ticketVenda)
+    setTicketMedioRecebido(ticketRecebimento)
     setUltimasVendas(vendasFormatadas.slice(0, 5))
     setTodasVendas(vendasFormatadas)
   }
@@ -192,7 +202,8 @@ export default function Financeiro() {
       "Categoria",
       "Quantidade",
       "Valor Total",
-      "Lucro",
+      "Recebido",
+      "Em Aberto",
       "Data",
     ]
 
@@ -203,7 +214,8 @@ export default function Financeiro() {
       venda.categoria,
       String(venda.quantidade),
       Number(venda.valor_total).toFixed(2),
-      Number(venda.lucro_total).toFixed(2),
+      Number(venda.valor_recebido).toFixed(2),
+      Number(venda.valor_em_aberto).toFixed(2),
       formatarData(venda.created_at),
     ])
 
@@ -243,14 +255,14 @@ export default function Financeiro() {
 
     doc.setFont("helvetica", "normal")
     doc.setFontSize(11)
-    doc.text(`Faturamento total: R$ ${faturamentoTotal.toFixed(2)}`, 14, startY)
-    doc.text(`Lucro total: R$ ${lucroTotal.toFixed(2)}`, 14, startY + 6)
-    doc.text(`Margem média: ${margemMedia.toFixed(1)}%`, 14, startY + 12)
-    doc.text(`Ticket médio: R$ ${ticketMedio.toFixed(2)}`, 14, startY + 18)
+    doc.text(`Total vendido: R$ ${totalVendido.toFixed(2)}`, 14, startY)
+    doc.text(`Total recebido: R$ ${totalRecebido.toFixed(2)}`, 14, startY + 6)
+    doc.text(`Total em aberto: R$ ${totalEmAberto.toFixed(2)}`, 14, startY + 12)
+    doc.text(`Ticket médio vendido: R$ ${ticketMedioVendido.toFixed(2)}`, 14, startY + 18)
 
     autoTable(doc, {
       startY: startY + 26,
-      head: [["Cliente", "Produto", "Marca", "Categoria", "Qtd.", "Valor", "Lucro", "Data"]],
+      head: [["Cliente", "Produto", "Marca", "Categoria", "Qtd.", "Total", "Recebido", "Aberto", "Data"]],
       body: vendasFiltradas.map((venda) => [
         venda.nomeCliente,
         venda.nomeProduto,
@@ -258,7 +270,8 @@ export default function Financeiro() {
         venda.categoria,
         String(venda.quantidade),
         `R$ ${Number(venda.valor_total).toFixed(2)}`,
-        `R$ ${Number(venda.lucro_total).toFixed(2)}`,
+        `R$ ${Number(venda.valor_recebido).toFixed(2)}`,
+        `R$ ${Number(venda.valor_em_aberto).toFixed(2)}`,
         formatarData(venda.created_at),
       ]),
       styles: {
@@ -275,7 +288,7 @@ export default function Financeiro() {
   return (
     <div>
       <h2 className="page-title">Financeiro</h2>
-      <p className="page-subtitle">Resumo financeiro com faturamento, lucro e margem.</p>
+      <p className="page-subtitle">Resumo financeiro com vendido, recebido e saldo em aberto.</p>
 
       {mensagem && <p>{mensagem}</p>}
 
@@ -300,33 +313,33 @@ export default function Financeiro() {
 
       <div className="grid-3">
         <div className="section-card">
-          <h3>Faturamento total</h3>
-          <p>R$ {faturamentoTotal.toFixed(2)}</p>
+          <h3>Total vendido</h3>
+          <p>R$ {totalVendido.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Lucro total</h3>
-          <p>R$ {lucroTotal.toFixed(2)}</p>
+          <h3>Total recebido</h3>
+          <p>R$ {totalRecebido.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Margem média</h3>
-          <p>{margemMedia.toFixed(1)}%</p>
+          <h3>Total em aberto</h3>
+          <p>R$ {totalEmAberto.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Ticket médio</h3>
-          <p>R$ {ticketMedio.toFixed(2)}</p>
+          <h3>Ticket médio vendido</h3>
+          <p>R$ {ticketMedioVendido.toFixed(2)}</p>
+        </div>
+
+        <div className="section-card">
+          <h3>Ticket médio recebido</h3>
+          <p>R$ {ticketMedioRecebido.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
           <h3>Quantidade vendida</h3>
           <p>{quantidadeVendida}</p>
-        </div>
-
-        <div className="section-card">
-          <h3>Vendas filtradas</h3>
-          <p>{vendasFiltradas.length}</p>
         </div>
       </div>
 
@@ -341,8 +354,9 @@ export default function Financeiro() {
               <th style={th}>Marca</th>
               <th style={th}>Categoria</th>
               <th style={th}>Qtd.</th>
-              <th style={th}>Valor</th>
-              <th style={th}>Lucro</th>
+              <th style={th}>Total</th>
+              <th style={th}>Recebido</th>
+              <th style={th}>Em aberto</th>
               <th style={th}>Data</th>
             </tr>
           </thead>
@@ -356,14 +370,15 @@ export default function Financeiro() {
                 <td style={td}>{venda.categoria}</td>
                 <td style={td}>{venda.quantidade}</td>
                 <td style={td}>R$ {Number(venda.valor_total).toFixed(2)}</td>
-                <td style={td}>R$ {Number(venda.lucro_total).toFixed(2)}</td>
+                <td style={td}>R$ {Number(venda.valor_recebido).toFixed(2)}</td>
+                <td style={td}>R$ {Number(venda.valor_em_aberto).toFixed(2)}</td>
                 <td style={td}>{formatarData(venda.created_at)}</td>
               </tr>
             ))}
 
             {ultimasVendas.length === 0 && (
               <tr>
-                <td style={tdVazio} colSpan={8}>
+                <td style={tdVazio} colSpan={9}>
                   Nenhuma venda ativa encontrada.
                 </td>
               </tr>
