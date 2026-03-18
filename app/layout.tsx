@@ -28,6 +28,8 @@ const menuGroups = [
   {
     title: "Visão geral",
     items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+  label: "Lucratividade",
+  href: "/relatorios/lucratividade",
   },
   {
     title: "Operação",
