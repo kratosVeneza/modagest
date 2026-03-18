@@ -22,14 +22,17 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  BarChart3,
 } from "lucide-react"
 
 const menuGroups = [
   {
     title: "Visão geral",
-    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
-  label: "Lucratividade",
-  href: "/relatorios/lucratividade",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/relatorios/lucratividade",  label: "Lucratividade", icon:BarChart3 },
+    ],
+  
   },
   {
     title: "Operação",
