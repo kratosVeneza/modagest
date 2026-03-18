@@ -160,9 +160,7 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    if (todasVendas.length > 0 || produtosLista.length > 0 || todosPagamentos.length >= 0) {
-      recalcularDashboard()
-    }
+    recalcularDashboard()
   }, [periodo, todasVendas, todosPagamentos, produtosLista, clientesLista])
 
   async function carregarDashboard() {
@@ -186,15 +184,13 @@ export default function Dashboard() {
       .maybeSingle()
 
     const loja = (lojaData ?? null) as Loja | null
-
     if (loja?.nome_loja) setNomeLoja(loja.nome_loja)
     if (loja?.logo_url) setLogoUrl(loja.logo_url)
 
-    const { data: vendasAtivas, error: vendasError } = await supabase
+    const { data: vendasData, error: vendasError } = await supabase
       .from("sales")
       .select("*")
       .eq("user_id", user.id)
-      .neq("status", "Cancelada")
       .order("created_at", { ascending: false })
 
     if (vendasError) {
@@ -232,9 +228,11 @@ export default function Dashboard() {
       .in("status", ["Pendente", "Encomendado", "Enviado"])
 
     const produtosTipados = (produtos ?? []) as Produto[]
+    const vendasTipadas = (vendasData ?? []) as Venda[]
+    const pagamentosTipados = (pagamentosData ?? []) as Pagamento[]
 
-    setTodasVendas((vendasAtivas ?? []) as Venda[])
-    setTodosPagamentos((pagamentosData ?? []) as Pagamento[])
+    setTodasVendas(vendasTipadas)
+    setTodosPagamentos(pagamentosTipados)
     setProdutosLista(produtosTipados)
     setClientesLista((clientes ?? []) as Cliente[])
 
@@ -342,24 +340,31 @@ export default function Dashboard() {
       quantidadeDiasGrafico,
     } = obterIntervalosSelecionados()
 
-    const vendasPeriodo = todasVendas.filter((v) => {
+    const vendasAtivas = todasVendas.filter((v) => v.status !== "Cancelada")
+    const idsVendasAtivas = new Set(vendasAtivas.map((v) => v.id))
+    const pagamentosValidos = todosPagamentos.filter((p) => idsVendasAtivas.has(p.sale_id))
+
+    const vendasPeriodo = vendasAtivas.filter((v) => {
       const data = new Date(v.created_at)
       return data >= inicioAtual && data <= fimAtual
     })
 
-    const vendasComparacao = todasVendas.filter((v) => {
+    const vendasComparacao = vendasAtivas.filter((v) => {
       const data = new Date(v.created_at)
       return data >= inicioComparacao && data <= fimComparacao
     })
 
-    const pagamentosPeriodo = todosPagamentos.filter((p) => {
+    const idsPeriodo = new Set(vendasPeriodo.map((v) => v.id))
+    const idsComparacao = new Set(vendasComparacao.map((v) => v.id))
+
+    const pagamentosPeriodo = pagamentosValidos.filter((p) => {
       const data = new Date(p.created_at)
-      return data >= inicioAtual && data <= fimAtual
+      return data >= inicioAtual && data <= fimAtual && idsPeriodo.has(p.sale_id)
     })
 
-    const pagamentosComparacao = todosPagamentos.filter((p) => {
+    const pagamentosComparacao = pagamentosValidos.filter((p) => {
       const data = new Date(p.created_at)
-      return data >= inicioComparacao && data <= fimComparacao
+      return data >= inicioComparacao && data <= fimComparacao && idsComparacao.has(p.sale_id)
     })
 
     const totalAtual = vendasPeriodo.reduce((soma, v) => soma + Number(v.valor_total), 0)
@@ -369,7 +374,7 @@ export default function Dashboard() {
     const recebidoAnterior = pagamentosComparacao.reduce((soma, p) => soma + Number(p.valor), 0)
 
     const recebidoPorVendaPeriodo = vendasPeriodo.reduce((soma, venda) => {
-      const recebidoVenda = todosPagamentos
+      const recebidoVenda = pagamentosValidos
         .filter((p) => p.sale_id === venda.id)
         .reduce((acc, item) => acc + Number(item.valor), 0)
       return soma + recebidoVenda
@@ -378,11 +383,14 @@ export default function Dashboard() {
     const emAberto = Math.max(totalAtual - recebidoPorVendaPeriodo, 0)
 
     const lucroRecebidoAtual = pagamentosPeriodo.reduce((soma, pagamento) => {
-      const venda = todasVendas.find((v) => v.id === pagamento.sale_id)
+      const venda = vendasAtivas.find((v) => v.id === pagamento.sale_id)
       if (!venda) return soma
       const produto = produtosLista.find((p) => p.id === venda.product_id)
       const custoUnitario = Number(produto?.custo || 0)
-      const proporcao = Number(venda.valor_total) > 0 ? Number(pagamento.valor) / Number(venda.valor_total) : 0
+      const proporcao =
+        Number(venda.valor_total) > 0
+          ? Number(pagamento.valor) / Number(venda.valor_total)
+          : 0
       const custoProporcional = custoUnitario * Number(venda.quantidade) * proporcao
       return soma + (Number(pagamento.valor) - custoProporcional)
     }, 0)
@@ -403,7 +411,7 @@ export default function Dashboard() {
     const recentes = vendasPeriodo.slice(0, 5).map((venda) => {
       const produto = produtosLista.find((p) => p.id === venda.product_id)
       const cliente = clientesLista.find((c) => c.id === venda.customer_id)
-      const pagamentosDaVenda = todosPagamentos.filter((p) => p.sale_id === venda.id)
+      const pagamentosDaVenda = pagamentosValidos.filter((p) => p.sale_id === venda.id)
       const valorRecebido = pagamentosDaVenda.reduce((s, p) => s + Number(p.valor), 0)
 
       return {
@@ -582,14 +590,6 @@ export default function Dashboard() {
     })
     linhas.push("")
 
-    linhas.push(`"ÚLTIMAS VENDAS"`)
-    linhas.push(`"Cliente";"Produto";"Valor";"Recebido";"Em Aberto";"Data"`)
-    ultimasVendas.forEach((item) => {
-      linhas.push(
-        `"${item.nomeCliente.replace(/"/g, '""')}";"${item.nomeProduto.replace(/"/g, '""')}";"${item.valorTotal.toFixed(2)}";"${item.valorRecebido.toFixed(2)}";"${item.valorEmAberto.toFixed(2)}";"${formatarData(item.created_at)}"`
-      )
-    })
-
     const conteudo = linhas.join("\n")
     const blob = new Blob([conteudo], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
@@ -745,7 +745,7 @@ export default function Dashboard() {
               <BadgeDollarSign size={20} />
             </div>
           </div>
-          <div className="metric-helper">Saldo a receber das vendas do período</div>
+          <div className="metric-helper">Saldo a receber das vendas ativas</div>
         </div>
 
         <div className="metric-card">

@@ -94,7 +94,6 @@ export default function Financeiro() {
       .maybeSingle()
 
     const loja = (lojaData ?? null) as Loja | null
-
     if (loja?.nome_loja) setNomeLoja(loja.nome_loja)
     if (loja?.logo_url) setLogoUrl(loja.logo_url)
 
@@ -102,7 +101,6 @@ export default function Financeiro() {
       .from("sales")
       .select("*")
       .eq("user_id", user.id)
-      .neq("status", "Cancelada")
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -125,12 +123,18 @@ export default function Financeiro() {
       .select("id, nome, marca, categoria, custo")
       .eq("user_id", user.id)
 
-    const vendas = (vendasData ?? []) as Venda[]
-    const pagamentos = (pagamentosData ?? []) as Pagamento[]
+    const vendasTodas = (vendasData ?? []) as Venda[]
+    const vendasAtivas = vendasTodas.filter((v) => v.status !== "Cancelada")
+    const idsVendasAtivas = new Set(vendasAtivas.map((v) => v.id))
+
+    const pagamentos = ((pagamentosData ?? []) as Pagamento[]).filter((p) =>
+      idsVendasAtivas.has(p.sale_id)
+    )
+
     const clientes = (clientesData ?? []) as Cliente[]
     const produtos = (produtosData ?? []) as Produto[]
 
-    const vendasFormatadas: VendaExibicao[] = vendas.map((venda) => {
+    const vendasFormatadas: VendaExibicao[] = vendasAtivas.map((venda) => {
       const cliente = clientes.find((c) => c.id === venda.customer_id)
       const produto = produtos.find((p) => p.id === venda.product_id)
       const pagamentosDaVenda = pagamentos.filter((p) => p.sale_id === venda.id)
@@ -153,9 +157,9 @@ export default function Financeiro() {
     const vendido = vendasFormatadas.reduce((soma, venda) => soma + Number(venda.valor_total), 0)
     const recebido = vendasFormatadas.reduce((soma, venda) => soma + Number(venda.valor_recebido), 0)
     const emAberto = vendasFormatadas.reduce((soma, venda) => soma + Number(venda.valor_em_aberto), 0)
-    const totalQuantidade = vendas.reduce((soma, venda) => soma + Number(venda.quantidade), 0)
+    const totalQuantidade = vendasAtivas.reduce((soma, venda) => soma + Number(venda.quantidade), 0)
 
-    const ticketVenda = vendas.length > 0 ? vendido / vendas.length : 0
+    const ticketVenda = vendasAtivas.length > 0 ? vendido / vendasAtivas.length : 0
     const vendasComPagamento = vendasFormatadas.filter((item) => item.valor_recebido > 0).length
     const ticketRecebimento = vendasComPagamento > 0 ? recebido / vendasComPagamento : 0
 
