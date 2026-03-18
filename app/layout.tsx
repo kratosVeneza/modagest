@@ -33,6 +33,7 @@ const menuGroups = [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
     ],
+  
   },
   {
     title: "Operação",
@@ -64,85 +65,18 @@ export default function RootLayout({
   const [menuFechado, setMenuFechado] = useState(false)
 
   useEffect(() => {
+  async function garantirPerfil() {
+    if (pathname === "/login") return
+    await ensureProfile({ trialDays: 7 })
+  }
+
+  garantirPerfil()
+}, [pathname])
+
+  useEffect(() => {
     const salvo = localStorage.getItem("modagest-menu-fechado")
     setMenuFechado(salvo === "true")
   }, [])
-
-  useEffect(() => {
-    let mounted = true
-
-    async function validarSessaoInicial() {
-      if (pathname === "/login") return
-
-      const { data, error } = await supabase.auth.getSession()
-
-      if (!mounted) return
-
-      if (error) {
-        console.error("Erro ao verificar sessão:", error.message)
-        await supabase.auth.signOut()
-        router.push("/login")
-        return
-      }
-
-      if (!data.session) {
-        await supabase.auth.signOut()
-        router.push("/login")
-      }
-    }
-
-    validarSessaoInicial()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return
-
-      if (
-        pathname !== "/login" &&
-        (event === "SIGNED_OUT" || (!session && event !== "INITIAL_SESSION"))
-      ) {
-        await supabase.auth.signOut()
-        router.push("/login")
-      }
-    })
-
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
-  }, [pathname, router])
-
-  useEffect(() => {
-    let mounted = true
-
-    async function garantirPerfil() {
-      if (pathname === "/login") return
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!mounted || !session) return
-
-      try {
-        await ensureProfile({ trialDays: 7 })
-      } catch (error) {
-        console.error("Erro ao garantir perfil:", error)
-      }
-    }
-
-    garantirPerfil()
-
-    return () => {
-      mounted = false
-    }
-  }, [pathname])
-
-  async function sair() {
-    await supabase.auth.signOut()
-    router.push("/login")
-  }
 
   function alternarMenu() {
     const novoValor = !menuFechado
@@ -150,14 +84,9 @@ export default function RootLayout({
     localStorage.setItem("modagest-menu-fechado", String(novoValor))
   }
 
-  const rotaLogin = pathname === "/login"
-
-  if (rotaLogin) {
-    return (
-      <html lang="pt-BR">
-        <body>{children}</body>
-      </html>
-    )
+  async function sair() {
+    await supabase.auth.signOut()
+    router.push("/login")
   }
 
   return (
@@ -181,11 +110,7 @@ export default function RootLayout({
                 className="sidebar-toggle-btn"
                 title={menuFechado ? "Abrir menu" : "Fechar menu"}
               >
-                {menuFechado ? (
-                  <PanelLeftOpen size={18} />
-                ) : (
-                  <PanelLeftClose size={18} />
-                )}
+                {menuFechado ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
               </button>
             </div>
 
@@ -196,8 +121,7 @@ export default function RootLayout({
 
                   <div className="menu-group-items">
                     {group.items.map((item) => {
-                      const ativo =
-                        pathname === item.href || pathname.startsWith(`${item.href}/`)
+                      const ativo = pathname === item.href
                       const Icon = item.icon
 
                       return (
@@ -212,6 +136,7 @@ export default function RootLayout({
                           <span className="menu-icon">
                             <Icon size={18} strokeWidth={2.2} />
                           </span>
+
                           {!menuFechado && <span>{item.label}</span>}
                         </Link>
                       )
@@ -228,6 +153,7 @@ export default function RootLayout({
                 <span className="menu-icon">
                   <LogOut size={18} strokeWidth={2.2} />
                 </span>
+
                 {!menuFechado && <span>Sair</span>}
               </button>
             </nav>
@@ -252,7 +178,6 @@ export default function RootLayout({
               <PageTransition>{children}</PageTransition>
             </section>
           </main>
-
           <OnboardingTour />
         </div>
       </body>
