@@ -30,12 +30,29 @@ const formasPagamento = [
   "Outro",
 ]
 
+function hojeInputDate() {
+  const hoje = new Date()
+  const ano = hoje.getFullYear()
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0")
+  const dia = String(hoje.getDate()).padStart(2, "0")
+  return `${ano}-${mes}-${dia}`
+}
+
+function montarDataISO(dataInput: string) {
+  if (!dataInput) {
+    return new Date().toISOString()
+  }
+
+  return new Date(`${dataInput}T12:00:00-03:00`).toISOString()
+}
+
 export default function Vendas() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [produtoId, setProdutoId] = useState("")
   const [clienteId, setClienteId] = useState("")
   const [quantidade, setQuantidade] = useState("")
+  const [dataVenda, setDataVenda] = useState(hojeInputDate())
   const [mensagem, setMensagem] = useState("")
   const [mensagemSucesso, setMensagemSucesso] = useState("")
   const [salvando, setSalvando] = useState(false)
@@ -128,6 +145,11 @@ export default function Vendas() {
       return
     }
 
+    if (!dataVenda) {
+      setMensagem("Informe a data da venda.")
+      return
+    }
+
     const produto = produtos.find((p) => p.id === Number(produtoId))
 
     if (!produto) {
@@ -160,6 +182,7 @@ export default function Vendas() {
     setSalvando(true)
 
     const novoEstoque = produto.estoque - qtd
+    const dataVendaISO = montarDataISO(dataVenda)
 
     const payload: {
       product_id: number
@@ -169,6 +192,7 @@ export default function Vendas() {
       user_id: string
       customer_id?: number | null
       status?: string
+      created_at: string
     } = {
       product_id: produto.id,
       quantidade: qtd,
@@ -177,6 +201,7 @@ export default function Vendas() {
       user_id: user.id,
       customer_id: clienteId ? Number(clienteId) : null,
       status: "Ativa",
+      created_at: dataVendaISO,
     }
 
     const { data: vendaCriada, error: erroVenda } = await supabase
@@ -199,6 +224,7 @@ export default function Vendas() {
           valor: recebidoInicial,
           forma_pagamento: formaPagamentoInicial,
           observacao: observacaoPagamentoInicial || null,
+          created_at: dataVendaISO,
         },
       ])
 
@@ -232,6 +258,7 @@ export default function Vendas() {
     setProdutoId("")
     setClienteId("")
     setQuantidade("")
+    setDataVenda(hojeInputDate())
     setValorRecebidoInicial("")
     setFormaPagamentoInicial("Pix")
     setObservacaoPagamentoInicial("")
@@ -318,6 +345,12 @@ export default function Vendas() {
             />
 
             <input
+              type="date"
+              value={dataVenda}
+              onChange={(e) => setDataVenda(e.target.value)}
+            />
+
+            <input
               type="number"
               step="0.01"
               placeholder="Valor recebido agora (opcional)"
@@ -370,6 +403,11 @@ export default function Vendas() {
           <div style={resumoLinha}>
             <span className="info-muted">Cliente</span>
             <strong>{clienteSelecionado?.nome || "Sem cliente"}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Data da venda</span>
+            <strong>{dataVenda || "-"}</strong>
           </div>
 
           <div style={resumoLinha}>
