@@ -34,6 +34,8 @@ import {
   Landmark,
   CircleDollarSign,
 } from "lucide-react"
+import HelpTooltip from "../components/HelpTooltip"
+import HelpBanner from "../components/Helpbanner"
 
 type Venda = {
   id: number
@@ -458,10 +460,12 @@ export default function Dashboard() {
       .filter((m) => m.type === "saida" && m.status === "pendente")
       .reduce((soma, m) => soma + Number(m.amount), 0)
 
-    const entradasPagasTotal = pagamentosValidos.reduce((soma, p) => soma + Number(p.valor), 0) + entradasManuaisPagas
+    const entradasPagasTotal =
+      pagamentosValidos.reduce((soma, p) => soma + Number(p.valor), 0) + entradasManuaisPagas
     const saidasPagasTotal = saidasManuaisPagas
     const saldoAtualCalculado = entradasPagasTotal - saidasPagasTotal
-    const saldoPrevistoCalculado = saldoAtualCalculado + entradasManuaisPendentes - saidasManuaisPendentes
+    const saldoPrevistoCalculado =
+      saldoAtualCalculado + entradasManuaisPendentes - saidasManuaisPendentes
 
     setEntradasPagas(entradasPagasTotal)
     setSaidasPagas(saidasPagasTotal)
@@ -650,7 +654,6 @@ export default function Dashboard() {
     linhas.push(`"ALERTAS"`)
     linhas.push(`"Produtos com estoque baixo";"${estoqueBaixo}"`)
     linhas.push(`"Pedidos pendentes";"${pedidosPendentes}"`)
-    linhas.push("")
 
     const conteudo = linhas.join("\n")
     const blob = new Blob([conteudo], { type: "text/csv;charset=utf-8;" })
@@ -721,6 +724,11 @@ export default function Dashboard() {
     <div>
       <h2 className="page-title">Dashboard</h2>
       <p className="page-subtitle">Resumo comercial e financeiro da operação.</p>
+
+      <HelpBanner
+        title="Como ler o Dashboard"
+        text="Aqui você acompanha vendas, recebimentos, caixa, saldo previsto, produtos em baixa e desempenho geral da operação. Os filtros por período alteram todos os indicadores."
+      />
 
       {mensagem && <p>{mensagem}</p>}
 
@@ -805,7 +813,10 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Total vendido</p>
+              <p className="metric-label" style={tituloComAjuda}>
+                Total vendido
+                <HelpTooltip text="Soma do valor total das vendas ativas no período selecionado, independentemente de terem sido pagas ou não." />
+              </p>
               <p className="metric-value">R$ {faturamentoPrincipal.toFixed(2)}</p>
             </div>
             <div className="metric-icon-box">
@@ -824,7 +835,10 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Total recebido</p>
+              <p className="metric-label" style={tituloComAjuda}>
+                Total recebido
+                <HelpTooltip text="Soma dos pagamentos realmente recebidos das vendas ativas no período." />
+              </p>
               <p className="metric-value">R$ {recebidoPrincipal.toFixed(2)}</p>
             </div>
             <div className="metric-icon-box green">
@@ -843,7 +857,10 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Em aberto</p>
+              <p className="metric-label" style={tituloComAjuda}>
+                Em aberto
+                <HelpTooltip text="Valor que ainda falta receber das vendas ativas do período." />
+              </p>
               <p className="metric-value">R$ {emAbertoPrincipal.toFixed(2)}</p>
             </div>
             <div className="metric-icon-box red">
@@ -856,7 +873,10 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Saldo atual</p>
+              <p className="metric-label" style={tituloComAjuda}>
+                Saldo atual
+                <HelpTooltip text="Resultado das entradas já pagas menos as saídas já pagas. Representa o caixa real." />
+              </p>
               <p className="metric-value">R$ {saldoAtual.toFixed(2)}</p>
             </div>
             <div className="metric-icon-box green">
@@ -869,7 +889,10 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Saldo previsto</p>
+              <p className="metric-label" style={tituloComAjuda}>
+                Saldo previsto
+                <HelpTooltip text="Mostra como o caixa ficará se todas as entradas e saídas pendentes forem realizadas." />
+              </p>
               <p className="metric-value">R$ {saldoPrevisto.toFixed(2)}</p>
             </div>
             <div className="metric-icon-box purple">
@@ -882,7 +905,10 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Despesas pendentes</p>
+              <p className="metric-label" style={tituloComAjuda}>
+                Despesas pendentes
+                <HelpTooltip text="Saídas financeiras ainda não pagas, como fornecedor, aluguel, frete ou marketing." />
+              </p>
               <p className="metric-value">R$ {despesasPendentes.toFixed(2)}</p>
             </div>
             <div className="metric-icon-box orange">
@@ -895,7 +921,10 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Margem média recebida</p>
+              <p className="metric-label" style={tituloComAjuda}>
+                Margem média recebida
+                <HelpTooltip text="Percentual médio de lucro sobre os valores que foram efetivamente recebidos." />
+              </p>
               <p className="metric-value">{margemMediaPeriodo.toFixed(1)}%</p>
             </div>
             <div className="metric-icon-box purple">
@@ -908,7 +937,10 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Itens vendidos</p>
+              <p className="metric-label" style={tituloComAjuda}>
+                Itens vendidos
+                <HelpTooltip text="Quantidade total de itens vendidos no período selecionado." />
+              </p>
               <p className="metric-value">{produtosVendidosPeriodo}</p>
             </div>
             <div className="metric-icon-box purple">
@@ -921,7 +953,10 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
-              <p className="metric-label">Estoque baixo</p>
+              <p className="metric-label" style={tituloComAjuda}>
+                Estoque baixo
+                <HelpTooltip text="Quantidade de produtos com estoque igual ou abaixo do estoque mínimo definido." />
+              </p>
               <p className="metric-value">{estoqueBaixo}</p>
             </div>
             <div className="metric-icon-box orange">
@@ -936,7 +971,10 @@ export default function Dashboard() {
         <div className="chart-shell">
           <div className="chart-header-row">
             <div>
-              <h3 className="dashboard-block-title">Recebido por dia</h3>
+              <h3 className="dashboard-block-title" style={tituloComAjuda}>
+                Recebido por dia
+                <HelpTooltip text="Mostra quanto foi efetivamente recebido em cada dia do período selecionado." />
+              </h3>
               <p className="dashboard-block-subtitle">Entradas reais de caixa das vendas</p>
             </div>
             <span className="chart-badge">Pagamentos</span>
@@ -972,7 +1010,10 @@ export default function Dashboard() {
         <div className="chart-shell">
           <div className="chart-header-row">
             <div>
-              <h3 className="dashboard-block-title">Recebido por forma</h3>
+              <h3 className="dashboard-block-title" style={tituloComAjuda}>
+                Recebido por forma
+                <HelpTooltip text="Distribui os recebimentos por forma de pagamento, como Pix, dinheiro ou cartão." />
+              </h3>
               <p className="dashboard-block-subtitle">Distribuição dos pagamentos</p>
             </div>
             <span className="chart-badge">Financeiro</span>
@@ -998,7 +1039,10 @@ export default function Dashboard() {
         <div className="chart-shell">
           <div className="chart-header-row">
             <div>
-              <h3 className="dashboard-block-title">Produtos mais vendidos</h3>
+              <h3 className="dashboard-block-title" style={tituloComAjuda}>
+                Produtos mais vendidos
+                <HelpTooltip text="Ranking dos produtos com maior quantidade vendida no período selecionado." />
+              </h3>
               <p className="dashboard-block-subtitle">Ranking do período</p>
             </div>
             <span className="chart-badge">Top 5</span>
@@ -1032,7 +1076,10 @@ export default function Dashboard() {
         </div>
 
         <div className="section-card">
-          <h3 className="dashboard-block-title">Últimas vendas</h3>
+          <h3 className="dashboard-block-title" style={tituloComAjuda}>
+            Últimas vendas
+            <HelpTooltip text="Mostra as vendas mais recentes do período com total vendido, recebido e saldo em aberto." />
+          </h3>
           <p className="dashboard-block-subtitle">Vendido, recebido e em aberto</p>
 
           <div className="data-table-wrap" style={{ marginTop: 16 }}>
@@ -1099,4 +1146,9 @@ const tdVazio = {
   padding: "20px",
   textAlign: "center" as const,
   color: "#6b7280",
+}
+
+const tituloComAjuda = {
+  display: "inline-flex",
+  alignItems: "center",
 }

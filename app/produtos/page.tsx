@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import AnimatedModal from "../components/AnimatedModal"
 import TableSkeleton from "../components/TableSkeleton"
+import HelpTooltip from "../components/HelpTooltip"
+import HelpBanner from "../components/Helpbanner"
 
 type Produto = {
   id: number
@@ -269,6 +271,11 @@ export default function Produtos() {
         Cadastro e controle de produtos, marcas, categorias, custo e estoque.
       </p>
 
+      <HelpBanner
+        title="Como usar a página de Produtos"
+        text="Cadastre aqui seus produtos com custo, preço, estoque e estoque mínimo. O sistema calcula lucro, margem e markup para ajudar na precificação e alerta quando o estoque estiver baixo."
+      />
+
       {mensagem && !modalAberto && <p style={{ marginTop: 16 }}>{mensagem}</p>}
 
       <div className="page-actions">
@@ -298,13 +305,48 @@ export default function Produtos() {
               <th style={th}>Tipo</th>
               <th style={th}>Unidade</th>
               <th style={th}>Estoque</th>
-              <th style={th}>Mínimo</th>
-              <th style={th}>Status</th>
-              <th style={th}>Custo</th>
-              <th style={th}>Preço</th>
-              <th style={th}>Lucro</th>
-              <th style={th}>Margem</th>
-              <th style={th}>Markup</th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Mínimo
+                  <HelpTooltip text="Quantidade mínima para o sistema alertar necessidade de reposição." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Status
+                  <HelpTooltip text="Mostra se o estoque está adequado ou abaixo do mínimo definido." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Custo
+                  <HelpTooltip text="Valor que você paga para ter o produto em estoque." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Preço
+                  <HelpTooltip text="Valor de venda do produto para o cliente." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Lucro
+                  <HelpTooltip text="Diferença entre o preço de venda e o custo do produto." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Margem
+                  <HelpTooltip text="Percentual do preço de venda que realmente vira lucro." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Markup
+                  <HelpTooltip text="Percentual do lucro em relação ao custo do produto." />
+                </span>
+              </th>
               <th style={th}>Ações</th>
             </tr>
           </thead>
@@ -405,86 +447,156 @@ export default function Produtos() {
         <>
           {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
 
+          <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280" }}>
+            Preencha os dados do produto. Use custo e preço corretamente para acompanhar lucro, margem e markup.
+          </div>
+
           <div className="grid-2">
-            <input
-              placeholder="Nome do produto"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Nome do produto
+                <HelpTooltip text="Nome principal do produto que será exibido no sistema." />
+              </label>
+              <input
+                placeholder="Nome do produto"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+              />
+            </div>
 
-            <input
-              placeholder="Marca"
-              value={marca}
-              onChange={(e) => setMarca(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Marca
+                <HelpTooltip text="Marca do produto, útil para organização e relatórios." />
+              </label>
+              <input
+                placeholder="Marca"
+                value={marca}
+                onChange={(e) => setMarca(e.target.value)}
+              />
+            </div>
 
-            <select
-              value={categoria}
-              onChange={(e) => setCategoria(e.target.value)}
-            >
-              <option value="">Selecione a categoria</option>
-              {categorias.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label style={labelAjuda}>
+                Categoria
+                <HelpTooltip text="Categoria geral do produto, como roupas, acessórios ou calçados." />
+              </label>
+              <select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+              >
+                <option value="">Selecione a categoria</option>
+                {categorias.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <input
-              placeholder="Tipo do produto"
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Tipo do produto
+                <HelpTooltip text="Tipo específico do item, como camiseta, tênis, relógio, gel ou pochete." />
+              </label>
+              <input
+                placeholder="Tipo do produto"
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value)}
+              />
+            </div>
 
-            <select value={unidade} onChange={(e) => setUnidade(e.target.value)}>
-              {unidades.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label style={labelAjuda}>
+                Unidade
+                <HelpTooltip text="Forma de controle da quantidade, como unidade, par, caixa, sachê ou kit." />
+              </label>
+              <select value={unidade} onChange={(e) => setUnidade(e.target.value)}>
+                {unidades.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <input
-              placeholder="Estoque"
-              type="number"
-              value={estoque}
-              onChange={(e) => setEstoque(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Estoque
+                <HelpTooltip text="Quantidade atual disponível desse produto no sistema." />
+              </label>
+              <input
+                placeholder="Estoque"
+                type="number"
+                value={estoque}
+                onChange={(e) => setEstoque(e.target.value)}
+              />
+            </div>
 
-            <input
-              placeholder="Estoque mínimo"
-              type="number"
-              value={estoqueMinimo}
-              onChange={(e) => setEstoqueMinimo(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Estoque mínimo
+                <HelpTooltip text="Quando o estoque ficar igual ou abaixo desse valor, o sistema alertará reposição." />
+              </label>
+              <input
+                placeholder="Estoque mínimo"
+                type="number"
+                value={estoqueMinimo}
+                onChange={(e) => setEstoqueMinimo(e.target.value)}
+              />
+            </div>
 
-            <input
-              placeholder="Custo"
-              type="number"
-              step="0.01"
-              value={custo}
-              onChange={(e) => setCusto(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Custo
+                <HelpTooltip text="Valor pago para comprar ou repor esse produto." />
+              </label>
+              <input
+                placeholder="Custo"
+                type="number"
+                step="0.01"
+                value={custo}
+                onChange={(e) => setCusto(e.target.value)}
+              />
+            </div>
 
-            <input
-              placeholder="Preço de venda"
-              type="number"
-              step="0.01"
-              value={preco}
-              onChange={(e) => setPreco(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Preço de venda
+                <HelpTooltip text="Valor cobrado do cliente na venda desse produto." />
+              </label>
+              <input
+                placeholder="Preço de venda"
+                type="number"
+                step="0.01"
+                value={preco}
+                onChange={(e) => setPreco(e.target.value)}
+              />
+            </div>
 
-            <input
-              placeholder="Cor (opcional)"
-              value={cor}
-              onChange={(e) => setCor(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Cor
+                <HelpTooltip text="Cor do produto, quando isso for relevante para a venda." />
+              </label>
+              <input
+                placeholder="Cor (opcional)"
+                value={cor}
+                onChange={(e) => setCor(e.target.value)}
+              />
+            </div>
 
-            <input
-              placeholder="Tamanho (opcional)"
-              value={tamanho}
-              onChange={(e) => setTamanho(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Tamanho
+                <HelpTooltip text="Tamanho do produto, quando isso for relevante para controle e venda." />
+              </label>
+              <input
+                placeholder="Tamanho (opcional)"
+                value={tamanho}
+                onChange={(e) => setTamanho(e.target.value)}
+              />
+            </div>
           </div>
 
           <div
@@ -514,17 +626,26 @@ export default function Produtos() {
               }}
             >
               <div style={previewItem}>
-                <span style={previewLabel}>Lucro</span>
+                <span style={previewLabelComAjuda}>
+                  Lucro
+                  <HelpTooltip text="Diferença entre o preço de venda e o custo do produto." />
+                </span>
                 <strong>R$ {lucroPreview.toFixed(2)}</strong>
               </div>
 
               <div style={previewItem}>
-                <span style={previewLabel}>Margem</span>
+                <span style={previewLabelComAjuda}>
+                  Margem
+                  <HelpTooltip text="Percentual do preço de venda que realmente vira lucro." />
+                </span>
                 <strong>{margemPreview.toFixed(1)}%</strong>
               </div>
 
               <div style={previewItem}>
-                <span style={previewLabel}>Markup</span>
+                <span style={previewLabelComAjuda}>
+                  Markup
+                  <HelpTooltip text="Percentual do lucro em relação ao custo do produto." />
+                </span>
                 <strong>{markupPreview.toFixed(1)}%</strong>
               </div>
             </div>
@@ -573,7 +694,22 @@ const previewItem = {
   border: "1px solid #e5e7eb",
 }
 
-const previewLabel = {
+const previewLabelComAjuda = {
+  display: "inline-flex",
+  alignItems: "center",
   fontSize: "12px",
   color: "#64748b",
+}
+
+const labelAjuda = {
+  display: "flex",
+  alignItems: "center",
+  fontSize: "14px",
+  fontWeight: 600,
+  marginBottom: "6px",
+}
+
+const tituloComAjuda = {
+  display: "inline-flex",
+  alignItems: "center",
 }

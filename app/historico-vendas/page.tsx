@@ -8,6 +8,8 @@ import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 import AnimatedModal from "../components/AnimatedModal"
+import HelpTooltip from "../components/HelpTooltip"
+import HelpBanner from "../components/Helpbanner"
 
 type VendaBanco = {
   id: number
@@ -554,6 +556,11 @@ export default function HistoricoVendas() {
       <h2 className="page-title">Histórico de Vendas</h2>
       <p className="page-subtitle">Lista de vendas, recebimentos e saldos em aberto.</p>
 
+      <HelpBanner
+        title="Como usar o Histórico de Vendas"
+        text="Aqui você acompanha cada venda registrada, quanto já foi recebido, quanto ainda está em aberto e pode adicionar pagamentos posteriores. Também é aqui que você cancela uma venda, quando necessário."
+      />
+
       {mensagem && <p>{mensagem}</p>}
 
       <div style={filtrosBox}>
@@ -591,14 +598,29 @@ export default function HistoricoVendas() {
 
       <div style={resumoBox}>
         <span style={contadorResultados}>{vendasFiltradas.length} venda(s)</span>
+
         <span style={totalResumo}>
-          Vendido: <strong>R$ {totalFiltrado.toFixed(2)}</strong>
+          <span style={tituloComAjuda}>
+            Vendido
+            <HelpTooltip text="Soma do valor total das vendas ativas mostradas na tela." />
+          </span>{" "}
+          <strong>R$ {totalFiltrado.toFixed(2)}</strong>
         </span>
+
         <span style={totalResumo}>
-          Recebido: <strong>R$ {totalRecebidoFiltrado.toFixed(2)}</strong>
+          <span style={tituloComAjuda}>
+            Recebido
+            <HelpTooltip text="Soma de tudo que já foi pago pelos clientes nessas vendas." />
+          </span>{" "}
+          <strong>R$ {totalRecebidoFiltrado.toFixed(2)}</strong>
         </span>
+
         <span style={totalResumo}>
-          Em aberto: <strong>R$ {totalEmAbertoFiltrado.toFixed(2)}</strong>
+          <span style={tituloComAjuda}>
+            Em aberto
+            <HelpTooltip text="Valor que ainda falta receber dessas vendas." />
+          </span>{" "}
+          <strong>R$ {totalEmAbertoFiltrado.toFixed(2)}</strong>
         </span>
       </div>
 
@@ -609,13 +631,48 @@ export default function HistoricoVendas() {
               <th style={th}>Cliente</th>
               <th style={th}>Produto</th>
               <th style={th}>SKU</th>
-              <th style={th}>Qtd.</th>
-              <th style={th}>Valor total</th>
-              <th style={th}>Recebido</th>
-              <th style={th}>Em aberto</th>
-              <th style={th}>Situação</th>
-              <th style={th}>Status venda</th>
-              <th style={th}>Data</th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Qtd.
+                  <HelpTooltip text="Quantidade de itens vendidos nessa operação." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Valor total
+                  <HelpTooltip text="Valor total da venda registrada." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Recebido
+                  <HelpTooltip text="Valor já recebido do cliente até agora." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Em aberto
+                  <HelpTooltip text="Valor restante que ainda falta receber." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Situação
+                  <HelpTooltip text="Mostra se a venda está pendente, parcial ou totalmente recebida." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Status venda
+                  <HelpTooltip text="Indica se a venda está ativa ou cancelada." />
+                </span>
+              </th>
+              <th style={th}>
+                <span style={tituloComAjuda}>
+                  Data
+                  <HelpTooltip text="Data da venda registrada no sistema." />
+                </span>
+              </th>
               <th style={th}>Ações</th>
             </tr>
           </thead>
@@ -714,41 +771,77 @@ export default function HistoricoVendas() {
         <>
           {vendaSelecionada && (
             <div style={{ marginBottom: 16 }}>
-              <div><strong>Venda:</strong> {vendaSelecionada.nomeProduto}</div>
-              <div><strong>Total:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}</div>
-              <div><strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}</div>
-              <div><strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}</div>
+              <div>
+                <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
+              </div>
+              <div>
+                <strong>Total:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}
+              </div>
+              <div>
+                <strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}
+              </div>
+              <div>
+                <strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}
+              </div>
             </div>
           )}
 
+          <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280" }}>
+            Use este formulário para registrar pagamentos feitos depois da venda, inclusive com data retroativa.
+          </div>
+
           <div className="grid-2">
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Valor do pagamento"
-              value={valorPagamento}
-              onChange={(e) => setValorPagamento(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Valor do pagamento
+                <HelpTooltip text="Informe quanto o cliente pagou nesta nova entrada." />
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Valor do pagamento"
+                value={valorPagamento}
+                onChange={(e) => setValorPagamento(e.target.value)}
+              />
+            </div>
 
-            <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
-              {formasPagamento.map((forma) => (
-                <option key={forma} value={forma}>
-                  {forma}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label style={labelAjuda}>
+                Forma de pagamento
+                <HelpTooltip text="Escolha a forma usada neste pagamento, como Pix, dinheiro ou cartão." />
+              </label>
+              <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
+                {formasPagamento.map((forma) => (
+                  <option key={forma} value={forma}>
+                    {forma}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <input
-              type="date"
-              value={dataPagamento}
-              onChange={(e) => setDataPagamento(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Data do pagamento
+                <HelpTooltip text="Use a data real em que o cliente pagou, mesmo que esteja registrando depois." />
+              </label>
+              <input
+                type="date"
+                value={dataPagamento}
+                onChange={(e) => setDataPagamento(e.target.value)}
+              />
+            </div>
 
-            <input
-              placeholder="Observação (opcional)"
-              value={observacaoPagamento}
-              onChange={(e) => setObservacaoPagamento(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Observação
+                <HelpTooltip text="Use para anotar algo como segunda parcela, complemento ou acordo com o cliente." />
+              </label>
+              <input
+                placeholder="Observação (opcional)"
+                value={observacaoPagamento}
+                onChange={(e) => setObservacaoPagamento(e.target.value)}
+              />
+            </div>
           </div>
         </>
       </AnimatedModal>
@@ -833,4 +926,17 @@ const acoesTabela = {
   display: "flex",
   gap: "8px",
   flexWrap: "wrap" as const,
+}
+
+const tituloComAjuda = {
+  display: "inline-flex",
+  alignItems: "center",
+}
+
+const labelAjuda = {
+  display: "flex",
+  alignItems: "center",
+  fontSize: "14px",
+  fontWeight: 600,
+  marginBottom: "6px",
 }

@@ -7,6 +7,8 @@ import autoTable from "jspdf-autotable"
 import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import AnimatedModal from "../components/AnimatedModal"
+import HelpTooltip from "../components/HelpTooltip"
+import HelpBanner from "../components/Helpbanner"
 
 type SalePayment = {
   id: number
@@ -526,6 +528,11 @@ export default function Financeiro() {
         Controle de caixa com entradas, saídas, pendências e saldo previsto.
       </p>
 
+      <HelpBanner
+        title="Como usar o Financeiro"
+        text="Cadastre aqui suas despesas e entradas extras, como marketing, frete, aluguel, energia, internet, fornecedores e retiradas. Os recebimentos das vendas entram automaticamente. O saldo atual mostra o que já entrou e saiu. O saldo previsto considera também pendências."
+      />
+
       {mensagem && <p>{mensagem}</p>}
 
       <div style={acoesTopo}>
@@ -569,34 +576,63 @@ export default function Financeiro() {
         </div>
       </div>
 
+      <div
+        style={{
+          marginTop: -6,
+          marginBottom: 14,
+          fontSize: 14,
+          color: "#6b7280",
+        }}
+      >
+        Use <strong>+ Nova movimentação</strong> para cadastrar despesas e entradas extras.
+      </div>
+
       <div className="grid-3">
         <div className="section-card">
-          <h3>Entradas recebidas</h3>
+          <h3 style={tituloComAjuda}>
+            Entradas recebidas
+            <HelpTooltip text="Soma dos pagamentos já recebidos das vendas e também das entradas manuais marcadas como pagas." />
+          </h3>
           <p>R$ {entradasRecebidas.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Saídas pagas</h3>
+          <h3 style={tituloComAjuda}>
+            Saídas pagas
+            <HelpTooltip text="Soma das despesas já pagas, como frete, marketing, aluguel, energia e outras saídas manuais." />
+          </h3>
           <p>R$ {saidasPagas.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Saldo atual</h3>
+          <h3 style={tituloComAjuda}>
+            Saldo atual
+            <HelpTooltip text="É o resultado das entradas já pagas menos as saídas já pagas. Representa o caixa real neste momento." />
+          </h3>
           <p>R$ {saldoAtual.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Entradas pendentes</h3>
+          <h3 style={tituloComAjuda}>
+            Entradas pendentes
+            <HelpTooltip text="Valores que ainda vão entrar no caixa, mas que ainda não foram marcados como pagos." />
+          </h3>
           <p>R$ {entradasPendentes.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Saídas pendentes</h3>
+          <h3 style={tituloComAjuda}>
+            Saídas pendentes
+            <HelpTooltip text="Despesas que ainda não foram pagas, como boletos, fornecedores, aluguel ou anúncios pendentes." />
+          </h3>
           <p>R$ {saidasPendentes.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Saldo previsto</h3>
+          <h3 style={tituloComAjuda}>
+            Saldo previsto
+            <HelpTooltip text="Mostra como o caixa ficará se todas as entradas e saídas pendentes forem realizadas." />
+          </h3>
           <p>R$ {saldoPrevisto.toFixed(2)}</p>
         </div>
       </div>
@@ -712,50 +748,92 @@ export default function Financeiro() {
       >
         <>
           <div className="grid-2">
-            <select value={tipo} onChange={(e) => setTipo(e.target.value as "entrada" | "saida")}>
-              <option value="entrada">Entrada</option>
-              <option value="saida">Saída</option>
-            </select>
+            <div>
+              <label style={labelAjuda}>
+                Tipo
+                <HelpTooltip text="Escolha entrada para valores que aumentam o caixa e saída para despesas ou retiradas." />
+              </label>
+              <select value={tipo} onChange={(e) => setTipo(e.target.value as "entrada" | "saida")}>
+                <option value="entrada">Entrada</option>
+                <option value="saida">Saída</option>
+              </select>
+            </div>
 
-            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-              {categorias.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label style={labelAjuda}>
+                Categoria
+                <HelpTooltip text="Classifique a movimentação para facilitar relatórios e análise do caixa." />
+              </label>
+              <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+                {categorias.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <input
-              placeholder="Descrição"
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Descrição
+                <HelpTooltip text="Descreva claramente a movimentação. Exemplo: anúncio Instagram, frete fornecedor, aluguel da loja." />
+              </label>
+              <input
+                placeholder="Descrição"
+                value={descricao}
+                onChange={(e) => setDescricao(e.target.value)}
+              />
+            </div>
 
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Valor"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Valor
+                <HelpTooltip text="Informe o valor da entrada ou da despesa." />
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Valor"
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+              />
+            </div>
 
-            <select value={status} onChange={(e) => setStatus(e.target.value as "pago" | "pendente")}>
-              <option value="pendente">Pendente</option>
-              <option value="pago">Pago</option>
-            </select>
+            <div>
+              <label style={labelAjuda}>
+                Status
+                <HelpTooltip text="Use pendente quando o valor ainda não entrou ou não saiu do caixa. Use pago quando já aconteceu." />
+              </label>
+              <select value={status} onChange={(e) => setStatus(e.target.value as "pago" | "pendente")}>
+                <option value="pendente">Pendente</option>
+                <option value="pago">Pago</option>
+              </select>
+            </div>
 
-            <input
-              type="date"
-              value={dataVencimento}
-              onChange={(e) => setDataVencimento(e.target.value)}
-            />
-
-            {status === "pago" && (
+            <div>
+              <label style={labelAjuda}>
+                Data de vencimento
+                <HelpTooltip text="Data prevista para pagamento ou recebimento da movimentação." />
+              </label>
               <input
                 type="date"
-                value={dataPagamento}
-                onChange={(e) => setDataPagamento(e.target.value)}
+                value={dataVencimento}
+                onChange={(e) => setDataVencimento(e.target.value)}
               />
+            </div>
+
+            {status === "pago" && (
+              <div>
+                <label style={labelAjuda}>
+                  Data de pagamento
+                  <HelpTooltip text="Informe a data real em que a movimentação foi paga ou recebida." />
+                </label>
+                <input
+                  type="date"
+                  value={dataPagamento}
+                  onChange={(e) => setDataPagamento(e.target.value)}
+                />
+              </div>
             )}
           </div>
         </>
@@ -824,3 +902,16 @@ const acoesTabela = {
   flexWrap: "wrap" as const,
 }
 
+const tituloComAjuda = {
+  display: "flex",
+  alignItems: "center",
+  gap: "4px",
+}
+
+const labelAjuda = {
+  display: "flex",
+  alignItems: "center",
+  fontSize: "14px",
+  fontWeight: 600,
+  marginBottom: "6px",
+}

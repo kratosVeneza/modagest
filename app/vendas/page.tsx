@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
+import HelpTooltip from "../components/HelpTooltip"
+import HelpBanner from "../components/Helpbanner"
 
 type Produto = {
   id: number
@@ -280,6 +282,11 @@ export default function Vendas() {
         Registre vendas, pagamentos iniciais e baixe o estoque automaticamente.
       </p>
 
+      <HelpBanner
+        title="Como usar a página de Vendas"
+        text="Registre aqui a venda do produto, a data real em que ela aconteceu e, se quiser, o valor já recebido do cliente. Você pode lançar pagamento total ou parcial. O estoque é baixado automaticamente."
+      />
+
       {mensagem && (
         <div
           style={{
@@ -318,62 +325,108 @@ export default function Vendas() {
         <div className="section-card">
           <h3 style={{ marginTop: 0 }}>Nova venda</h3>
 
+          <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280" }}>
+            Preencha os dados da venda. Use a data real da operação mesmo que esteja cadastrando depois.
+          </div>
+
           <div className="grid-2">
-            <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
-              <option value="">Selecione um produto</option>
-              {produtos.map((produto) => (
-                <option key={produto.id} value={produto.id}>
-                  {produto.nome} - {produto.sku}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label style={labelAjuda}>
+                Produto
+                <HelpTooltip text="Selecione o produto que foi vendido. O sistema vai usar o preço cadastrado e baixar o estoque automaticamente." />
+              </label>
+              <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
+                <option value="">Selecione um produto</option>
+                {produtos.map((produto) => (
+                  <option key={produto.id} value={produto.id}>
+                    {produto.nome} - {produto.sku}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <select value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
-              <option value="">Cliente (opcional)</option>
-              {clientes.map((cliente) => (
-                <option key={cliente.id} value={cliente.id}>
-                  {cliente.nome}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label style={labelAjuda}>
+                Cliente
+                <HelpTooltip text="Selecione o cliente da venda. Esse campo é opcional." />
+              </label>
+              <select value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
+                <option value="">Cliente (opcional)</option>
+                {clientes.map((cliente) => (
+                  <option key={cliente.id} value={cliente.id}>
+                    {cliente.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <input
-              type="number"
-              placeholder="Quantidade"
-              value={quantidade}
-              onChange={(e) => setQuantidade(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Quantidade
+                <HelpTooltip text="Informe quantas unidades foram vendidas nessa operação." />
+              </label>
+              <input
+                type="number"
+                placeholder="Quantidade"
+                value={quantidade}
+                onChange={(e) => setQuantidade(e.target.value)}
+              />
+            </div>
 
-            <input
-              type="date"
-              value={dataVenda}
-              onChange={(e) => setDataVenda(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Data da venda
+                <HelpTooltip text="Use a data real em que a venda aconteceu. Isso mantém o dashboard e os relatórios corretos." />
+              </label>
+              <input
+                type="date"
+                value={dataVenda}
+                onChange={(e) => setDataVenda(e.target.value)}
+              />
+            </div>
 
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Valor recebido agora (opcional)"
-              value={valorRecebidoInicial}
-              onChange={(e) => setValorRecebidoInicial(e.target.value)}
-            />
+            <div>
+              <label style={labelAjuda}>
+                Valor recebido agora
+                <HelpTooltip text="Informe quanto o cliente já pagou agora. Pode ser o valor total ou apenas um sinal." />
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Valor recebido agora (opcional)"
+                value={valorRecebidoInicial}
+                onChange={(e) => setValorRecebidoInicial(e.target.value)}
+              />
+            </div>
 
-            <select
-              value={formaPagamentoInicial}
-              onChange={(e) => setFormaPagamentoInicial(e.target.value)}
-            >
-              {formasPagamento.map((forma) => (
-                <option key={forma} value={forma}>
-                  {forma}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label style={labelAjuda}>
+                Forma de pagamento
+                <HelpTooltip text="Escolha a forma usada nesse recebimento inicial, como Pix, dinheiro ou cartão." />
+              </label>
+              <select
+                value={formaPagamentoInicial}
+                onChange={(e) => setFormaPagamentoInicial(e.target.value)}
+              >
+                {formasPagamento.map((forma) => (
+                  <option key={forma} value={forma}>
+                    {forma}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <input
-              placeholder="Observação do pagamento (opcional)"
-              value={observacaoPagamentoInicial}
-              onChange={(e) => setObservacaoPagamentoInicial(e.target.value)}
-            />
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelAjuda}>
+                Observação do pagamento
+                <HelpTooltip text="Use para anotar algo importante, como sinal, primeira parcela ou acordo com o cliente." />
+              </label>
+              <input
+                placeholder="Observação do pagamento (opcional)"
+                value={observacaoPagamentoInicial}
+                onChange={(e) => setObservacaoPagamentoInicial(e.target.value)}
+              />
+            </div>
           </div>
 
           <div style={{ marginTop: "18px" }}>
@@ -391,7 +444,10 @@ export default function Vendas() {
           <h3 style={{ marginTop: 0 }}>Resumo da venda</h3>
 
           <div style={resumoLinha}>
-            <span className="info-muted">Produto</span>
+            <span className="info-muted" style={tituloComAjuda}>
+              Produto
+              <HelpTooltip text="Produto selecionado para essa venda." />
+            </span>
             <strong>{produtoSelecionado?.nome || "-"}</strong>
           </div>
 
@@ -406,7 +462,10 @@ export default function Vendas() {
           </div>
 
           <div style={resumoLinha}>
-            <span className="info-muted">Data da venda</span>
+            <span className="info-muted" style={tituloComAjuda}>
+              Data da venda
+              <HelpTooltip text="Data que será usada nos relatórios e no dashboard." />
+            </span>
             <strong>{dataVenda || "-"}</strong>
           </div>
 
@@ -421,12 +480,18 @@ export default function Vendas() {
           </div>
 
           <div style={resumoLinha}>
-            <span className="info-muted">Estoque atual</span>
+            <span className="info-muted" style={tituloComAjuda}>
+              Estoque atual
+              <HelpTooltip text="Quantidade disponível antes de registrar a venda." />
+            </span>
             <strong>{produtoSelecionado?.estoque ?? 0}</strong>
           </div>
 
           <div style={resumoLinha}>
-            <span className="info-muted">Estoque após venda</span>
+            <span className="info-muted" style={tituloComAjuda}>
+              Estoque após venda
+              <HelpTooltip text="Quantidade que restará no estoque depois que a venda for registrada." />
+            </span>
             <strong
               style={{
                 color:
@@ -438,17 +503,26 @@ export default function Vendas() {
           </div>
 
           <div style={resumoLinha}>
-            <span className="info-muted">Recebido agora</span>
+            <span className="info-muted" style={tituloComAjuda}>
+              Recebido agora
+              <HelpTooltip text="Valor pago neste momento pelo cliente." />
+            </span>
             <strong>R$ {recebidoInicial.toFixed(2)}</strong>
           </div>
 
           <div style={resumoLinha}>
-            <span className="info-muted">Saldo em aberto</span>
+            <span className="info-muted" style={tituloComAjuda}>
+              Saldo em aberto
+              <HelpTooltip text="Valor que ainda falta receber dessa venda depois do pagamento inicial." />
+            </span>
             <strong>R$ {Math.max(saldoRestante, 0).toFixed(2)}</strong>
           </div>
 
           <div className="summary-box" style={totalBox}>
-            <span>Total da venda</span>
+            <span style={tituloComAjuda}>
+              Total da venda
+              <HelpTooltip text="Valor total calculado com base no preço do produto multiplicado pela quantidade vendida." />
+            </span>
             <strong style={{ fontSize: "22px" }}>
               R$ {valorTotal.toFixed(2)}
             </strong>
@@ -473,5 +547,18 @@ const totalBox = {
   borderRadius: "14px",
   display: "flex",
   justifyContent: "space-between",
+  alignItems: "center",
+}
+
+const labelAjuda = {
+  display: "flex",
+  alignItems: "center",
+  fontSize: "14px",
+  fontWeight: 600,
+  marginBottom: "6px",
+}
+
+const tituloComAjuda = {
+  display: "inline-flex",
   alignItems: "center",
 }
