@@ -8,7 +8,7 @@ import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import AnimatedModal from "../components/AnimatedModal"
 import HelpTooltip from "../components/HelpTooltip"
-import HelpBanner from "../components/Helpbanner"
+import HelpBanner from "../components/InfoBanner"
 
 type SalePayment = {
   id: number

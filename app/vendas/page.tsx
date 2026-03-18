@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 import HelpTooltip from "../components/HelpTooltip"
-import HelpBanner from "../components/Helpbanner"
+import HelpBanner from "../components/InfoBanner"
 
 type Produto = {
   id: number

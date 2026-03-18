@@ -9,6 +9,7 @@ import HeaderLoja from "./components/HeaderLoja"
 import UserProfile from "./components/UserProfile"
 import ThemeToggle from "./components/ThemeToggle"
 import PageTransition from "./components/PageTransition"
+import OnboardingTour from "./components/OnboardingTour"
 import {
   LayoutDashboard,
   Package,
@@ -162,6 +163,7 @@ export default function RootLayout({
               <PageTransition>{children}</PageTransition>
             </section>
           </main>
+          <OnboardingTour />
         </div>
       </body>
     </html>

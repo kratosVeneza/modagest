@@ -35,7 +35,7 @@ import {
   CircleDollarSign,
 } from "lucide-react"
 import HelpTooltip from "../components/HelpTooltip"
-import HelpBanner from "../components/Helpbanner"
+import HelpBanner from "../components/InfoBanner"
 
 type Venda = {
   id: number

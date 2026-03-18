@@ -9,7 +9,7 @@ import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 import AnimatedModal from "../components/AnimatedModal"
 import HelpTooltip from "../components/HelpTooltip"
-import HelpBanner from "../components/Helpbanner"
+import HelpBanner from "../components/InfoBanner"
 
 type VendaBanco = {
   id: number
