@@ -31,6 +31,8 @@ import {
   Percent,
   AlertTriangle,
   Wallet,
+  Landmark,
+  CircleDollarSign,
 } from "lucide-react"
 
 type Venda = {
@@ -48,6 +50,19 @@ type Pagamento = {
   sale_id: number
   valor: number
   forma_pagamento: string
+  created_at: string
+}
+
+type FinancialTransaction = {
+  id: number
+  user_id: string
+  type: "entrada" | "saida"
+  description: string
+  category: string | null
+  amount: number
+  status: "pago" | "pendente"
+  due_date: string | null
+  paid_at: string | null
   created_at: string
 }
 
@@ -130,6 +145,7 @@ const periodos: { value: Periodo; label: string }[] = [
 export default function Dashboard() {
   const [todasVendas, setTodasVendas] = useState<Venda[]>([])
   const [todosPagamentos, setTodosPagamentos] = useState<Pagamento[]>([])
+  const [movimentacoesFinanceiras, setMovimentacoesFinanceiras] = useState<FinancialTransaction[]>([])
   const [produtosLista, setProdutosLista] = useState<Produto[]>([])
   const [clientesLista, setClientesLista] = useState<Cliente[]>([])
   const [periodo, setPeriodo] = useState<Periodo>("7dias")
@@ -140,6 +156,14 @@ export default function Dashboard() {
   const [recebidoComparacao, setRecebidoComparacao] = useState(0)
   const [faturamentoComparacao, setFaturamentoComparacao] = useState(0)
   const [margemMediaPeriodo, setMargemMediaPeriodo] = useState(0)
+
+  const [saldoAtual, setSaldoAtual] = useState(0)
+  const [saldoPrevisto, setSaldoPrevisto] = useState(0)
+  const [despesasPendentes, setDespesasPendentes] = useState(0)
+  const [entradasPendentes, setEntradasPendentes] = useState(0)
+  const [entradasPagas, setEntradasPagas] = useState(0)
+  const [saidasPagas, setSaidasPagas] = useState(0)
+
   const [produtosVendidosPeriodo, setProdutosVendidosPeriodo] = useState(0)
   const [estoqueBaixo, setEstoqueBaixo] = useState(0)
   const [pedidosPendentes, setPedidosPendentes] = useState(0)
@@ -161,7 +185,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     recalcularDashboard()
-  }, [periodo, todasVendas, todosPagamentos, produtosLista, clientesLista])
+  }, [periodo, todasVendas, todosPagamentos, movimentacoesFinanceiras, produtosLista, clientesLista])
 
   async function carregarDashboard() {
     setCarregando(true)
@@ -211,6 +235,18 @@ export default function Dashboard() {
       return
     }
 
+    const { data: movsData, error: movsError } = await supabase
+      .from("financial_transactions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+
+    if (movsError) {
+      setMensagem("Erro ao carregar movimentações financeiras do dashboard.")
+      setCarregando(false)
+      return
+    }
+
     const { data: produtos } = await supabase
       .from("products")
       .select("id, nome, sku, estoque, estoque_minimo, marca, categoria, tipo, unidade, custo, preco")
@@ -230,9 +266,11 @@ export default function Dashboard() {
     const produtosTipados = (produtos ?? []) as Produto[]
     const vendasTipadas = (vendasData ?? []) as Venda[]
     const pagamentosTipados = (pagamentosData ?? []) as Pagamento[]
+    const movsTipadas = (movsData ?? []) as FinancialTransaction[]
 
     setTodasVendas(vendasTipadas)
     setTodosPagamentos(pagamentosTipados)
+    setMovimentacoesFinanceiras(movsTipadas)
     setProdutosLista(produtosTipados)
     setClientesLista((clientes ?? []) as Cliente[])
 
@@ -404,6 +442,34 @@ export default function Dashboard() {
     setEmAbertoPrincipal(emAberto)
     setMargemMediaPeriodo(margemMedia)
 
+    const entradasManuaisPagas = movimentacoesFinanceiras
+      .filter((m) => m.type === "entrada" && m.status === "pago")
+      .reduce((soma, m) => soma + Number(m.amount), 0)
+
+    const saidasManuaisPagas = movimentacoesFinanceiras
+      .filter((m) => m.type === "saida" && m.status === "pago")
+      .reduce((soma, m) => soma + Number(m.amount), 0)
+
+    const entradasManuaisPendentes = movimentacoesFinanceiras
+      .filter((m) => m.type === "entrada" && m.status === "pendente")
+      .reduce((soma, m) => soma + Number(m.amount), 0)
+
+    const saidasManuaisPendentes = movimentacoesFinanceiras
+      .filter((m) => m.type === "saida" && m.status === "pendente")
+      .reduce((soma, m) => soma + Number(m.amount), 0)
+
+    const entradasPagasTotal = pagamentosValidos.reduce((soma, p) => soma + Number(p.valor), 0) + entradasManuaisPagas
+    const saidasPagasTotal = saidasManuaisPagas
+    const saldoAtualCalculado = entradasPagasTotal - saidasPagasTotal
+    const saldoPrevistoCalculado = saldoAtualCalculado + entradasManuaisPendentes - saidasManuaisPendentes
+
+    setEntradasPagas(entradasPagasTotal)
+    setSaidasPagas(saidasPagasTotal)
+    setEntradasPendentes(entradasManuaisPendentes)
+    setDespesasPendentes(saidasManuaisPendentes)
+    setSaldoAtual(saldoAtualCalculado)
+    setSaldoPrevisto(saldoPrevistoCalculado)
+
     setProdutosVendidosPeriodo(
       vendasPeriodo.reduce((soma, v) => soma + Number(v.quantidade), 0)
     )
@@ -566,28 +632,24 @@ export default function Dashboard() {
     linhas.push(`"ModaGest Dashboard"`)
     linhas.push(`"Período";"${periodo}"`)
     linhas.push("")
-    linhas.push(`"RESUMO"`)
+    linhas.push(`"RESUMO COMERCIAL"`)
     linhas.push(`"Total vendido";"${faturamentoPrincipal.toFixed(2)}"`)
     linhas.push(`"Total recebido";"${recebidoPrincipal.toFixed(2)}"`)
     linhas.push(`"Total em aberto";"${emAbertoPrincipal.toFixed(2)}"`)
     linhas.push(`"Margem média recebida";"${margemMediaPeriodo.toFixed(1)}%"`)
     linhas.push(`"Itens vendidos";"${produtosVendidosPeriodo}"`)
+    linhas.push("")
+    linhas.push(`"RESUMO FINANCEIRO"`)
+    linhas.push(`"Entradas pagas";"${entradasPagas.toFixed(2)}"`)
+    linhas.push(`"Saídas pagas";"${saidasPagas.toFixed(2)}"`)
+    linhas.push(`"Saldo atual";"${saldoAtual.toFixed(2)}"`)
+    linhas.push(`"Entradas pendentes";"${entradasPendentes.toFixed(2)}"`)
+    linhas.push(`"Despesas pendentes";"${despesasPendentes.toFixed(2)}"`)
+    linhas.push(`"Saldo previsto";"${saldoPrevisto.toFixed(2)}"`)
+    linhas.push("")
+    linhas.push(`"ALERTAS"`)
     linhas.push(`"Produtos com estoque baixo";"${estoqueBaixo}"`)
     linhas.push(`"Pedidos pendentes";"${pedidosPendentes}"`)
-    linhas.push("")
-
-    linhas.push(`"RECEBIDO POR DIA"`)
-    linhas.push(`"Dia";"Total"`)
-    graficoDias.forEach((item) => {
-      linhas.push(`"${item.dia}";"${item.total.toFixed(2)}"`)
-    })
-    linhas.push("")
-
-    linhas.push(`"RECEBIDO POR FORMA"`)
-    linhas.push(`"Forma";"Valor"`)
-    graficoFormasPagamento.forEach((item) => {
-      linhas.push(`"${item.name.replace(/"/g, '""')}";"${item.value.toFixed(2)}"`)
-    })
     linhas.push("")
 
     const conteudo = linhas.join("\n")
@@ -626,17 +688,30 @@ export default function Dashboard() {
 
     autoTable(doc, {
       startY: startY + 8,
-      head: [["Resumo", "Valor"]],
+      head: [["Resumo comercial", "Valor"]],
       body: [
         ["Total vendido", `R$ ${faturamentoPrincipal.toFixed(2)}`],
         ["Total recebido", `R$ ${recebidoPrincipal.toFixed(2)}`],
         ["Total em aberto", `R$ ${emAbertoPrincipal.toFixed(2)}`],
         ["Margem média recebida", `${margemMediaPeriodo.toFixed(1)}%`],
-        ["Produtos com estoque baixo", String(estoqueBaixo)],
-        ["Pedidos pendentes", String(pedidosPendentes)],
       ],
       styles: { fontSize: 10 },
       headStyles: { fillColor: [37, 99, 235] },
+    })
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 8,
+      head: [["Resumo financeiro", "Valor"]],
+      body: [
+        ["Entradas pagas", `R$ ${entradasPagas.toFixed(2)}`],
+        ["Saídas pagas", `R$ ${saidasPagas.toFixed(2)}`],
+        ["Saldo atual", `R$ ${saldoAtual.toFixed(2)}`],
+        ["Entradas pendentes", `R$ ${entradasPendentes.toFixed(2)}`],
+        ["Despesas pendentes", `R$ ${despesasPendentes.toFixed(2)}`],
+        ["Saldo previsto", `R$ ${saldoPrevisto.toFixed(2)}`],
+      ],
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [5, 150, 105] },
     })
 
     doc.save(`dashboard_${periodo}.pdf`)
@@ -645,7 +720,7 @@ export default function Dashboard() {
   return (
     <div>
       <h2 className="page-title">Dashboard</h2>
-      <p className="page-subtitle">Resumo de vendas, recebimentos e saldo em aberto.</p>
+      <p className="page-subtitle">Resumo comercial e financeiro da operação.</p>
 
       {mensagem && <p>{mensagem}</p>}
 
@@ -674,7 +749,7 @@ export default function Dashboard() {
       {produtosAbaixoDoMinimo.length > 0 && (
         <div
           style={{
-            marginBottom: 20,
+            marginBottom: 16,
             padding: "14px 16px",
             borderRadius: 14,
             background: "#fff7ed",
@@ -693,6 +768,36 @@ export default function Dashboard() {
               .map((p) => `${p.nome} (${p.estoque}/${p.estoque_minimo || 0})`)
               .join(" • ")}
           </div>
+        </div>
+      )}
+
+      {saldoAtual < 0 && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "14px 16px",
+            borderRadius: 14,
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            color: "#991b1b",
+          }}
+        >
+          <strong>Alerta:</strong> o caixa atual está negativo em R$ {Math.abs(saldoAtual).toFixed(2)}.
+        </div>
+      )}
+
+      {saldoPrevisto < 0 && (
+        <div
+          style={{
+            marginBottom: 20,
+            padding: "14px 16px",
+            borderRadius: 14,
+            background: "#fff7ed",
+            border: "1px solid #fdba74",
+            color: "#9a3412",
+          }}
+        >
+          <strong>Atenção:</strong> o saldo previsto ficará negativo em R$ {Math.abs(saldoPrevisto).toFixed(2)} se todas as pendências acontecerem.
         </div>
       )}
 
@@ -751,6 +856,45 @@ export default function Dashboard() {
         <div className="metric-card">
           <div className="metric-top-row">
             <div>
+              <p className="metric-label">Saldo atual</p>
+              <p className="metric-value">R$ {saldoAtual.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box green">
+              <Landmark size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Entradas pagas menos saídas pagas</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label">Saldo previsto</p>
+              <p className="metric-value">R$ {saldoPrevisto.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box purple">
+              <CircleDollarSign size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Considerando pendências</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label">Despesas pendentes</p>
+              <p className="metric-value">R$ {despesasPendentes.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box orange">
+              <PackageOpen size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Saídas ainda não pagas</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
               <p className="metric-label">Margem média recebida</p>
               <p className="metric-value">{margemMediaPeriodo.toFixed(1)}%</p>
             </div>
@@ -793,7 +937,7 @@ export default function Dashboard() {
           <div className="chart-header-row">
             <div>
               <h3 className="dashboard-block-title">Recebido por dia</h3>
-              <p className="dashboard-block-subtitle">Entradas reais de caixa</p>
+              <p className="dashboard-block-subtitle">Entradas reais de caixa das vendas</p>
             </div>
             <span className="chart-badge">Pagamentos</span>
           </div>
@@ -829,7 +973,7 @@ export default function Dashboard() {
           <div className="chart-header-row">
             <div>
               <h3 className="dashboard-block-title">Recebido por forma</h3>
-              <p className="dashboard-block-subtitle">Distribuição por pagamento</p>
+              <p className="dashboard-block-subtitle">Distribuição dos pagamentos</p>
             </div>
             <span className="chart-badge">Financeiro</span>
           </div>
