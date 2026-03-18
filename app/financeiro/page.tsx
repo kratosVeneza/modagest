@@ -6,18 +6,9 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
+import AnimatedModal from "../components/AnimatedModal"
 
-type Venda = {
-  id: number
-  quantidade: number
-  valor_total: number
-  created_at: string
-  status?: string
-  customer_id?: number | null
-  product_id: number
-}
-
-type Pagamento = {
+type SalePayment = {
   id: number
   sale_id: number
   valor: number
@@ -26,30 +17,17 @@ type Pagamento = {
   created_at: string
 }
 
-type Cliente = {
+type FinancialTransaction = {
   id: number
-  nome: string
-}
-
-type Produto = {
-  id: number
-  nome: string
-  marca: string | null
-  categoria: string | null
-  custo: number | null
-}
-
-type VendaExibicao = {
-  id: number
-  quantidade: number
-  valor_total: number
-  valor_recebido: number
-  valor_em_aberto: number
+  user_id: string
+  type: "entrada" | "saida"
+  description: string
+  category: string | null
+  amount: number
+  status: "pago" | "pendente"
+  due_date: string | null
+  paid_at: string | null
   created_at: string
-  nomeCliente: string
-  nomeProduto: string
-  marca: string
-  categoria: string
 }
 
 type Loja = {
@@ -57,19 +35,75 @@ type Loja = {
   logo_url?: string | null
 }
 
+type LinhaFinanceira = {
+  origem: "venda" | "manual"
+  id: string
+  tipo: "entrada" | "saida"
+  descricao: string
+  categoria: string
+  valor: number
+  status: "pago" | "pendente"
+  vencimento: string | null
+  pagamento: string | null
+  criadoEm: string
+  formaPagamento?: string
+}
+
+const categorias = [
+  "Fornecedor",
+  "Aluguel",
+  "Energia",
+  "Internet",
+  "Funcionário",
+  "Frete",
+  "Marketing",
+  "Imposto",
+  "Retirada",
+  "Entrada extra",
+  "Outros",
+]
+
+function hojeInputDate() {
+  const hoje = new Date()
+  const ano = hoje.getFullYear()
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0")
+  const dia = String(hoje.getDate()).padStart(2, "0")
+  return `${ano}-${mes}-${dia}`
+}
+
+function formatarDataInput(dataIso?: string | null) {
+  if (!dataIso) return ""
+  const data = new Date(dataIso)
+  const ano = data.getFullYear()
+  const mes = String(data.getMonth() + 1).padStart(2, "0")
+  const dia = String(data.getDate()).padStart(2, "0")
+  return `${ano}-${mes}-${dia}`
+}
+
+function montarDataISO(dataInput: string) {
+  if (!dataInput) return null
+  return new Date(`${dataInput}T12:00:00-03:00`).toISOString()
+}
+
 export default function Financeiro() {
-  const [totalVendido, setTotalVendido] = useState(0)
-  const [totalRecebido, setTotalRecebido] = useState(0)
-  const [totalEmAberto, setTotalEmAberto] = useState(0)
-  const [quantidadeVendida, setQuantidadeVendida] = useState(0)
-  const [ticketMedioVendido, setTicketMedioVendido] = useState(0)
-  const [ticketMedioRecebido, setTicketMedioRecebido] = useState(0)
-  const [ultimasVendas, setUltimasVendas] = useState<VendaExibicao[]>([])
-  const [todasVendas, setTodasVendas] = useState<VendaExibicao[]>([])
+  const [pagamentosVendas, setPagamentosVendas] = useState<SalePayment[]>([])
+  const [movimentacoes, setMovimentacoes] = useState<FinancialTransaction[]>([])
   const [mensagem, setMensagem] = useState("")
   const [nomeLoja, setNomeLoja] = useState("ModaGest")
   const [logoUrl, setLogoUrl] = useState("")
   const [busca, setBusca] = useState("")
+  const [filtroStatus, setFiltroStatus] = useState("Todos")
+  const [filtroTipo, setFiltroTipo] = useState("Todos")
+
+  const [modalAberto, setModalAberto] = useState(false)
+  const [idEdicao, setIdEdicao] = useState<number | null>(null)
+  const [tipo, setTipo] = useState<"entrada" | "saida">("saida")
+  const [descricao, setDescricao] = useState("")
+  const [categoria, setCategoria] = useState("Fornecedor")
+  const [valor, setValor] = useState("")
+  const [status, setStatus] = useState<"pago" | "pendente">("pendente")
+  const [dataVencimento, setDataVencimento] = useState("")
+  const [dataPagamento, setDataPagamento] = useState("")
 
   useEffect(() => {
     carregarFinanceiro()
@@ -97,130 +131,323 @@ export default function Financeiro() {
     if (loja?.nome_loja) setNomeLoja(loja.nome_loja)
     if (loja?.logo_url) setLogoUrl(loja.logo_url)
 
-    const { data: vendasData, error } = await supabase
-      .from("sales")
+    const { data: pagamentosData, error: pagamentosError } = await supabase
+      .from("sale_payments")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
-    if (error) {
-      setMensagem("Erro ao carregar dados financeiros.")
+    if (pagamentosError) {
+      setMensagem("Erro ao carregar recebimentos de vendas.")
       return
     }
 
-    const { data: pagamentosData } = await supabase
-      .from("sale_payments")
-      .select("*")
+    const { data: vendasData, error: vendasError } = await supabase
+      .from("sales")
+      .select("id, status")
       .eq("user_id", user.id)
 
-    const { data: clientesData } = await supabase
-      .from("customers")
-      .select("id, nome")
-      .eq("user_id", user.id)
+    if (vendasError) {
+      setMensagem("Erro ao carregar vendas.")
+      return
+    }
 
-    const { data: produtosData } = await supabase
-      .from("products")
-      .select("id, nome, marca, categoria, custo")
-      .eq("user_id", user.id)
+    const idsVendasAtivas = new Set(
+      (vendasData ?? [])
+        .filter((v: any) => v.status !== "Cancelada")
+        .map((v: any) => v.id)
+    )
 
-    const vendasTodas = (vendasData ?? []) as Venda[]
-    const vendasAtivas = vendasTodas.filter((v) => v.status !== "Cancelada")
-    const idsVendasAtivas = new Set(vendasAtivas.map((v) => v.id))
-
-    const pagamentos = ((pagamentosData ?? []) as Pagamento[]).filter((p) =>
+    const pagamentosValidos = ((pagamentosData ?? []) as SalePayment[]).filter((p) =>
       idsVendasAtivas.has(p.sale_id)
     )
 
-    const clientes = (clientesData ?? []) as Cliente[]
-    const produtos = (produtosData ?? []) as Produto[]
+    const { data: movsData, error: movsError } = await supabase
+      .from("financial_transactions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
 
-    const vendasFormatadas: VendaExibicao[] = vendasAtivas.map((venda) => {
-      const cliente = clientes.find((c) => c.id === venda.customer_id)
-      const produto = produtos.find((p) => p.id === venda.product_id)
-      const pagamentosDaVenda = pagamentos.filter((p) => p.sale_id === venda.id)
-      const valorRecebido = pagamentosDaVenda.reduce((soma, item) => soma + Number(item.valor), 0)
+    if (movsError) {
+      setMensagem("Erro ao carregar movimentações financeiras.")
+      return
+    }
 
-      return {
-        id: venda.id,
-        quantidade: venda.quantidade,
-        valor_total: Number(venda.valor_total),
-        valor_recebido: valorRecebido,
-        valor_em_aberto: Math.max(Number(venda.valor_total) - valorRecebido, 0),
-        created_at: venda.created_at,
-        nomeCliente: cliente?.nome || "Sem cliente",
-        nomeProduto: produto?.nome || "Produto removido",
-        marca: produto?.marca || "-",
-        categoria: produto?.categoria || "-",
+    setPagamentosVendas(pagamentosValidos)
+    setMovimentacoes((movsData ?? []) as FinancialTransaction[])
+  }
+
+  function abrirNovoModal() {
+    setIdEdicao(null)
+    setTipo("saida")
+    setDescricao("")
+    setCategoria("Fornecedor")
+    setValor("")
+    setStatus("pendente")
+    setDataVencimento(hojeInputDate())
+    setDataPagamento("")
+    setModalAberto(true)
+  }
+
+  function abrirEdicao(item: FinancialTransaction) {
+    setIdEdicao(item.id)
+    setTipo(item.type)
+    setDescricao(item.description)
+    setCategoria(item.category || "Outros")
+    setValor(String(item.amount))
+    setStatus(item.status)
+    setDataVencimento(formatarDataInput(item.due_date))
+    setDataPagamento(formatarDataInput(item.paid_at))
+    setModalAberto(true)
+  }
+
+  function fecharModal() {
+    setIdEdicao(null)
+    setTipo("saida")
+    setDescricao("")
+    setCategoria("Fornecedor")
+    setValor("")
+    setStatus("pendente")
+    setDataVencimento("")
+    setDataPagamento("")
+    setModalAberto(false)
+  }
+
+  async function salvarMovimentacao() {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    if (!descricao.trim() || Number(valor || 0) <= 0) {
+      setMensagem("Informe descrição e valor válido.")
+      return
+    }
+
+    if (status === "pago" && !dataPagamento) {
+      setMensagem("Informe a data de pagamento.")
+      return
+    }
+
+    const payload = {
+      user_id: user.id,
+      type: tipo,
+      description: descricao.trim(),
+      category: categoria || null,
+      amount: Number(valor),
+      status,
+      due_date: montarDataISO(dataVencimento),
+      paid_at: status === "pago" ? montarDataISO(dataPagamento) : null,
+    }
+
+    if (idEdicao) {
+      const { error } = await supabase
+        .from("financial_transactions")
+        .update(payload)
+        .eq("id", idEdicao)
+        .eq("user_id", user.id)
+
+      if (error) {
+        setMensagem("Erro ao atualizar movimentação.")
+        return
       }
-    })
 
-    const vendido = vendasFormatadas.reduce((soma, venda) => soma + Number(venda.valor_total), 0)
-    const recebido = vendasFormatadas.reduce((soma, venda) => soma + Number(venda.valor_recebido), 0)
-    const emAberto = vendasFormatadas.reduce((soma, venda) => soma + Number(venda.valor_em_aberto), 0)
-    const totalQuantidade = vendasAtivas.reduce((soma, venda) => soma + Number(venda.quantidade), 0)
+      fecharModal()
+      await carregarFinanceiro()
+      return
+    }
 
-    const ticketVenda = vendasAtivas.length > 0 ? vendido / vendasAtivas.length : 0
-    const vendasComPagamento = vendasFormatadas.filter((item) => item.valor_recebido > 0).length
-    const ticketRecebimento = vendasComPagamento > 0 ? recebido / vendasComPagamento : 0
+    const { error } = await supabase.from("financial_transactions").insert([payload])
 
-    setTotalVendido(vendido)
-    setTotalRecebido(recebido)
-    setTotalEmAberto(emAberto)
-    setQuantidadeVendida(totalQuantidade)
-    setTicketMedioVendido(ticketVenda)
-    setTicketMedioRecebido(ticketRecebimento)
-    setUltimasVendas(vendasFormatadas.slice(0, 5))
-    setTodasVendas(vendasFormatadas)
+    if (error) {
+      setMensagem("Erro ao cadastrar movimentação.")
+      return
+    }
+
+    fecharModal()
+    await carregarFinanceiro()
   }
 
-  function formatarData(dataIso: string) {
-    const data = new Date(dataIso)
-    return data.toLocaleString("pt-BR")
+  async function excluirMovimentacao(id: number) {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const { error } = await supabase
+      .from("financial_transactions")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+
+    if (error) {
+      setMensagem("Erro ao excluir movimentação.")
+      return
+    }
+
+    await carregarFinanceiro()
   }
 
-  const vendasFiltradas = useMemo(() => {
+  async function marcarComoPago(item: FinancialTransaction) {
+    setMensagem("")
+
+    if (item.status === "pago") return
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const { error } = await supabase
+      .from("financial_transactions")
+      .update({
+        status: "pago",
+        paid_at: new Date().toISOString(),
+      })
+      .eq("id", item.id)
+      .eq("user_id", user.id)
+
+    if (error) {
+      setMensagem("Erro ao marcar como pago.")
+      return
+    }
+
+    await carregarFinanceiro()
+  }
+
+  function formatarData(dataIso?: string | null) {
+    if (!dataIso) return "-"
+    return new Date(dataIso).toLocaleString("pt-BR")
+  }
+
+  const linhasFinanceiras = useMemo<LinhaFinanceira[]>(() => {
+    const recebimentosVendas: LinhaFinanceira[] = pagamentosVendas.map((p) => ({
+      origem: "venda",
+      id: `venda-${p.id}`,
+      tipo: "entrada",
+      descricao: "Recebimento de venda",
+      categoria: "Venda",
+      valor: Number(p.valor),
+      status: "pago",
+      vencimento: p.created_at,
+      pagamento: p.created_at,
+      criadoEm: p.created_at,
+      formaPagamento: p.forma_pagamento,
+    }))
+
+    const linhasManuais: LinhaFinanceira[] = movimentacoes.map((m) => ({
+      origem: "manual",
+      id: `manual-${m.id}`,
+      tipo: m.type,
+      descricao: m.description,
+      categoria: m.category || "Outros",
+      valor: Number(m.amount),
+      status: m.status,
+      vencimento: m.due_date,
+      pagamento: m.paid_at,
+      criadoEm: m.created_at,
+    }))
+
+    return [...recebimentosVendas, ...linhasManuais].sort(
+      (a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()
+    )
+  }, [pagamentosVendas, movimentacoes])
+
+  const linhasFiltradas = useMemo(() => {
     const termo = busca.trim().toLowerCase()
 
-    if (!termo) return todasVendas
+    return linhasFinanceiras.filter((item) => {
+      const passouBusca =
+        !termo ||
+        item.descricao.toLowerCase().includes(termo) ||
+        item.categoria.toLowerCase().includes(termo) ||
+        (item.formaPagamento || "").toLowerCase().includes(termo)
 
-    return todasVendas.filter((venda) => {
-      return (
-        venda.nomeCliente.toLowerCase().includes(termo) ||
-        venda.nomeProduto.toLowerCase().includes(termo) ||
-        venda.marca.toLowerCase().includes(termo) ||
-        venda.categoria.toLowerCase().includes(termo)
-      )
+      const passouStatus =
+        filtroStatus === "Todos" || item.status === filtroStatus
+
+      const passouTipo =
+        filtroTipo === "Todos" || item.tipo === filtroTipo
+
+      return passouBusca && passouStatus && passouTipo
     })
-  }, [todasVendas, busca])
+  }, [linhasFinanceiras, busca, filtroStatus, filtroTipo])
+
+  const entradasRecebidas = useMemo(() => {
+    return linhasFinanceiras
+      .filter((i) => i.tipo === "entrada" && i.status === "pago")
+      .reduce((soma, i) => soma + i.valor, 0)
+  }, [linhasFinanceiras])
+
+  const saidasPagas = useMemo(() => {
+    return linhasFinanceiras
+      .filter((i) => i.tipo === "saida" && i.status === "pago")
+      .reduce((soma, i) => soma + i.valor, 0)
+  }, [linhasFinanceiras])
+
+  const saldoAtual = entradasRecebidas - saidasPagas
+
+  const entradasPendentes = useMemo(() => {
+    return linhasFinanceiras
+      .filter((i) => i.tipo === "entrada" && i.status === "pendente")
+      .reduce((soma, i) => soma + i.valor, 0)
+  }, [linhasFinanceiras])
+
+  const saidasPendentes = useMemo(() => {
+    return linhasFinanceiras
+      .filter((i) => i.tipo === "saida" && i.status === "pendente")
+      .reduce((soma, i) => soma + i.valor, 0)
+  }, [linhasFinanceiras])
+
+  const saldoPrevisto = saldoAtual + entradasPendentes - saidasPendentes
+  const totalPendencias = entradasPendentes + saidasPendentes
 
   function exportarCSV() {
-    if (vendasFiltradas.length === 0) {
-      setMensagem("Não há dados financeiros para exportar.")
+    if (linhasFiltradas.length === 0) {
+      setMensagem("Não há dados para exportar.")
       return
     }
 
     const cabecalho = [
-      "Cliente",
-      "Produto",
-      "Marca",
+      "Origem",
+      "Tipo",
+      "Descrição",
       "Categoria",
-      "Quantidade",
-      "Valor Total",
-      "Recebido",
-      "Em Aberto",
-      "Data",
+      "Valor",
+      "Status",
+      "Forma",
+      "Vencimento",
+      "Pagamento",
+      "Criado em",
     ]
 
-    const linhas = vendasFiltradas.map((venda) => [
-      venda.nomeCliente,
-      venda.nomeProduto,
-      venda.marca,
-      venda.categoria,
-      String(venda.quantidade),
-      Number(venda.valor_total).toFixed(2),
-      Number(venda.valor_recebido).toFixed(2),
-      Number(venda.valor_em_aberto).toFixed(2),
-      formatarData(venda.created_at),
+    const linhas = linhasFiltradas.map((item) => [
+      item.origem,
+      item.tipo,
+      item.descricao,
+      item.categoria,
+      item.valor.toFixed(2),
+      item.status,
+      item.formaPagamento || "-",
+      formatarData(item.vencimento),
+      formatarData(item.pagamento),
+      formatarData(item.criadoEm),
     ])
 
     const conteudo = [cabecalho, ...linhas]
@@ -229,21 +456,18 @@ export default function Financeiro() {
       )
       .join("\n")
 
-    const blob = new Blob([conteudo], {
-      type: "text/csv;charset=utf-8;",
-    })
-
+    const blob = new Blob([conteudo], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = "financeiro.csv"
+    link.download = "financeiro_completo.csv"
     link.click()
     URL.revokeObjectURL(url)
   }
 
   async function exportarPDF() {
-    if (vendasFiltradas.length === 0) {
-      setMensagem("Não há dados financeiros para exportar.")
+    if (linhasFiltradas.length === 0) {
+      setMensagem("Não há dados para exportar.")
       return
     }
 
@@ -252,63 +476,93 @@ export default function Financeiro() {
 
     const startY = await montarCabecalhoPDF({
       doc,
-      titulo: "Relatório Financeiro",
+      titulo: "Relatório Financeiro Completo",
       nomeLoja,
       logoDataUrl,
     })
 
     doc.setFont("helvetica", "normal")
     doc.setFontSize(11)
-    doc.text(`Total vendido: R$ ${totalVendido.toFixed(2)}`, 14, startY)
-    doc.text(`Total recebido: R$ ${totalRecebido.toFixed(2)}`, 14, startY + 6)
-    doc.text(`Total em aberto: R$ ${totalEmAberto.toFixed(2)}`, 14, startY + 12)
-    doc.text(`Ticket médio vendido: R$ ${ticketMedioVendido.toFixed(2)}`, 14, startY + 18)
+    doc.text(`Entradas recebidas: R$ ${entradasRecebidas.toFixed(2)}`, 14, startY)
+    doc.text(`Saídas pagas: R$ ${saidasPagas.toFixed(2)}`, 14, startY + 6)
+    doc.text(`Saldo atual: R$ ${saldoAtual.toFixed(2)}`, 14, startY + 12)
+    doc.text(`Saldo previsto: R$ ${saldoPrevisto.toFixed(2)}`, 14, startY + 18)
 
     autoTable(doc, {
       startY: startY + 26,
-      head: [["Cliente", "Produto", "Marca", "Categoria", "Qtd.", "Total", "Recebido", "Aberto", "Data"]],
-      body: vendasFiltradas.map((venda) => [
-        venda.nomeCliente,
-        venda.nomeProduto,
-        venda.marca,
-        venda.categoria,
-        String(venda.quantidade),
-        `R$ ${Number(venda.valor_total).toFixed(2)}`,
-        `R$ ${Number(venda.valor_recebido).toFixed(2)}`,
-        `R$ ${Number(venda.valor_em_aberto).toFixed(2)}`,
-        formatarData(venda.created_at),
+      head: [[
+        "Origem",
+        "Tipo",
+        "Descrição",
+        "Categoria",
+        "Valor",
+        "Status",
+        "Forma",
+        "Vencimento",
+        "Pagamento",
+      ]],
+      body: linhasFiltradas.map((item) => [
+        item.origem,
+        item.tipo,
+        item.descricao,
+        item.categoria,
+        `R$ ${item.valor.toFixed(2)}`,
+        item.status,
+        item.formaPagamento || "-",
+        formatarData(item.vencimento),
+        formatarData(item.pagamento),
       ]),
-      styles: {
-        fontSize: 8.5,
-      },
-      headStyles: {
-        fillColor: [37, 99, 235],
-      },
+      styles: { fontSize: 8.5 },
+      headStyles: { fillColor: [37, 99, 235] },
     })
 
-    doc.save("financeiro.pdf")
+    doc.save("financeiro_completo.pdf")
   }
 
   return (
     <div>
       <h2 className="page-title">Financeiro</h2>
-      <p className="page-subtitle">Resumo financeiro com vendido, recebido e saldo em aberto.</p>
+      <p className="page-subtitle">
+        Controle de caixa com entradas, saídas, pendências e saldo previsto.
+      </p>
 
       {mensagem && <p>{mensagem}</p>}
 
       <div style={acoesTopo}>
         <input
-          placeholder="Buscar por cliente, produto, marca ou categoria"
+          placeholder="Buscar por descrição, categoria ou forma"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           style={inputBusca}
         />
 
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <select
+          value={filtroTipo}
+          onChange={(e) => setFiltroTipo(e.target.value)}
+          style={selectFiltro}
+        >
+          <option value="Todos">Todos os tipos</option>
+          <option value="entrada">Entradas</option>
+          <option value="saida">Saídas</option>
+        </select>
+
+        <select
+          value={filtroStatus}
+          onChange={(e) => setFiltroStatus(e.target.value)}
+          style={selectFiltro}
+        >
+          <option value="Todos">Todos os status</option>
+          <option value="pago">Pago</option>
+          <option value="pendente">Pendente</option>
+        </select>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button onClick={abrirNovoModal} className="btn btn-primary">
+            + Nova movimentação
+          </button>
           <button onClick={exportarCSV} className="btn btn-secondary">
             Exportar CSV
           </button>
-
           <button onClick={exportarPDF} className="btn btn-primary">
             Exportar PDF
           </button>
@@ -317,79 +571,195 @@ export default function Financeiro() {
 
       <div className="grid-3">
         <div className="section-card">
-          <h3>Total vendido</h3>
-          <p>R$ {totalVendido.toFixed(2)}</p>
+          <h3>Entradas recebidas</h3>
+          <p>R$ {entradasRecebidas.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Total recebido</h3>
-          <p>R$ {totalRecebido.toFixed(2)}</p>
+          <h3>Saídas pagas</h3>
+          <p>R$ {saidasPagas.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Total em aberto</h3>
-          <p>R$ {totalEmAberto.toFixed(2)}</p>
+          <h3>Saldo atual</h3>
+          <p>R$ {saldoAtual.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Ticket médio vendido</h3>
-          <p>R$ {ticketMedioVendido.toFixed(2)}</p>
+          <h3>Entradas pendentes</h3>
+          <p>R$ {entradasPendentes.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Ticket médio recebido</h3>
-          <p>R$ {ticketMedioRecebido.toFixed(2)}</p>
+          <h3>Saídas pendentes</h3>
+          <p>R$ {saidasPendentes.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
-          <h3>Quantidade vendida</h3>
-          <p>{quantidadeVendida}</p>
+          <h3>Saldo previsto</h3>
+          <p>R$ {saldoPrevisto.toFixed(2)}</p>
         </div>
       </div>
 
-      <div className="section-card" style={blocoTabela}>
-        <h3>Últimas vendas</h3>
+      <div className="section-card" style={blocoResumo}>
+        <strong>Pendências totais:</strong> R$ {totalPendencias.toFixed(2)}
+      </div>
 
+      <div className="data-table-wrap" style={{ marginTop: 20 }}>
         <table style={tabela}>
           <thead>
             <tr>
-              <th style={th}>Cliente</th>
-              <th style={th}>Produto</th>
-              <th style={th}>Marca</th>
+              <th style={th}>Origem</th>
+              <th style={th}>Tipo</th>
+              <th style={th}>Descrição</th>
               <th style={th}>Categoria</th>
-              <th style={th}>Qtd.</th>
-              <th style={th}>Total</th>
-              <th style={th}>Recebido</th>
-              <th style={th}>Em aberto</th>
-              <th style={th}>Data</th>
+              <th style={th}>Valor</th>
+              <th style={th}>Status</th>
+              <th style={th}>Forma</th>
+              <th style={th}>Vencimento</th>
+              <th style={th}>Pagamento</th>
+              <th style={th}>Criado em</th>
+              <th style={th}>Ações</th>
             </tr>
           </thead>
 
           <tbody>
-            {ultimasVendas.map((venda) => (
-              <tr key={venda.id}>
-                <td style={td}>{venda.nomeCliente}</td>
-                <td style={td}>{venda.nomeProduto}</td>
-                <td style={td}>{venda.marca}</td>
-                <td style={td}>{venda.categoria}</td>
-                <td style={td}>{venda.quantidade}</td>
-                <td style={td}>R$ {Number(venda.valor_total).toFixed(2)}</td>
-                <td style={td}>R$ {Number(venda.valor_recebido).toFixed(2)}</td>
-                <td style={td}>R$ {Number(venda.valor_em_aberto).toFixed(2)}</td>
-                <td style={td}>{formatarData(venda.created_at)}</td>
-              </tr>
-            ))}
+            {linhasFiltradas.map((item) => {
+              const movimentacaoManual =
+                item.origem === "manual"
+                  ? movimentacoes.find((m) => `manual-${m.id}` === item.id)
+                  : null
 
-            {ultimasVendas.length === 0 && (
+              return (
+                <tr key={item.id}>
+                  <td style={td}>{item.origem === "venda" ? "Venda" : "Manual"}</td>
+                  <td style={td}>{item.tipo}</td>
+                  <td style={td}>{item.descricao}</td>
+                  <td style={td}>{item.categoria}</td>
+                  <td style={td}>R$ {item.valor.toFixed(2)}</td>
+                  <td style={td}>
+                    <span
+                      className={
+                        item.status === "pago"
+                          ? "status-pill status-green"
+                          : "status-pill status-yellow"
+                      }
+                    >
+                      {item.status}
+                    </span>
+                  </td>
+                  <td style={td}>{item.formaPagamento || "-"}</td>
+                  <td style={td}>{formatarData(item.vencimento)}</td>
+                  <td style={td}>{formatarData(item.pagamento)}</td>
+                  <td style={td}>{formatarData(item.criadoEm)}</td>
+                  <td style={td}>
+                    {item.origem === "manual" && movimentacaoManual ? (
+                      <div style={acoesTabela}>
+                        {movimentacaoManual.status === "pendente" && (
+                          <button
+                            onClick={() => marcarComoPago(movimentacaoManual)}
+                            className="btn btn-success btn-sm"
+                          >
+                            Marcar pago
+                          </button>
+                        )}
+                        <button
+                          onClick={() => abrirEdicao(movimentacaoManual)}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => excluirMovimentacao(movimentacaoManual.id)}
+                          className="btn btn-danger btn-sm"
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    ) : (
+                      <span style={{ color: "#6b7280", fontSize: 13 }}>Automático</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+
+            {linhasFiltradas.length === 0 && (
               <tr>
-                <td style={tdVazio} colSpan={9}>
-                  Nenhuma venda ativa encontrada.
+                <td style={tdVazio} colSpan={11}>
+                  Nenhuma movimentação encontrada.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <AnimatedModal
+        open={modalAberto}
+        onClose={fecharModal}
+        title={idEdicao ? "Editar movimentação" : "Nova movimentação"}
+        footer={
+          <>
+            <button onClick={fecharModal} className="btn btn-secondary">
+              Cancelar
+            </button>
+            <button onClick={salvarMovimentacao} className="btn btn-primary">
+              {idEdicao ? "Salvar alterações" : "Salvar movimentação"}
+            </button>
+          </>
+        }
+      >
+        <>
+          <div className="grid-2">
+            <select value={tipo} onChange={(e) => setTipo(e.target.value as "entrada" | "saida")}>
+              <option value="entrada">Entrada</option>
+              <option value="saida">Saída</option>
+            </select>
+
+            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+              {categorias.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+
+            <input
+              placeholder="Descrição"
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+            />
+
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Valor"
+              value={valor}
+              onChange={(e) => setValor(e.target.value)}
+            />
+
+            <select value={status} onChange={(e) => setStatus(e.target.value as "pago" | "pendente")}>
+              <option value="pendente">Pendente</option>
+              <option value="pago">Pago</option>
+            </select>
+
+            <input
+              type="date"
+              value={dataVencimento}
+              onChange={(e) => setDataVencimento(e.target.value)}
+            />
+
+            {status === "pago" && (
+              <input
+                type="date"
+                value={dataPagamento}
+                onChange={(e) => setDataPagamento(e.target.value)}
+              />
+            )}
+          </div>
+        </>
+      </AnimatedModal>
     </div>
   )
 }
@@ -405,7 +775,7 @@ const acoesTopo = {
 }
 
 const inputBusca = {
-  minWidth: "280px",
+  minWidth: "260px",
   flex: 1,
   padding: "10px",
   border: "1px solid #d1d5db",
@@ -413,14 +783,20 @@ const inputBusca = {
   fontSize: "14px",
 }
 
-const blocoTabela = {
+const selectFiltro = {
+  padding: "10px",
+  border: "1px solid #d1d5db",
+  borderRadius: "8px",
+  fontSize: "14px",
+}
+
+const blocoResumo = {
   marginTop: "20px",
 }
 
 const tabela = {
   width: "100%",
   borderCollapse: "collapse" as const,
-  marginTop: "12px",
 }
 
 const th = {
@@ -432,6 +808,7 @@ const th = {
 const td = {
   borderBottom: "1px solid #e5e7eb",
   padding: "12px",
+  verticalAlign: "top" as const,
 }
 
 const tdVazio = {
@@ -440,3 +817,10 @@ const tdVazio = {
   textAlign: "center" as const,
   color: "#6b7280",
 }
+
+const acoesTabela = {
+  display: "flex",
+  gap: "8px",
+  flexWrap: "wrap" as const,
+}
+
