@@ -166,11 +166,17 @@ export default function Dashboard() {
   const [entradasPagas, setEntradasPagas] = useState(0)
   const [saidasPagas, setSaidasPagas] = useState(0)
 
+  const [custoProdutosPeriodo, setCustoProdutosPeriodo] = useState(0)
+  const [lucroBrutoPeriodo, setLucroBrutoPeriodo] = useState(0)
+  const [despesasPagasPeriodo, setDespesasPagasPeriodo] = useState(0)
+  const [resultadoLiquidoPeriodo, setResultadoLiquidoPeriodo] = useState(0)
+
   const [produtosVendidosPeriodo, setProdutosVendidosPeriodo] = useState(0)
   const [estoqueBaixo, setEstoqueBaixo] = useState(0)
   const [pedidosPendentes, setPedidosPendentes] = useState(0)
   const [ultimasVendas, setUltimasVendas] = useState<VendaRecente[]>([])
   const [graficoDias, setGraficoDias] = useState<GraficoDia[]>([])
+  const [graficoLucroDias, setGraficoLucroDias] = useState<GraficoDia[]>([])
   const [rankingProdutos, setRankingProdutos] = useState<ProdutoRanking[]>([])
   const [graficoCategorias, setGraficoCategorias] = useState<CategoriaGrafico[]>([])
   const [graficoFormasPagamento, setGraficoFormasPagamento] = useState<FormaPagamentoGrafico[]>([])
@@ -422,20 +428,39 @@ export default function Dashboard() {
 
     const emAberto = Math.max(totalAtual - recebidoPorVendaPeriodo, 0)
 
+    let custoRecebidoAtual = 0
+
     const lucroRecebidoAtual = pagamentosPeriodo.reduce((soma, pagamento) => {
       const venda = vendasAtivas.find((v) => v.id === pagamento.sale_id)
       if (!venda) return soma
+
       const produto = produtosLista.find((p) => p.id === venda.product_id)
       const custoUnitario = Number(produto?.custo || 0)
+
       const proporcao =
         Number(venda.valor_total) > 0
           ? Number(pagamento.valor) / Number(venda.valor_total)
           : 0
-      const custoProporcional = custoUnitario * Number(venda.quantidade) * proporcao
+
+      const custoProporcional =
+        custoUnitario * Number(venda.quantidade) * proporcao
+
+      custoRecebidoAtual += custoProporcional
+
       return soma + (Number(pagamento.valor) - custoProporcional)
     }, 0)
 
     const margemMedia = recebidoAtual > 0 ? (lucroRecebidoAtual / recebidoAtual) * 100 : 0
+
+    const despesasPagasNoPeriodo = movimentacoesFinanceiras
+      .filter((m) => m.type === "saida" && m.status === "pago" && m.paid_at)
+      .filter((m) => {
+        const data = new Date(m.paid_at as string)
+        return data >= inicioAtual && data <= fimAtual
+      })
+      .reduce((soma, m) => soma + Number(m.amount), 0)
+
+    const resultadoLiquidoNoPeriodo = lucroRecebidoAtual - despesasPagasNoPeriodo
 
     setFaturamentoPrincipal(totalAtual)
     setFaturamentoComparacao(totalComparacao)
@@ -443,6 +468,10 @@ export default function Dashboard() {
     setRecebidoComparacao(recebidoAnterior)
     setEmAbertoPrincipal(emAberto)
     setMargemMediaPeriodo(margemMedia)
+    setCustoProdutosPeriodo(custoRecebidoAtual)
+    setLucroBrutoPeriodo(lucroRecebidoAtual)
+    setDespesasPagasPeriodo(despesasPagasNoPeriodo)
+    setResultadoLiquidoPeriodo(resultadoLiquidoNoPeriodo)
 
     const entradasManuaisPagas = movimentacoesFinanceiras
       .filter((m) => m.type === "entrada" && m.status === "pago")
@@ -523,6 +552,66 @@ export default function Dashboard() {
     })
 
     setGraficoDias(diasBase)
+
+    const lucroPorDiaMap = new Map<string, number>()
+
+    pagamentosPeriodo.forEach((pagamento) => {
+      const venda = vendasAtivas.find((v) => v.id === pagamento.sale_id)
+      if (!venda) return
+
+      const produto = produtosLista.find((p) => p.id === venda.product_id)
+      const custoUnitario = Number(produto?.custo || 0)
+
+      const proporcao =
+        Number(venda.valor_total) > 0
+          ? Number(pagamento.valor) / Number(venda.valor_total)
+          : 0
+
+      const custoProporcional =
+        custoUnitario * Number(venda.quantidade) * proporcao
+
+      const lucroDoPagamento = Number(pagamento.valor) - custoProporcional
+
+      const chave = new Date(pagamento.created_at).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+      })
+
+      lucroPorDiaMap.set(chave, (lucroPorDiaMap.get(chave) || 0) + lucroDoPagamento)
+    })
+
+    movimentacoesFinanceiras
+      .filter((m) => m.type === "saida" && m.status === "pago" && m.paid_at)
+      .filter((m) => {
+        const data = new Date(m.paid_at as string)
+        return data >= inicioAtual && data <= fimAtual
+      })
+      .forEach((m) => {
+        const chave = new Date(m.paid_at as string).toLocaleDateString("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+        })
+
+        lucroPorDiaMap.set(chave, (lucroPorDiaMap.get(chave) || 0) - Number(m.amount))
+      })
+
+    const lucroDiasBase: GraficoDia[] = []
+    for (let i = 0; i < quantidadeDiasGrafico; i++) {
+      const data = new Date(inicioAtual)
+      data.setDate(inicioAtual.getDate() + i)
+
+      const chave = data.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+      })
+
+      lucroDiasBase.push({
+        dia: chave,
+        total: lucroPorDiaMap.get(chave) || 0,
+      })
+    }
+
+    setGraficoLucroDias(lucroDiasBase)
 
     const mapaProdutos = new Map<number, ProdutoRanking>()
     const mapaCategorias = new Map<string, number>()
@@ -643,6 +732,12 @@ export default function Dashboard() {
     linhas.push(`"Margem média recebida";"${margemMediaPeriodo.toFixed(1)}%"`)
     linhas.push(`"Itens vendidos";"${produtosVendidosPeriodo}"`)
     linhas.push("")
+    linhas.push(`"RESUMO GERENCIAL"`)
+    linhas.push(`"Custo recebido";"${custoProdutosPeriodo.toFixed(2)}"`)
+    linhas.push(`"Lucro bruto";"${lucroBrutoPeriodo.toFixed(2)}"`)
+    linhas.push(`"Despesas pagas no período";"${despesasPagasPeriodo.toFixed(2)}"`)
+    linhas.push(`"Resultado líquido";"${resultadoLiquidoPeriodo.toFixed(2)}"`)
+    linhas.push("")
     linhas.push(`"RESUMO FINANCEIRO"`)
     linhas.push(`"Entradas pagas";"${entradasPagas.toFixed(2)}"`)
     linhas.push(`"Saídas pagas";"${saidasPagas.toFixed(2)}"`)
@@ -700,6 +795,19 @@ export default function Dashboard() {
       ],
       styles: { fontSize: 10 },
       headStyles: { fillColor: [37, 99, 235] },
+    })
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 8,
+      head: [["Resumo gerencial", "Valor"]],
+      body: [
+        ["Custo recebido", `R$ ${custoProdutosPeriodo.toFixed(2)}`],
+        ["Lucro bruto", `R$ ${lucroBrutoPeriodo.toFixed(2)}`],
+        ["Despesas pagas no período", `R$ ${despesasPagasPeriodo.toFixed(2)}`],
+        ["Resultado líquido", `R$ ${resultadoLiquidoPeriodo.toFixed(2)}`],
+      ],
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [124, 58, 237] },
     })
 
     autoTable(doc, {
@@ -965,6 +1073,70 @@ export default function Dashboard() {
           </div>
           <div className="metric-helper">Produtos no limite mínimo</div>
         </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label" style={tituloComAjuda}>
+                Custo recebido
+                <HelpTooltip text="Custo proporcional dos produtos referente ao que foi efetivamente recebido no período." />
+              </p>
+              <p className="metric-value">R$ {custoProdutosPeriodo.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box orange">
+              <PackageOpen size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Custo dos recebimentos do período</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label" style={tituloComAjuda}>
+                Lucro bruto
+                <HelpTooltip text="Recebimentos menos custo proporcional dos produtos recebidos no período." />
+              </p>
+              <p className="metric-value">R$ {lucroBrutoPeriodo.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box green">
+              <TrendingUp size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Antes das despesas operacionais</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label" style={tituloComAjuda}>
+                Despesas pagas
+                <HelpTooltip text="Despesas manuais marcadas como pagas dentro do período selecionado." />
+              </p>
+              <p className="metric-value">R$ {despesasPagasPeriodo.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box red">
+              <BadgeDollarSign size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Saídas realizadas no período</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label" style={tituloComAjuda}>
+                Resultado líquido
+                <HelpTooltip text="Lucro bruto menos despesas pagas no período." />
+              </p>
+              <p className="metric-value">R$ {resultadoLiquidoPeriodo.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box purple">
+              <CircleDollarSign size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Resultado final do período</div>
+        </div>
       </div>
 
       <div className="dashboard-two-columns" style={{ marginBottom: 24 }}>
@@ -1032,6 +1204,47 @@ export default function Dashboard() {
               </PieChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+
+      <div className="chart-shell" style={{ marginBottom: 24 }}>
+        <div className="chart-header-row">
+          <div>
+            <h3 className="dashboard-block-title" style={tituloComAjuda}>
+              Lucro líquido por dia
+              <HelpTooltip text="Mostra o resultado líquido diário considerando recebimentos, custo proporcional dos produtos e despesas pagas." />
+            </h3>
+            <p className="dashboard-block-subtitle">
+              Resultado diário após custos e despesas
+            </p>
+          </div>
+          <span className="chart-badge">Resultado</span>
+        </div>
+
+        <div style={{ width: "100%", height: 320 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={graficoLucroDias}>
+              <defs>
+                <linearGradient id="colorLucroLiquido" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#7c3aed" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="dia" />
+              <YAxis />
+              <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
+              <Area
+                type="monotone"
+                dataKey="total"
+                stroke="#7c3aed"
+                strokeWidth={3}
+                fillOpacity={1}
+                fill="url(#colorLucroLiquido)"
+                isAnimationActive
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
