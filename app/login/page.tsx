@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 import { Chrome, Mail, Lock, UserPlus, LogIn } from "lucide-react"
+import { ensureProfile } from "@/lib/ensureProfile"
 
 type Modo = "entrar" | "criar"
 
@@ -59,7 +60,7 @@ export default function LoginPage() {
       setErro(error.message || "Não foi possível entrar.")
       return
     }
-
+    await ensureProfile({ trialDays: 7 })
     router.push("/dashboard")
   }
 

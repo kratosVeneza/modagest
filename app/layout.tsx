@@ -10,6 +10,7 @@ import UserProfile from "./components/UserProfile"
 import ThemeToggle from "./components/ThemeToggle"
 import PageTransition from "./components/PageTransition"
 import OnboardingTour from "./components/OnboardingTour"
+import { ensureProfile } from "@/lib/ensureProfile"
 import {
   LayoutDashboard,
   Package,
@@ -62,6 +63,15 @@ export default function RootLayout({
   const router = useRouter()
   const pathname = usePathname()
   const [menuFechado, setMenuFechado] = useState(false)
+
+  useEffect(() => {
+  async function garantirPerfil() {
+    if (pathname === "/login") return
+    await ensureProfile({ trialDays: 7 })
+  }
+
+  garantirPerfil()
+}, [pathname])
 
   useEffect(() => {
     const salvo = localStorage.getItem("modagest-menu-fechado")
