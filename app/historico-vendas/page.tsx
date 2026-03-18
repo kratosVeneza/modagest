@@ -76,6 +76,31 @@ const formasPagamento = [
   "Outro",
 ]
 
+function hojeInputDate() {
+  const hoje = new Date()
+  const ano = hoje.getFullYear()
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0")
+  const dia = String(hoje.getDate()).padStart(2, "0")
+  return `${ano}-${mes}-${dia}`
+}
+
+function formatarDataInput(dataIso?: string) {
+  if (!dataIso) return hojeInputDate()
+  const data = new Date(dataIso)
+  const ano = data.getFullYear()
+  const mes = String(data.getMonth() + 1).padStart(2, "0")
+  const dia = String(data.getDate()).padStart(2, "0")
+  return `${ano}-${mes}-${dia}`
+}
+
+function montarDataISO(dataInput: string) {
+  if (!dataInput) {
+    return new Date().toISOString()
+  }
+
+  return new Date(`${dataInput}T12:00:00-03:00`).toISOString()
+}
+
 export default function HistoricoVendas() {
   const [vendas, setVendas] = useState<VendaExibicao[]>([])
   const [mensagem, setMensagem] = useState("")
@@ -90,6 +115,7 @@ export default function HistoricoVendas() {
   const [valorPagamento, setValorPagamento] = useState("")
   const [formaPagamento, setFormaPagamento] = useState("Pix")
   const [observacaoPagamento, setObservacaoPagamento] = useState("")
+  const [dataPagamento, setDataPagamento] = useState(hojeInputDate())
   const [salvandoPagamento, setSalvandoPagamento] = useState(false)
 
   useEffect(() => {
@@ -298,6 +324,7 @@ export default function HistoricoVendas() {
     setValorPagamento("")
     setFormaPagamento("Pix")
     setObservacaoPagamento("")
+    setDataPagamento(formatarDataInput(venda.created_at))
     setModalPagamentoAberto(true)
   }
 
@@ -306,6 +333,7 @@ export default function HistoricoVendas() {
     setValorPagamento("")
     setFormaPagamento("Pix")
     setObservacaoPagamento("")
+    setDataPagamento(hojeInputDate())
     setModalPagamentoAberto(false)
   }
 
@@ -335,6 +363,11 @@ export default function HistoricoVendas() {
       return
     }
 
+    if (!dataPagamento) {
+      setMensagem("Informe a data do pagamento.")
+      return
+    }
+
     setSalvandoPagamento(true)
 
     const { error } = await supabase.from("sale_payments").insert([
@@ -344,6 +377,7 @@ export default function HistoricoVendas() {
         valor,
         forma_pagamento: formaPagamento,
         observacao: observacaoPagamento || null,
+        created_at: montarDataISO(dataPagamento),
       },
     ])
 
@@ -703,6 +737,12 @@ export default function HistoricoVendas() {
                 </option>
               ))}
             </select>
+
+            <input
+              type="date"
+              value={dataPagamento}
+              onChange={(e) => setDataPagamento(e.target.value)}
+            />
 
             <input
               placeholder="Observação (opcional)"
