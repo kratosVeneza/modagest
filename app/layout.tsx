@@ -30,7 +30,7 @@ const menuGroups = [
     title: "Visão geral",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/relatorios/lucratividade",  label: "Lucratividade", icon:BarChart3 },
+      { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
     ],
   
   },
