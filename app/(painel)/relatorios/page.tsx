@@ -10,8 +10,8 @@ import {
   Receipt,
   ArrowRight,
 } from "lucide-react"
-import HelpTooltip from "../components/HelpTooltip"
-import HelpBanner from "../components/InfoBanner"
+import HelpTooltip from "../../components/HelpTooltip"
+import HelpBanner from "../../components/InfoBanner"
 
 type Sale = {
   id: number

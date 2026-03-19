@@ -6,18 +6,25 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
-import HelpTooltip from "../../components/HelpTooltip"
-import HelpBanner from "../../components/InfoBanner"
+import HelpTooltip from "../../../components/HelpTooltip"
+import HelpBanner from "../../../components/InfoBanner"
 
 type Sale = {
   id: number
   product_id: number
   customer_id: number | null
-  quantidade: number
-  valor_unitario: number
   valor_total: number
-  created_at: string
   status?: string
+  user_id: string
+}
+
+type SalePayment = {
+  id: number
+  sale_id: number
+  valor: number
+  forma_pagamento: string
+  observacao: string | null
+  created_at: string
   user_id: string
 }
 
@@ -36,32 +43,26 @@ type Customer = {
   user_id: string
 }
 
-type SalePayment = {
-  id: number
-  sale_id: number
-  valor: number
-  created_at: string
-  user_id: string
-}
-
 type Loja = {
   nome_loja?: string | null
   logo_url?: string | null
 }
 
-type SaleRow = {
+type PaymentRow = {
   id: number
   data: string
+  vendaId: number
   cliente: string
   produto: string
   sku: string
-  marca: string
-  categoria: string
-  quantidade: number
-  valorUnitario: number
-  valorTotal: number
-  recebido: number
-  emAberto: number
+  forma: string
+  valor: number
+  observacao: string
+}
+
+type FormaResumo = {
+  forma: string
+  valor: number
 }
 
 type Periodo = "hoje" | "7dias" | "30dias" | "mes" | "tudo"
@@ -74,11 +75,11 @@ const periodos: { value: Periodo; label: string }[] = [
   { value: "tudo", label: "Tudo" },
 ]
 
-export default function RelatorioVendasPage() {
+export default function RelatorioRecebimentosPage() {
   const [sales, setSales] = useState<Sale[]>([])
+  const [payments, setPayments] = useState<SalePayment[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
-  const [payments, setPayments] = useState<SalePayment[]>([])
   const [periodo, setPeriodo] = useState<Periodo>("30dias")
   const [busca, setBusca] = useState("")
   const [mensagem, setMensagem] = useState("")
@@ -116,39 +117,33 @@ export default function RelatorioVendasPage() {
 
     const [
       { data: salesData, error: salesError },
+      { data: paymentsData, error: paymentsError },
       { data: productsData, error: productsError },
       { data: customersData, error: customersError },
-      { data: paymentsData, error: paymentsError },
     ] = await Promise.all([
+      supabase.from("sales").select("id, product_id, customer_id, valor_total, status, user_id").eq("user_id", user.id),
       supabase
-        .from("sales")
-        .select("*")
+        .from("sale_payments")
+        .select("id, sale_id, valor, forma_pagamento, observacao, created_at, user_id")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false }),
       supabase
         .from("products")
         .select("id, nome, sku, marca, categoria, user_id")
         .eq("user_id", user.id),
-      supabase
-        .from("customers")
-        .select("id, nome, user_id")
-        .eq("user_id", user.id),
-      supabase
-        .from("sale_payments")
-        .select("id, sale_id, valor, created_at, user_id")
-        .eq("user_id", user.id),
+      supabase.from("customers").select("id, nome, user_id").eq("user_id", user.id),
     ])
 
-    if (salesError || productsError || customersError || paymentsError) {
-      setMensagem("Erro ao carregar relatório de vendas.")
+    if (salesError || paymentsError || productsError || customersError) {
+      setMensagem("Erro ao carregar relatório de recebimentos.")
       setCarregando(false)
       return
     }
 
     setSales((salesData ?? []) as Sale[])
+    setPayments((paymentsData ?? []) as SalePayment[])
     setProducts((productsData ?? []) as Product[])
     setCustomers((customersData ?? []) as Customer[])
-    setPayments((paymentsData ?? []) as SalePayment[])
     setCarregando(false)
   }
 
@@ -190,101 +185,92 @@ export default function RelatorioVendasPage() {
     return data >= inicio && data <= fim
   }
 
-  const salesRows = useMemo<SaleRow[]>(() => {
-    return sales
-      .filter((sale) => sale.status !== "Cancelada")
-      .filter((sale) => inPeriodo(sale.created_at))
-      .map((sale) => {
-        const product = products.find((p) => p.id === sale.product_id)
-        const customer = customers.find((c) => c.id === sale.customer_id)
-        const salePayments = payments.filter((p) => p.sale_id === sale.id)
-        const recebido = salePayments.reduce((acc, item) => acc + Number(item.valor), 0)
+  const idsVendasAtivas = useMemo(() => {
+    return new Set(sales.filter((sale) => sale.status !== "Cancelada").map((sale) => sale.id))
+  }, [sales])
+
+  const paymentRows = useMemo<PaymentRow[]>(() => {
+    return payments
+      .filter((payment) => idsVendasAtivas.has(payment.sale_id))
+      .filter((payment) => inPeriodo(payment.created_at))
+      .map((payment) => {
+        const sale = sales.find((s) => s.id === payment.sale_id)
+        const product = products.find((p) => p.id === sale?.product_id)
+        const customer = customers.find((c) => c.id === sale?.customer_id)
 
         return {
-          id: sale.id,
-          data: sale.created_at,
+          id: payment.id,
+          data: payment.created_at,
+          vendaId: payment.sale_id,
           cliente: customer?.nome || "Sem cliente",
           produto: product?.nome || "Produto removido",
           sku: product?.sku || "-",
-          marca: product?.marca || "-",
-          categoria: product?.categoria || "-",
-          quantidade: Number(sale.quantidade),
-          valorUnitario: Number(sale.valor_unitario),
-          valorTotal: Number(sale.valor_total),
-          recebido,
-          emAberto: Math.max(Number(sale.valor_total) - recebido, 0),
+          forma: payment.forma_pagamento,
+          valor: Number(payment.valor),
+          observacao: payment.observacao || "-",
         }
       })
       .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-  }, [sales, products, customers, payments, periodo])
+  }, [payments, sales, products, customers, periodo, idsVendasAtivas])
 
-  const salesRowsFiltrados = useMemo(() => {
+  const paymentRowsFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
-    if (!termo) return salesRows
+    if (!termo) return paymentRows
 
-    return salesRows.filter((item) => {
+    return paymentRows.filter((item) => {
       return (
         item.cliente.toLowerCase().includes(termo) ||
         item.produto.toLowerCase().includes(termo) ||
         item.sku.toLowerCase().includes(termo) ||
-        item.marca.toLowerCase().includes(termo) ||
-        item.categoria.toLowerCase().includes(termo)
+        item.forma.toLowerCase().includes(termo) ||
+        item.observacao.toLowerCase().includes(termo)
       )
     })
-  }, [salesRows, busca])
+  }, [paymentRows, busca])
 
   const resumo = useMemo(() => {
-    const vendido = salesRowsFiltrados.reduce((acc, item) => acc + item.valorTotal, 0)
-    const recebido = salesRowsFiltrados.reduce((acc, item) => acc + item.recebido, 0)
-    const emAberto = salesRowsFiltrados.reduce((acc, item) => acc + item.emAberto, 0)
-    const quantidade = salesRowsFiltrados.reduce((acc, item) => acc + item.quantidade, 0)
-    const ticketMedio = salesRowsFiltrados.length > 0 ? vendido / salesRowsFiltrados.length : 0
+    const total = paymentRowsFiltrados.reduce((acc, item) => acc + item.valor, 0)
+    const quantidade = paymentRowsFiltrados.length
+    const ticket = quantidade > 0 ? total / quantidade : 0
+
+    const mapa = new Map<string, number>()
+    paymentRowsFiltrados.forEach((item) => {
+      mapa.set(item.forma, (mapa.get(item.forma) || 0) + item.valor)
+    })
+
+    const porForma: FormaResumo[] = Array.from(mapa.entries())
+      .map(([forma, valor]) => ({ forma, valor }))
+      .sort((a, b) => b.valor - a.valor)
 
     return {
-      vendido,
-      recebido,
-      emAberto,
+      total,
       quantidade,
-      ticketMedio,
+      ticket,
+      porForma,
     }
-  }, [salesRowsFiltrados])
+  }, [paymentRowsFiltrados])
 
   function formatarData(dataIso: string) {
     return new Date(dataIso).toLocaleString("pt-BR")
   }
 
   function exportarCSV() {
-    if (salesRowsFiltrados.length === 0) {
+    if (paymentRowsFiltrados.length === 0) {
       setMensagem("Não há dados para exportar.")
       return
     }
 
     const linhas = [
-      [
-        "Data",
-        "Cliente",
-        "Produto",
-        "SKU",
-        "Marca",
-        "Categoria",
-        "Quantidade",
-        "Valor unitário",
-        "Valor total",
-        "Recebido",
-        "Em aberto",
-      ],
-      ...salesRowsFiltrados.map((r) => [
+      ["Data", "Venda", "Cliente", "Produto", "SKU", "Forma", "Valor", "Observação"],
+      ...paymentRowsFiltrados.map((r) => [
         formatarData(r.data),
+        String(r.vendaId),
         r.cliente,
         r.produto,
         r.sku,
-        r.marca,
-        r.categoria,
-        String(r.quantidade),
-        r.valorUnitario.toFixed(2),
-        r.valorTotal.toFixed(2),
-        r.recebido.toFixed(2),
-        r.emAberto.toFixed(2),
+        r.forma,
+        r.valor.toFixed(2),
+        r.observacao,
       ]),
     ]
 
@@ -298,13 +284,13 @@ export default function RelatorioVendasPage() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = "relatorio_vendas.csv"
+    link.download = "relatorio_recebimentos.csv"
     link.click()
     URL.revokeObjectURL(url)
   }
 
   async function exportarPDF() {
-    if (salesRowsFiltrados.length === 0) {
+    if (paymentRowsFiltrados.length === 0) {
       setMensagem("Não há dados para exportar.")
       return
     }
@@ -314,47 +300,45 @@ export default function RelatorioVendasPage() {
 
     const startY = await montarCabecalhoPDF({
       doc,
-      titulo: "Relatório de Vendas",
+      titulo: "Relatório de Recebimentos",
       nomeLoja,
       logoDataUrl,
     })
 
     doc.setFont("helvetica", "normal")
     doc.setFontSize(11)
-    doc.text(`Total vendido: R$ ${resumo.vendido.toFixed(2)}`, 14, startY)
-    doc.text(`Total recebido: R$ ${resumo.recebido.toFixed(2)}`, 14, startY + 6)
-    doc.text(`Total em aberto: R$ ${resumo.emAberto.toFixed(2)}`, 14, startY + 12)
-    doc.text(`Ticket médio: R$ ${resumo.ticketMedio.toFixed(2)}`, 14, startY + 18)
+    doc.text(`Total recebido: R$ ${resumo.total.toFixed(2)}`, 14, startY)
+    doc.text(`Quantidade de recebimentos: ${resumo.quantidade}`, 14, startY + 6)
+    doc.text(`Valor médio por recebimento: R$ ${resumo.ticket.toFixed(2)}`, 14, startY + 12)
 
     autoTable(doc, {
-      startY: startY + 26,
-      head: [["Data", "Cliente", "Produto", "Qtd.", "Total", "Recebido", "Aberto"]],
-      body: salesRowsFiltrados.map((r) => [
+      startY: startY + 20,
+      head: [["Data", "Venda", "Cliente", "Produto", "Forma", "Valor"]],
+      body: paymentRowsFiltrados.map((r) => [
         formatarData(r.data),
+        `#${r.vendaId}`,
         r.cliente,
         r.produto,
-        String(r.quantidade),
-        `R$ ${r.valorTotal.toFixed(2)}`,
-        `R$ ${r.recebido.toFixed(2)}`,
-        `R$ ${r.emAberto.toFixed(2)}`,
+        r.forma,
+        `R$ ${r.valor.toFixed(2)}`,
       ]),
       styles: { fontSize: 8.5 },
-      headStyles: { fillColor: [37, 99, 235] },
+      headStyles: { fillColor: [5, 150, 105] },
     })
 
-    doc.save("relatorio_vendas.pdf")
+    doc.save("relatorio_recebimentos.pdf")
   }
 
   return (
     <div>
-      <h2 className="page-title">Relatório de Vendas</h2>
+      <h2 className="page-title">Relatório de Recebimentos</h2>
       <p className="page-subtitle">
-        Analise as vendas registradas, o valor vendido, recebido e o saldo em aberto.
+        Acompanhe os valores que realmente entraram no caixa, com data e forma de pagamento.
       </p>
 
       <HelpBanner
         title="Como usar este relatório"
-        text="Aqui você acompanha as vendas ativas do período, incluindo cliente, produto, quantidade, valor vendido, quanto já foi recebido e o que ainda falta entrar."
+        text="Aqui você vê todos os recebimentos vinculados às vendas ativas, com data, forma de pagamento, cliente, produto e observação. É o relatório ideal para acompanhar entradas reais no caixa."
       />
 
       {mensagem && <p>{mensagem}</p>}
@@ -374,7 +358,7 @@ export default function RelatorioVendasPage() {
 
       <div style={acoesTopo}>
         <input
-          placeholder="Buscar por cliente, produto, SKU, marca ou categoria"
+          placeholder="Buscar por cliente, produto, SKU, forma ou observação"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           style={inputBusca}
@@ -390,45 +374,59 @@ export default function RelatorioVendasPage() {
         </div>
       </div>
 
-      <div className="grid-4" style={{ marginBottom: 24 }}>
-        <div className="section-card">
-          <h3 style={tituloComAjuda}>
-            Total vendido
-            <HelpTooltip text="Soma do valor total das vendas ativas no período e na busca atual." />
-          </h3>
-          <p>R$ {resumo.vendido.toFixed(2)}</p>
-        </div>
-
+      <div className="grid-3" style={{ marginBottom: 24 }}>
         <div className="section-card">
           <h3 style={tituloComAjuda}>
             Total recebido
-            <HelpTooltip text="Soma dos pagamentos já recebidos dessas vendas." />
+            <HelpTooltip text="Soma dos recebimentos exibidos no período e na busca atual." />
           </h3>
-          <p>R$ {resumo.recebido.toFixed(2)}</p>
+          <p>R$ {resumo.total.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
           <h3 style={tituloComAjuda}>
-            Em aberto
-            <HelpTooltip text="Valor que ainda falta receber dessas vendas." />
+            Qtde. de recebimentos
+            <HelpTooltip text="Quantidade de lançamentos de recebimento encontrados no filtro atual." />
           </h3>
-          <p>R$ {resumo.emAberto.toFixed(2)}</p>
+          <p>{resumo.quantidade}</p>
         </div>
 
         <div className="section-card">
           <h3 style={tituloComAjuda}>
-            Ticket médio
-            <HelpTooltip text="Valor médio por venda no conjunto filtrado." />
+            Valor médio
+            <HelpTooltip text="Valor médio por recebimento no conjunto filtrado." />
           </h3>
-          <p>R$ {resumo.ticketMedio.toFixed(2)}</p>
+          <p>R$ {resumo.ticket.toFixed(2)}</p>
+        </div>
+      </div>
+
+      <div className="section-card" style={{ marginBottom: 24 }}>
+        <div style={headerBloco}>
+          <div>
+            <h3 style={{ margin: 0 }}>Recebimentos por forma</h3>
+            <p style={subBloco}>Distribuição por método de pagamento</p>
+          </div>
+        </div>
+
+        <div style={gridFormas}>
+          {resumo.porForma.length > 0 ? (
+            resumo.porForma.map((item) => (
+              <div key={item.forma} style={formaCard}>
+                <span style={{ fontSize: 13, color: "#64748b" }}>{item.forma}</span>
+                <strong style={{ fontSize: 18 }}>R$ {item.valor.toFixed(2)}</strong>
+              </div>
+            ))
+          ) : (
+            <div style={{ color: "#6b7280" }}>Nenhum recebimento encontrado.</div>
+          )}
         </div>
       </div>
 
       <div className="section-card">
         <div style={headerBloco}>
           <div>
-            <h3 style={{ margin: 0 }}>Lista de vendas</h3>
-            <p style={subBloco}>{salesRowsFiltrados.length} venda(s)</p>
+            <h3 style={{ margin: 0 }}>Lista de recebimentos</h3>
+            <p style={subBloco}>{paymentRowsFiltrados.length} recebimento(s)</p>
           </div>
         </div>
 
@@ -437,64 +435,50 @@ export default function RelatorioVendasPage() {
             <thead>
               <tr>
                 <th style={th}>Data</th>
+                <th style={th}>Venda</th>
                 <th style={th}>Cliente</th>
                 <th style={th}>Produto</th>
                 <th style={th}>SKU</th>
-                <th style={th}>Marca</th>
-                <th style={th}>Categoria</th>
                 <th style={th}>
                   <span style={tituloComAjuda}>
-                    Qtd.
-                    <HelpTooltip text="Quantidade vendida nessa operação." />
+                    Forma
+                    <HelpTooltip text="Forma usada no recebimento, como Pix, dinheiro ou cartão." />
                   </span>
                 </th>
                 <th style={th}>
                   <span style={tituloComAjuda}>
-                    Valor total
-                    <HelpTooltip text="Valor total vendido nessa operação." />
+                    Valor
+                    <HelpTooltip text="Valor efetivamente recebido nessa entrada." />
                   </span>
                 </th>
-                <th style={th}>
-                  <span style={tituloComAjuda}>
-                    Recebido
-                    <HelpTooltip text="Quanto já foi pago pelo cliente nessa venda." />
-                  </span>
-                </th>
-                <th style={th}>
-                  <span style={tituloComAjuda}>
-                    Em aberto
-                    <HelpTooltip text="Quanto ainda falta receber dessa venda." />
-                  </span>
-                </th>
+                <th style={th}>Observação</th>
               </tr>
             </thead>
 
             <tbody>
               {carregando ? (
                 <tr>
-                  <td style={tdVazio} colSpan={10}>
+                  <td style={tdVazio} colSpan={8}>
                     Carregando...
                   </td>
                 </tr>
-              ) : salesRowsFiltrados.length > 0 ? (
-                salesRowsFiltrados.map((r) => (
+              ) : paymentRowsFiltrados.length > 0 ? (
+                paymentRowsFiltrados.map((r) => (
                   <tr key={r.id}>
                     <td style={td}>{formatarData(r.data)}</td>
+                    <td style={td}>#{r.vendaId}</td>
                     <td style={td}>{r.cliente}</td>
                     <td style={td}>{r.produto}</td>
                     <td style={td}>{r.sku}</td>
-                    <td style={td}>{r.marca}</td>
-                    <td style={td}>{r.categoria}</td>
-                    <td style={td}>{r.quantidade}</td>
-                    <td style={td}>R$ {r.valorTotal.toFixed(2)}</td>
-                    <td style={td}>R$ {r.recebido.toFixed(2)}</td>
-                    <td style={td}>R$ {r.emAberto.toFixed(2)}</td>
+                    <td style={td}>{r.forma}</td>
+                    <td style={td}>R$ {r.valor.toFixed(2)}</td>
+                    <td style={td}>{r.observacao}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td style={tdVazio} colSpan={10}>
-                    Nenhuma venda encontrada no período.
+                  <td style={tdVazio} colSpan={8}>
+                    Nenhum recebimento encontrado no período.
                   </td>
                 </tr>
               )}
@@ -538,6 +522,22 @@ const subBloco = {
   margin: "4px 0 0 0",
   color: "#6b7280",
   fontSize: "14px",
+}
+
+const gridFormas = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: "12px",
+}
+
+const formaCard = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: "6px",
+  padding: "14px",
+  borderRadius: "14px",
+  border: "1px solid #e5e7eb",
+  background: "#f8fafc",
 }
 
 const tabela = {

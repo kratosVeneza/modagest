@@ -6,13 +6,15 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
-import HelpTooltip from "../../components/HelpTooltip"
-import HelpBanner from "../../components/InfoBanner"
+import HelpTooltip from "../../../components/HelpTooltip"
+import HelpBanner from "../../../components/InfoBanner"
 
 type Sale = {
   id: number
   product_id: number
+  customer_id: number | null
   quantidade: number
+  valor_unitario: number
   valor_total: number
   created_at: string
   status?: string
@@ -25,8 +27,20 @@ type Product = {
   sku: string
   marca: string | null
   categoria: string | null
-  custo: number | null
-  preco: number
+  user_id: string
+}
+
+type Customer = {
+  id: number
+  nome: string
+  user_id: string
+}
+
+type SalePayment = {
+  id: number
+  sale_id: number
+  valor: number
+  created_at: string
   user_id: string
 }
 
@@ -35,17 +49,19 @@ type Loja = {
   logo_url?: string | null
 }
 
-type ProfitRow = {
-  productId: number
+type SaleRow = {
+  id: number
+  data: string
+  cliente: string
   produto: string
   sku: string
   marca: string
   categoria: string
-  quantidadeVendida: number
-  faturamento: number
-  custoTotal: number
-  lucro: number
-  margem: number
+  quantidade: number
+  valorUnitario: number
+  valorTotal: number
+  recebido: number
+  emAberto: number
 }
 
 type Periodo = "hoje" | "7dias" | "30dias" | "mes" | "tudo"
@@ -58,9 +74,11 @@ const periodos: { value: Periodo; label: string }[] = [
   { value: "tudo", label: "Tudo" },
 ]
 
-export default function RelatorioLucratividadePage() {
+export default function RelatorioVendasPage() {
   const [sales, setSales] = useState<Sale[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [payments, setPayments] = useState<SalePayment[]>([])
   const [periodo, setPeriodo] = useState<Periodo>("30dias")
   const [busca, setBusca] = useState("")
   const [mensagem, setMensagem] = useState("")
@@ -96,25 +114,41 @@ export default function RelatorioLucratividadePage() {
     if (loja?.nome_loja) setNomeLoja(loja.nome_loja)
     if (loja?.logo_url) setLogoUrl(loja.logo_url)
 
-    const { data: salesData, error: salesError } = await supabase
-      .from("sales")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
+    const [
+      { data: salesData, error: salesError },
+      { data: productsData, error: productsError },
+      { data: customersData, error: customersError },
+      { data: paymentsData, error: paymentsError },
+    ] = await Promise.all([
+      supabase
+        .from("sales")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("products")
+        .select("id, nome, sku, marca, categoria, user_id")
+        .eq("user_id", user.id),
+      supabase
+        .from("customers")
+        .select("id, nome, user_id")
+        .eq("user_id", user.id),
+      supabase
+        .from("sale_payments")
+        .select("id, sale_id, valor, created_at, user_id")
+        .eq("user_id", user.id),
+    ])
 
-    const { data: productsData, error: productsError } = await supabase
-      .from("products")
-      .select("id, nome, sku, marca, categoria, custo, preco, user_id")
-      .eq("user_id", user.id)
-
-    if (salesError || productsError) {
-      setMensagem("Erro ao carregar relatório de lucratividade.")
+    if (salesError || productsError || customersError || paymentsError) {
+      setMensagem("Erro ao carregar relatório de vendas.")
       setCarregando(false)
       return
     }
 
     setSales((salesData ?? []) as Sale[])
     setProducts((productsData ?? []) as Product[])
+    setCustomers((customersData ?? []) as Customer[])
+    setPayments((paymentsData ?? []) as SalePayment[])
     setCarregando(false)
   }
 
@@ -156,122 +190,121 @@ export default function RelatorioLucratividadePage() {
     return data >= inicio && data <= fim
   }
 
-  const profitRows = useMemo<ProfitRow[]>(() => {
-    const mapa = new Map<number, ProfitRow>()
-
-    sales
+  const salesRows = useMemo<SaleRow[]>(() => {
+    return sales
       .filter((sale) => sale.status !== "Cancelada")
       .filter((sale) => inPeriodo(sale.created_at))
-      .forEach((sale) => {
+      .map((sale) => {
         const product = products.find((p) => p.id === sale.product_id)
-        if (!product) return
+        const customer = customers.find((c) => c.id === sale.customer_id)
+        const salePayments = payments.filter((p) => p.sale_id === sale.id)
+        const recebido = salePayments.reduce((acc, item) => acc + Number(item.valor), 0)
 
-        const quantidade = Number(sale.quantidade)
-        const faturamento = Number(sale.valor_total)
-        const custoUnitario = Number(product.custo || 0)
-        const custoTotal = custoUnitario * quantidade
-        const lucro = faturamento - custoTotal
-
-        if (!mapa.has(product.id)) {
-          mapa.set(product.id, {
-            productId: product.id,
-            produto: product.nome,
-            sku: product.sku,
-            marca: product.marca || "-",
-            categoria: product.categoria || "-",
-            quantidadeVendida: 0,
-            faturamento: 0,
-            custoTotal: 0,
-            lucro: 0,
-            margem: 0,
-          })
+        return {
+          id: sale.id,
+          data: sale.created_at,
+          cliente: customer?.nome || "Sem cliente",
+          produto: product?.nome || "Produto removido",
+          sku: product?.sku || "-",
+          marca: product?.marca || "-",
+          categoria: product?.categoria || "-",
+          quantidade: Number(sale.quantidade),
+          valorUnitario: Number(sale.valor_unitario),
+          valorTotal: Number(sale.valor_total),
+          recebido,
+          emAberto: Math.max(Number(sale.valor_total) - recebido, 0),
         }
-
-        const atual = mapa.get(product.id)!
-        atual.quantidadeVendida += quantidade
-        atual.faturamento += faturamento
-        atual.custoTotal += custoTotal
-        atual.lucro += lucro
       })
+      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+  }, [sales, products, customers, payments, periodo])
 
-    return Array.from(mapa.values())
-      .map((item) => ({
-        ...item,
-        margem: item.faturamento > 0 ? (item.lucro / item.faturamento) * 100 : 0,
-      }))
-      .sort((a, b) => b.lucro - a.lucro)
-  }, [sales, products, periodo])
-
-  const profitRowsFiltrados = useMemo(() => {
+  const salesRowsFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
-    if (!termo) return profitRows
+    if (!termo) return salesRows
 
-    return profitRows.filter((item) => {
+    return salesRows.filter((item) => {
       return (
+        item.cliente.toLowerCase().includes(termo) ||
         item.produto.toLowerCase().includes(termo) ||
         item.sku.toLowerCase().includes(termo) ||
         item.marca.toLowerCase().includes(termo) ||
         item.categoria.toLowerCase().includes(termo)
       )
     })
-  }, [profitRows, busca])
+  }, [salesRows, busca])
 
   const resumo = useMemo(() => {
-    const faturamento = profitRowsFiltrados.reduce((acc, item) => acc + item.faturamento, 0)
-    const custoTotal = profitRowsFiltrados.reduce((acc, item) => acc + item.custoTotal, 0)
-    const lucro = profitRowsFiltrados.reduce((acc, item) => acc + item.lucro, 0)
-    const quantidade = profitRowsFiltrados.reduce((acc, item) => acc + item.quantidadeVendida, 0)
-    const margem = faturamento > 0 ? (lucro / faturamento) * 100 : 0
+    const vendido = salesRowsFiltrados.reduce((acc, item) => acc + item.valorTotal, 0)
+    const recebido = salesRowsFiltrados.reduce((acc, item) => acc + item.recebido, 0)
+    const emAberto = salesRowsFiltrados.reduce((acc, item) => acc + item.emAberto, 0)
+    const quantidade = salesRowsFiltrados.reduce((acc, item) => acc + item.quantidade, 0)
+    const ticketMedio = salesRowsFiltrados.length > 0 ? vendido / salesRowsFiltrados.length : 0
 
     return {
-      faturamento,
-      custoTotal,
-      lucro,
+      vendido,
+      recebido,
+      emAberto,
       quantidade,
-      margem,
+      ticketMedio,
     }
-  }, [profitRowsFiltrados])
+  }, [salesRowsFiltrados])
 
-  function formatarDataAtual() {
-    return new Date().toLocaleString("pt-BR")
+  function formatarData(dataIso: string) {
+    return new Date(dataIso).toLocaleString("pt-BR")
   }
 
   function exportarCSV() {
-    if (profitRowsFiltrados.length === 0) {
+    if (salesRowsFiltrados.length === 0) {
       setMensagem("Não há dados para exportar.")
       return
     }
 
     const linhas = [
-      ["Produto", "SKU", "Marca", "Categoria", "Qtd vendida", "Faturamento", "Custo", "Lucro", "Margem"],
-      ...profitRowsFiltrados.map((r) => [
+      [
+        "Data",
+        "Cliente",
+        "Produto",
+        "SKU",
+        "Marca",
+        "Categoria",
+        "Quantidade",
+        "Valor unitário",
+        "Valor total",
+        "Recebido",
+        "Em aberto",
+      ],
+      ...salesRowsFiltrados.map((r) => [
+        formatarData(r.data),
+        r.cliente,
         r.produto,
         r.sku,
         r.marca,
         r.categoria,
-        String(r.quantidadeVendida),
-        r.faturamento.toFixed(2),
-        r.custoTotal.toFixed(2),
-        r.lucro.toFixed(2),
-        `${r.margem.toFixed(1)}%`,
+        String(r.quantidade),
+        r.valorUnitario.toFixed(2),
+        r.valorTotal.toFixed(2),
+        r.recebido.toFixed(2),
+        r.emAberto.toFixed(2),
       ]),
     ]
 
     const conteudo = linhas
-      .map((linha) => linha.map((campo) => `"${String(campo).replace(/"/g, '""')}"`).join(";"))
+      .map((linha) =>
+        linha.map((campo) => `"${String(campo).replace(/"/g, '""')}"`).join(";")
+      )
       .join("\n")
 
     const blob = new Blob([conteudo], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = "relatorio_lucratividade.csv"
+    link.download = "relatorio_vendas.csv"
     link.click()
     URL.revokeObjectURL(url)
   }
 
   async function exportarPDF() {
-    if (profitRowsFiltrados.length === 0) {
+    if (salesRowsFiltrados.length === 0) {
       setMensagem("Não há dados para exportar.")
       return
     }
@@ -281,47 +314,47 @@ export default function RelatorioLucratividadePage() {
 
     const startY = await montarCabecalhoPDF({
       doc,
-      titulo: "Relatório de Lucratividade por Produto",
+      titulo: "Relatório de Vendas",
       nomeLoja,
       logoDataUrl,
     })
 
     doc.setFont("helvetica", "normal")
     doc.setFontSize(11)
-    doc.text(`Gerado em: ${formatarDataAtual()}`, 14, startY)
-    doc.text(`Faturamento: R$ ${resumo.faturamento.toFixed(2)}`, 14, startY + 6)
-    doc.text(`Custo total: R$ ${resumo.custoTotal.toFixed(2)}`, 14, startY + 12)
-    doc.text(`Lucro bruto: R$ ${resumo.lucro.toFixed(2)}`, 14, startY + 18)
-    doc.text(`Margem média: ${resumo.margem.toFixed(1)}%`, 14, startY + 24)
+    doc.text(`Total vendido: R$ ${resumo.vendido.toFixed(2)}`, 14, startY)
+    doc.text(`Total recebido: R$ ${resumo.recebido.toFixed(2)}`, 14, startY + 6)
+    doc.text(`Total em aberto: R$ ${resumo.emAberto.toFixed(2)}`, 14, startY + 12)
+    doc.text(`Ticket médio: R$ ${resumo.ticketMedio.toFixed(2)}`, 14, startY + 18)
 
     autoTable(doc, {
-      startY: startY + 32,
-      head: [["Produto", "Qtd.", "Faturamento", "Custo", "Lucro", "Margem"]],
-      body: profitRowsFiltrados.map((r) => [
+      startY: startY + 26,
+      head: [["Data", "Cliente", "Produto", "Qtd.", "Total", "Recebido", "Aberto"]],
+      body: salesRowsFiltrados.map((r) => [
+        formatarData(r.data),
+        r.cliente,
         r.produto,
-        String(r.quantidadeVendida),
-        `R$ ${r.faturamento.toFixed(2)}`,
-        `R$ ${r.custoTotal.toFixed(2)}`,
-        `R$ ${r.lucro.toFixed(2)}`,
-        `${r.margem.toFixed(1)}%`,
+        String(r.quantidade),
+        `R$ ${r.valorTotal.toFixed(2)}`,
+        `R$ ${r.recebido.toFixed(2)}`,
+        `R$ ${r.emAberto.toFixed(2)}`,
       ]),
       styles: { fontSize: 8.5 },
-      headStyles: { fillColor: [124, 58, 237] },
+      headStyles: { fillColor: [37, 99, 235] },
     })
 
-    doc.save("relatorio_lucratividade.pdf")
+    doc.save("relatorio_vendas.pdf")
   }
 
   return (
     <div>
-      <h2 className="page-title">Relatório de Lucratividade</h2>
+      <h2 className="page-title">Relatório de Vendas</h2>
       <p className="page-subtitle">
-        Veja quais produtos realmente dão mais retorno para o negócio.
+        Analise as vendas registradas, o valor vendido, recebido e o saldo em aberto.
       </p>
 
       <HelpBanner
         title="Como usar este relatório"
-        text="Aqui você vê quanto cada produto faturou, quanto custou e qual foi o lucro bruto gerado. Isso ajuda a identificar os itens mais rentáveis do seu negócio."
+        text="Aqui você acompanha as vendas ativas do período, incluindo cliente, produto, quantidade, valor vendido, quanto já foi recebido e o que ainda falta entrar."
       />
 
       {mensagem && <p>{mensagem}</p>}
@@ -341,7 +374,7 @@ export default function RelatorioLucratividadePage() {
 
       <div style={acoesTopo}>
         <input
-          placeholder="Buscar por produto, SKU, marca ou categoria"
+          placeholder="Buscar por cliente, produto, SKU, marca ou categoria"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           style={inputBusca}
@@ -360,42 +393,42 @@ export default function RelatorioLucratividadePage() {
       <div className="grid-4" style={{ marginBottom: 24 }}>
         <div className="section-card">
           <h3 style={tituloComAjuda}>
-            Faturamento
-            <HelpTooltip text="Soma total vendida dos produtos mostrados no relatório." />
+            Total vendido
+            <HelpTooltip text="Soma do valor total das vendas ativas no período e na busca atual." />
           </h3>
-          <p>R$ {resumo.faturamento.toFixed(2)}</p>
+          <p>R$ {resumo.vendido.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
           <h3 style={tituloComAjuda}>
-            Custo total
-            <HelpTooltip text="Soma do custo estimado dos produtos vendidos no período." />
+            Total recebido
+            <HelpTooltip text="Soma dos pagamentos já recebidos dessas vendas." />
           </h3>
-          <p>R$ {resumo.custoTotal.toFixed(2)}</p>
+          <p>R$ {resumo.recebido.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
           <h3 style={tituloComAjuda}>
-            Lucro bruto
-            <HelpTooltip text="Diferença entre faturamento e custo total dos produtos vendidos." />
+            Em aberto
+            <HelpTooltip text="Valor que ainda falta receber dessas vendas." />
           </h3>
-          <p>R$ {resumo.lucro.toFixed(2)}</p>
+          <p>R$ {resumo.emAberto.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
           <h3 style={tituloComAjuda}>
-            Margem média
-            <HelpTooltip text="Percentual médio de lucro sobre o faturamento dos produtos mostrados." />
+            Ticket médio
+            <HelpTooltip text="Valor médio por venda no conjunto filtrado." />
           </h3>
-          <p>{resumo.margem.toFixed(1)}%</p>
+          <p>R$ {resumo.ticketMedio.toFixed(2)}</p>
         </div>
       </div>
 
       <div className="section-card">
         <div style={headerBloco}>
           <div>
-            <h3 style={{ margin: 0 }}>Ranking de lucratividade por produto</h3>
-            <p style={subBloco}>{profitRowsFiltrados.length} produto(s)</p>
+            <h3 style={{ margin: 0 }}>Lista de vendas</h3>
+            <p style={subBloco}>{salesRowsFiltrados.length} venda(s)</p>
           </div>
         </div>
 
@@ -403,6 +436,8 @@ export default function RelatorioLucratividadePage() {
           <table style={tabela}>
             <thead>
               <tr>
+                <th style={th}>Data</th>
+                <th style={th}>Cliente</th>
                 <th style={th}>Produto</th>
                 <th style={th}>SKU</th>
                 <th style={th}>Marca</th>
@@ -410,31 +445,25 @@ export default function RelatorioLucratividadePage() {
                 <th style={th}>
                   <span style={tituloComAjuda}>
                     Qtd.
-                    <HelpTooltip text="Quantidade total vendida desse produto no período." />
+                    <HelpTooltip text="Quantidade vendida nessa operação." />
                   </span>
                 </th>
                 <th style={th}>
                   <span style={tituloComAjuda}>
-                    Faturamento
-                    <HelpTooltip text="Valor total vendido desse produto no período." />
+                    Valor total
+                    <HelpTooltip text="Valor total vendido nessa operação." />
                   </span>
                 </th>
                 <th style={th}>
                   <span style={tituloComAjuda}>
-                    Custo
-                    <HelpTooltip text="Custo total estimado com base no custo cadastrado do produto." />
+                    Recebido
+                    <HelpTooltip text="Quanto já foi pago pelo cliente nessa venda." />
                   </span>
                 </th>
                 <th style={th}>
                   <span style={tituloComAjuda}>
-                    Lucro
-                    <HelpTooltip text="Diferença entre o faturamento e o custo total do produto." />
-                  </span>
-                </th>
-                <th style={th}>
-                  <span style={tituloComAjuda}>
-                    Margem
-                    <HelpTooltip text="Percentual do faturamento que virou lucro bruto." />
+                    Em aberto
+                    <HelpTooltip text="Quanto ainda falta receber dessa venda." />
                   </span>
                 </th>
               </tr>
@@ -443,28 +472,29 @@ export default function RelatorioLucratividadePage() {
             <tbody>
               {carregando ? (
                 <tr>
-                  <td style={tdVazio} colSpan={9}>
+                  <td style={tdVazio} colSpan={10}>
                     Carregando...
                   </td>
                 </tr>
-              ) : profitRowsFiltrados.length > 0 ? (
-                profitRowsFiltrados.map((r) => (
-                  <tr key={r.productId}>
+              ) : salesRowsFiltrados.length > 0 ? (
+                salesRowsFiltrados.map((r) => (
+                  <tr key={r.id}>
+                    <td style={td}>{formatarData(r.data)}</td>
+                    <td style={td}>{r.cliente}</td>
                     <td style={td}>{r.produto}</td>
                     <td style={td}>{r.sku}</td>
                     <td style={td}>{r.marca}</td>
                     <td style={td}>{r.categoria}</td>
-                    <td style={td}>{r.quantidadeVendida}</td>
-                    <td style={td}>R$ {r.faturamento.toFixed(2)}</td>
-                    <td style={td}>R$ {r.custoTotal.toFixed(2)}</td>
-                    <td style={td}>R$ {r.lucro.toFixed(2)}</td>
-                    <td style={td}>{r.margem.toFixed(1)}%</td>
+                    <td style={td}>{r.quantidade}</td>
+                    <td style={td}>R$ {r.valorTotal.toFixed(2)}</td>
+                    <td style={td}>R$ {r.recebido.toFixed(2)}</td>
+                    <td style={td}>R$ {r.emAberto.toFixed(2)}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td style={tdVazio} colSpan={9}>
-                    Nenhum dado de lucratividade encontrado no período.
+                  <td style={tdVazio} colSpan={10}>
+                    Nenhuma venda encontrada no período.
                   </td>
                 </tr>
               )}

@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
-import AnimatedModal from "../components/AnimatedModal"
-import TableSkeleton from "../components/TableSkeleton"
-import HelpTooltip from "../components/HelpTooltip"
-import HelpBanner from "../components/InfoBanner"
+import AnimatedModal from "../../components/AnimatedModal"
+import TableSkeleton from "../../components/TableSkeleton"
+import HelpTooltip from "../../components/HelpTooltip"
+import HelpBanner from "../../components/InfoBanner"
 
 type Produto = {
   id: number

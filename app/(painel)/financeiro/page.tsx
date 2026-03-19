@@ -6,9 +6,9 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
-import AnimatedModal from "../components/AnimatedModal"
-import HelpTooltip from "../components/HelpTooltip"
-import HelpBanner from "../components/InfoBanner"
+import AnimatedModal from "../../components/AnimatedModal"
+import HelpTooltip from "../../components/HelpTooltip"
+import HelpBanner from "../../components/InfoBanner"
 
 type SalePayment = {
   id: number

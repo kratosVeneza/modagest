@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
-import AnimatedModal from "../components/AnimatedModal"
+import AnimatedModal from "../../components/AnimatedModal"
 
 type Produto = {
   id: number

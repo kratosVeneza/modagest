@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
-import AnimatedModal from "../components/AnimatedModal"
+import AnimatedModal from "../../components/AnimatedModal"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 
 type Pedido = {

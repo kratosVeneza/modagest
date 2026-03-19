@@ -7,9 +7,9 @@ import autoTable from "jspdf-autotable"
 import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
-import AnimatedModal from "../components/AnimatedModal"
-import HelpTooltip from "../components/HelpTooltip"
-import HelpBanner from "../components/InfoBanner"
+import AnimatedModal from "../../components/AnimatedModal"
+import HelpTooltip from "../../components/HelpTooltip"
+import HelpBanner from "../../components/InfoBanner"
 
 type VendaBanco = {
   id: number
