@@ -50,6 +50,7 @@ const menuGroups = [
       { href: "/financeiro", label: "Financeiro", icon: ClipboardList },
       { href: "/historico-vendas", label: "Histórico de Vendas", icon: ClipboardList },
       { href: "/loja", label: "Minha Loja", icon: Store },
+      { href: "/meu-plano", label: "Meu Plano", icon: Store },
     ],
   },
 ]

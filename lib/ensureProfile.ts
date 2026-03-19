@@ -5,9 +5,18 @@ type EnsureProfileParams = {
   selectedPlan?: string
 }
 
+const PLANOS_VALIDOS = ["essencial", "profissional", "premium"] as const
+
+function normalizarPlano(plan?: string) {
+  if (!plan) return "profissional"
+  return PLANOS_VALIDOS.includes(plan as (typeof PLANOS_VALIDOS)[number])
+    ? plan
+    : "profissional"
+}
+
 export async function ensureProfile(params?: EnsureProfileParams) {
   const trialDays = params?.trialDays ?? 7
-  const selectedPlan = params?.selectedPlan ?? "profissional"
+  const selectedPlan = normalizarPlano(params?.selectedPlan)
 
   const {
     data: { user },
@@ -20,7 +29,7 @@ export async function ensureProfile(params?: EnsureProfileParams) {
 
   const { data: existingProfile, error: selectError } = await supabase
     .from("profiles")
-    .select("id, plan_slug")
+    .select("id, plan_slug, subscription_status, trial_ends_at")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -29,7 +38,7 @@ export async function ensureProfile(params?: EnsureProfileParams) {
   }
 
   if (existingProfile) {
-    return { ok: true, created: false }
+    return { ok: true, created: false, profile: existingProfile }
   }
 
   const fullName =
@@ -46,7 +55,7 @@ export async function ensureProfile(params?: EnsureProfileParams) {
   const trialEndsAt = new Date()
   trialEndsAt.setDate(trialEndsAt.getDate() + trialDays)
 
-  const { error: insertError } = await supabase.from("profiles").insert({
+  const novoPerfil = {
     id: user.id,
     email: user.email ?? null,
     full_name: fullName,
@@ -54,11 +63,17 @@ export async function ensureProfile(params?: EnsureProfileParams) {
     plan_slug: selectedPlan,
     subscription_status: "trialing",
     trial_ends_at: trialEndsAt.toISOString(),
-  })
+  }
+
+  const { data: insertedProfile, error: insertError } = await supabase
+    .from("profiles")
+    .insert(novoPerfil)
+    .select()
+    .single()
 
   if (insertError) {
     return { ok: false, error: insertError.message }
   }
 
-  return { ok: true, created: true }
+  return { ok: true, created: true, profile: insertedProfile }
 }
