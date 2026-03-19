@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
-import { Chrome, Mail, Lock, UserPlus, LogIn } from "lucide-react"
+import { Chrome, Mail, Lock, UserPlus, LogIn, ArrowLeft } from "lucide-react"
 import { ensureProfile } from "@/lib/ensureProfile"
 
 type Modo = "entrar" | "criar"
@@ -54,13 +55,14 @@ export default function LoginPage() {
       password: senha,
     })
 
-    setCarregando(false)
-
     if (error) {
+      setCarregando(false)
       setErro(error.message || "Não foi possível entrar.")
       return
     }
+
     await ensureProfile({ trialDays: 7 })
+    setCarregando(false)
     router.push("/dashboard")
   }
 
@@ -97,9 +99,7 @@ export default function LoginPage() {
       return
     }
 
-    setMensagem(
-      "Conta criada com sucesso. Verifique seu email para confirmar o cadastro."
-    )
+    setMensagem("Conta criada com sucesso. Verifique seu email para confirmar o cadastro.")
     setSenha("")
     setConfirmarSenha("")
   }
@@ -152,124 +152,144 @@ export default function LoginPage() {
       </div>
 
       <div style={colunaDireita}>
-        <div style={formCard}>
-          <div style={tabs}>
-            <button
-              type="button"
-              onClick={() => {
-                setModo("entrar")
-                setMensagem("")
-                setErro("")
-              }}
-              style={{
-                ...tabBtn,
-                ...(modo === "entrar" ? tabBtnAtivo : {}),
-              }}
-            >
-              Entrar
-            </button>
+        <div style={{ width: "100%", maxWidth: 460 }}>
+          <div style={{ marginBottom: 18, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <Link href="/" style={linkTopo}>
+              <ArrowLeft size={16} />
+              Voltar para a página inicial
+            </Link>
 
-            <button
-              type="button"
-              onClick={() => {
-                setModo("criar")
-                setMensagem("")
-                setErro("")
-              }}
-              style={{
-                ...tabBtn,
-                ...(modo === "criar" ? tabBtnAtivo : {}),
-              }}
-            >
-              Criar conta
-            </button>
+            <Link href="/planos" style={linkTopoSecundario}>
+              Ver planos
+            </Link>
           </div>
 
-          <h2 style={tituloStyle}>{titulo}</h2>
-          <p style={subtituloStyle}>{subtitulo}</p>
+          <div style={formCard}>
+            <div style={tabs}>
+              <button
+                type="button"
+                onClick={() => {
+                  setModo("entrar")
+                  setMensagem("")
+                  setErro("")
+                }}
+                style={{
+                  ...tabBtn,
+                  ...(modo === "entrar" ? tabBtnAtivo : {}),
+                }}
+              >
+                Entrar
+              </button>
 
-          {erro && <div style={erroBox}>{erro}</div>}
-          {mensagem && <div style={sucessoBox}>{mensagem}</div>}
-
-          <button
-            type="button"
-            onClick={entrarComGoogle}
-            disabled={carregando}
-            style={googleBtn}
-          >
-            <Chrome size={18} />
-            Continuar com Google
-          </button>
-
-          <div style={divisor}>
-            <span style={divisorLinha} />
-            <span style={divisorTexto}>ou</span>
-            <span style={divisorLinha} />
-          </div>
-
-          <form onSubmit={onSubmit} style={formStyle}>
-            <div>
-              <label style={labelStyle}>Email</label>
-              <div style={inputWrap}>
-                <Mail size={18} color="#64748b" />
-                <input
-                  type="email"
-                  placeholder="seuemail@exemplo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  style={inputStyle}
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModo("criar")
+                  setMensagem("")
+                  setErro("")
+                }}
+                style={{
+                  ...tabBtn,
+                  ...(modo === "criar" ? tabBtnAtivo : {}),
+                }}
+              >
+                Criar conta
+              </button>
             </div>
 
-            <div>
-              <label style={labelStyle}>Senha</label>
-              <div style={inputWrap}>
-                <Lock size={18} color="#64748b" />
-                <input
-                  type="password"
-                  placeholder="Sua senha"
-                  value={senha}
-                  onChange={(e) => setSenha(e.target.value)}
-                  required
-                  style={inputStyle}
-                />
-              </div>
+            <h2 style={tituloStyle}>{titulo}</h2>
+            <p style={subtituloStyle}>{subtitulo}</p>
+
+            {erro && <div style={erroBox}>{erro}</div>}
+            {mensagem && <div style={sucessoBox}>{mensagem}</div>}
+
+            <button
+              type="button"
+              onClick={entrarComGoogle}
+              disabled={carregando}
+              style={googleBtn}
+            >
+              <Chrome size={18} />
+              Continuar com Google
+            </button>
+
+            <div style={divisor}>
+              <span style={divisorLinha} />
+              <span style={divisorTexto}>ou</span>
+              <span style={divisorLinha} />
             </div>
 
-            {modo === "criar" && (
+            <form onSubmit={onSubmit} style={formStyle}>
               <div>
-                <label style={labelStyle}>Confirmar senha</label>
+                <label style={labelStyle}>Email</label>
                 <div style={inputWrap}>
-                  <Lock size={18} color="#64748b" />
+                  <Mail size={18} color="#64748b" />
                   <input
-                    type="password"
-                    placeholder="Repita sua senha"
-                    value={confirmarSenha}
-                    onChange={(e) => setConfirmarSenha(e.target.value)}
+                    type="email"
+                    placeholder="seuemail@exemplo.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     required
                     style={inputStyle}
                   />
                 </div>
               </div>
-            )}
 
-            <button type="submit" disabled={carregando} style={submitBtn}>
-              {modo === "entrar" ? <LogIn size={18} /> : <UserPlus size={18} />}
-              {carregando
-                ? "Aguarde..."
-                : modo === "entrar"
-                ? "Entrar"
-                : "Criar conta"}
-            </button>
-          </form>
+              <div>
+                <label style={labelStyle}>Senha</label>
+                <div style={inputWrap}>
+                  <Lock size={18} color="#64748b" />
+                  <input
+                    type="password"
+                    placeholder="Sua senha"
+                    value={senha}
+                    onChange={(e) => setSenha(e.target.value)}
+                    required
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
 
-          <p style={rodapeTexto}>
-            {modo === "entrar"
-              ? "Ainda não tem conta? Clique em “Criar conta”."
-              : "Já tem conta? Clique em “Entrar”."}
-          </p>
+              {modo === "criar" && (
+                <div>
+                  <label style={labelStyle}>Confirmar senha</label>
+                  <div style={inputWrap}>
+                    <Lock size={18} color="#64748b" />
+                    <input
+                      type="password"
+                      placeholder="Repita sua senha"
+                      value={confirmarSenha}
+                      onChange={(e) => setConfirmarSenha(e.target.value)}
+                      required
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <button type="submit" disabled={carregando} style={submitBtn}>
+                {modo === "entrar" ? <LogIn size={18} /> : <UserPlus size={18} />}
+                {carregando
+                  ? "Aguarde..."
+                  : modo === "entrar"
+                  ? "Entrar"
+                  : "Criar conta"}
+              </button>
+            </form>
+
+            <p style={rodapeTexto}>
+              {modo === "entrar"
+                ? "Ainda não tem conta? Clique em “Criar conta”."
+                : "Já tem conta? Clique em “Entrar”."}
+            </p>
+
+            <p style={rodapePlanos}>
+              Ainda está conhecendo o sistema?{" "}
+              <Link href="/planos" style={linkPlanos}>
+                Ver planos
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -350,6 +370,23 @@ const formCard: React.CSSProperties = {
   borderRadius: 24,
   padding: 28,
   boxShadow: "0 20px 50px rgba(15,23,42,0.08)",
+}
+
+const linkTopo: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  textDecoration: "none",
+  color: "#2563eb",
+  fontWeight: 700,
+  fontSize: 14,
+}
+
+const linkTopoSecundario: React.CSSProperties = {
+  textDecoration: "none",
+  color: "#0f172a",
+  fontWeight: 700,
+  fontSize: 14,
 }
 
 const tabs: React.CSSProperties = {
@@ -498,3 +535,16 @@ const rodapeTexto: React.CSSProperties = {
   marginTop: 16,
   textAlign: "center",
 }
+
+const rodapePlanos: React.CSSProperties = {
+  fontSize: 14,
+  color: "#64748b",
+  marginTop: 12,
+  textAlign: "center",
+}
+
+const linkPlanos: React.CSSProperties = {
+  color: "#2563eb",
+  fontWeight: 700,
+  textDecoration: "none",
+} 
