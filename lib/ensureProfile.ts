@@ -9,6 +9,7 @@ const PLANOS_VALIDOS = ["essencial", "profissional", "premium"] as const
 
 function normalizarPlano(plan?: string) {
   if (!plan) return "profissional"
+
   return PLANOS_VALIDOS.includes(plan as (typeof PLANOS_VALIDOS)[number])
     ? plan
     : "profissional"
@@ -37,10 +38,6 @@ export async function ensureProfile(params?: EnsureProfileParams) {
     return { ok: false, error: selectError.message }
   }
 
-  if (existingProfile) {
-    return { ok: true, created: false, profile: existingProfile }
-  }
-
   const fullName =
     user.user_metadata?.full_name ||
     user.user_metadata?.name ||
@@ -54,6 +51,27 @@ export async function ensureProfile(params?: EnsureProfileParams) {
 
   const trialEndsAt = new Date()
   trialEndsAt.setDate(trialEndsAt.getDate() + trialDays)
+
+  if (existingProfile) {
+    const { data: updatedProfile, error: updateError } = await supabase
+      .from("profiles")
+      .update({
+        email: user.email ?? null,
+        full_name: fullName,
+        avatar_url: avatarUrl,
+        plan_slug: selectedPlan,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", user.id)
+      .select()
+      .single()
+
+    if (updateError) {
+      return { ok: false, error: updateError.message }
+    }
+
+    return { ok: true, created: false, updated: true, profile: updatedProfile }
+  }
 
   const novoPerfil = {
     id: user.id,
@@ -75,5 +93,5 @@ export async function ensureProfile(params?: EnsureProfileParams) {
     return { ok: false, error: insertError.message }
   }
 
-  return { ok: true, created: true, profile: insertedProfile }
+  return { ok: true, created: true, updated: false, profile: insertedProfile }
 }
