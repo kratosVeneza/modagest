@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = "force-dynamic"
+
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
@@ -13,7 +15,7 @@ type Modo = "entrar" | "criar"
 export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-const planoSelecionado = searchParams.get("plan") || "profissional"
+const planoSelecionado = searchParams?.get("plan") ?? "profissional"
 
   const [modo, setModo] = useState<Modo>("entrar")
   const [email, setEmail] = useState("")
