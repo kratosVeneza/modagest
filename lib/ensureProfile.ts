@@ -2,10 +2,12 @@ import { supabase } from "@/lib/supabase"
 
 type EnsureProfileParams = {
   trialDays?: number
+  selectedPlan?: string
 }
 
 export async function ensureProfile(params?: EnsureProfileParams) {
   const trialDays = params?.trialDays ?? 7
+  const selectedPlan = params?.selectedPlan ?? "profissional"
 
   const {
     data: { user },
@@ -18,7 +20,7 @@ export async function ensureProfile(params?: EnsureProfileParams) {
 
   const { data: existingProfile, error: selectError } = await supabase
     .from("profiles")
-    .select("id")
+    .select("id, plan_slug")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -49,7 +51,7 @@ export async function ensureProfile(params?: EnsureProfileParams) {
     email: user.email ?? null,
     full_name: fullName,
     avatar_url: avatarUrl,
-    plan_slug: "trial",
+    plan_slug: selectedPlan,
     subscription_status: "trialing",
     trial_ends_at: trialEndsAt.toISOString(),
   })

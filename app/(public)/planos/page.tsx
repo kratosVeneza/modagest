@@ -5,6 +5,7 @@ import { CheckCircle2, ArrowLeft, BadgeCheck, Crown, Rocket } from "lucide-react
 
 const planos = [
   {
+    slug: "essencial",
     nome: "Essencial",
     preco: "R$ 39/mês",
     descricao: "Ideal para lojas pequenas que querem sair do caderno e começar a organizar a operação.",
@@ -19,6 +20,7 @@ const planos = [
     ],
   },
   {
+    slug: "profissional",
     nome: "Profissional",
     preco: "R$ 89/mês",
     descricao: "Plano mais indicado para quem quer controle financeiro e visão real do negócio.",
@@ -34,6 +36,7 @@ const planos = [
     ],
   },
   {
+    slug: "premium",
     nome: "Premium",
     preco: "R$ 179/mês",
     descricao: "Para operações mais robustas e futuras funções premium do sistema.",
@@ -78,7 +81,7 @@ export default function PlanosPage() {
         <div style={gridPlanos}>
           {planos.map((plano) => (
             <div
-              key={plano.nome}
+              key={plano.slug}
               style={{
                 ...cardPlano,
                 ...(plano.destaque ? cardPlanoDestaque : {}),
@@ -101,7 +104,7 @@ export default function PlanosPage() {
               </div>
 
               <Link
-                href="/login"
+                href={`/login?plan=${plano.slug}`}
                 style={{
                   ...botaoPlano,
                   ...(plano.destaque ? botaoPlanoDestaque : {}),
@@ -148,12 +151,12 @@ export default function PlanosPage() {
         </p>
 
         <div style={ctaAcoes}>
-          <Link href="/login" style={botaoCtaPrincipal}>
+          <Link href="/login?plan=profissional" style={botaoCtaPrincipal}>
             Criar conta grátis
           </Link>
 
           <Link href="/" style={botaoCtaSecundario}>
-            Ir para a página inicial
+            Voltar ao início
           </Link>
         </div>
       </section>

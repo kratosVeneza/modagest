@@ -6,11 +6,14 @@ import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 import { Chrome, Mail, Lock, UserPlus, LogIn, ArrowLeft } from "lucide-react"
 import { ensureProfile } from "@/lib/ensureProfile"
+import { useSearchParams} from "next/navigation"
 
 type Modo = "entrar" | "criar"
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+const planoSelecionado = searchParams.get("plan") || "profissional"
 
   const [modo, setModo] = useState<Modo>("entrar")
   const [email, setEmail] = useState("")
@@ -19,6 +22,7 @@ export default function LoginPage() {
   const [carregando, setCarregando] = useState(false)
   const [mensagem, setMensagem] = useState("")
   const [erro, setErro] = useState("")
+  
 
   useEffect(() => {
     verificarSessao()
@@ -61,7 +65,10 @@ export default function LoginPage() {
       return
     }
 
-    await ensureProfile({ trialDays: 7 })
+    await ensureProfile({
+  trialDays: 7,
+  selectedPlan: planoSelecionado,
+})
     setCarregando(false)
     router.push("/dashboard")
   }
@@ -199,6 +206,16 @@ export default function LoginPage() {
 
             <h2 style={tituloStyle}>{titulo}</h2>
             <p style={subtituloStyle}>{subtitulo}</p>
+            <div style={planoSelecionadoBox}>
+  <span style={planoSelecionadoLabel}>Plano selecionado</span>
+  <strong style={planoSelecionadoValor}>
+    {planoSelecionado === "essencial"
+      ? "Essencial"
+      : planoSelecionado === "premium"
+      ? "Premium"
+      : "Profissional"}
+  </strong>
+</div>
 
             {erro && <div style={erroBox}>{erro}</div>}
             {mensagem && <div style={sucessoBox}>{mensagem}</div>}
@@ -548,3 +565,25 @@ const linkPlanos: React.CSSProperties = {
   fontWeight: 700,
   textDecoration: "none",
 } 
+const planoSelecionadoBox: React.CSSProperties = {
+  marginBottom: 16,
+  padding: "12px 14px",
+  borderRadius: 12,
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+}
+
+const planoSelecionadoLabel: React.CSSProperties = {
+  fontSize: 13,
+  color: "#2563eb",
+  fontWeight: 700,
+}
+
+const planoSelecionadoValor: React.CSSProperties = {
+  fontSize: 14,
+  color: "#1d4ed8",
+}
