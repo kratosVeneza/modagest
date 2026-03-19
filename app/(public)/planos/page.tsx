@@ -153,7 +153,7 @@ export default function PlanosPage() {
           </Link>
 
           <Link href="/" style={botaoCtaSecundario}>
-            Voltar para a landing page
+            Ir para a página inicial
           </Link>
         </div>
       </section>
