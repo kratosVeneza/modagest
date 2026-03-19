@@ -110,7 +110,7 @@ export default function PainelLayout({
 
   async function sair() {
     await supabase.auth.signOut()
-    router.replace("/login")
+    router.replace("/")
   }
 
   function alternarMenu() {
