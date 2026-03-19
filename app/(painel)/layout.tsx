@@ -62,38 +62,43 @@ export default function PainelLayout({
   const router = useRouter()
   const pathname = usePathname()
   const [menuFechado, setMenuFechado] = useState(false)
-  const [loadingAuth, setLoadingAuth] = useState(true)
+  const [carregandoAuth, setCarregandoAuth] = useState(true)
 
   useEffect(() => {
     const salvo = localStorage.getItem("modagest-menu-fechado")
     setMenuFechado(salvo === "true")
   }, [])
 
-  // 🔐 PROTEÇÃO DE ROTA
   useEffect(() => {
     let mounted = true
 
-    async function checkAuth() {
-      const { data, error } = await supabase.auth.getSession()
+    async function validarSessao() {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession()
 
       if (!mounted) return
 
-      if (error || !data.session) {
+      if (error || !session) {
         await supabase.auth.signOut()
-        router.push("/login")
+        router.replace("/login")
         return
       }
 
-      setLoadingAuth(false)
+      await ensureProfile({ trialDays: 7 })
+      setCarregandoAuth(false)
     }
 
-    checkAuth()
+    validarSessao()
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return
+
       if (!session) {
-        router.push("/login")
+        router.replace("/login")
       }
     })
 
@@ -103,20 +108,10 @@ export default function PainelLayout({
     }
   }, [router])
 
-  // 🧠 GARANTE PERFIL
-  useEffect(() => {
-    async function garantirPerfil() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session) return
-
-      await ensureProfile({ trialDays: 7 })
-    }
-
-    garantirPerfil()
-  }, [])
+  async function sair() {
+    await supabase.auth.signOut()
+    router.replace("/login")
+  }
 
   function alternarMenu() {
     const novoValor = !menuFechado
@@ -124,78 +119,106 @@ export default function PainelLayout({
     localStorage.setItem("modagest-menu-fechado", String(novoValor))
   }
 
-  async function sair() {
-    await supabase.auth.signOut()
-    router.push("/login")
-  }
-
-  // 🔥 EVITA PISCAR TELA
-  if (loadingAuth) {
-    return <div style={{ padding: 40 }}>Carregando...</div>
+  if (carregandoAuth) {
+    return (
+      <html lang="pt-BR">
+        <body style={{ padding: 32 }}>Carregando...</body>
+      </html>
+    )
   }
 
   return (
-    <div className={`app-shell ${menuFechado ? "menu-collapsed" : ""}`}>
-      <aside className={`sidebar ${menuFechado ? "sidebar-collapsed" : ""}`}>
-        <div className="logo-box">
-          <div className="logo-badge">M</div>
+    <html lang="pt-BR">
+      <body>
+        <div className={`app-shell ${menuFechado ? "menu-collapsed" : ""}`}>
+          <aside className={`sidebar ${menuFechado ? "sidebar-collapsed" : ""}`}>
+            <div className="logo-box">
+              <div className="logo-badge">M</div>
 
-          {!menuFechado && (
-            <div>
-              <h2 className="logo-title">ModaGest</h2>
-              <p className="logo-subtitle">Gestão para lojas</p>
+              {!menuFechado && (
+                <div>
+                  <h2 className="logo-title">ModaGest</h2>
+                  <p className="logo-subtitle">Gestão para lojas</p>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={alternarMenu}
+                className="sidebar-toggle-btn"
+                title={menuFechado ? "Abrir menu" : "Fechar menu"}
+              >
+                {menuFechado ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+              </button>
             </div>
-          )}
 
-          <button onClick={alternarMenu} className="sidebar-toggle-btn">
-            {menuFechado ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          </button>
+            <nav className="sidebar-nav">
+              {menuGroups.map((group) => (
+                <div key={group.title} className="menu-group">
+                  {!menuFechado && <p className="menu-group-title">{group.title}</p>}
+
+                  <div className="menu-group-items">
+                    {group.items.map((item) => {
+                      const ativo =
+                        pathname === item.href || pathname.startsWith(`${item.href}/`)
+                      const Icon = item.icon
+
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={`menu-link ${ativo ? "menu-link-active" : ""} ${
+                            menuFechado ? "menu-link-collapsed" : ""
+                          }`}
+                          title={menuFechado ? item.label : ""}
+                        >
+                          <span className="menu-icon">
+                            <Icon size={18} strokeWidth={2.2} />
+                          </span>
+                          {!menuFechado && <span>{item.label}</span>}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              <button
+                onClick={sair}
+                className={`menu-link-danger ${menuFechado ? "menu-link-collapsed" : ""}`}
+                title={menuFechado ? "Sair" : ""}
+              >
+                <span className="menu-icon">
+                  <LogOut size={18} strokeWidth={2.2} />
+                </span>
+                {!menuFechado && <span>Sair</span>}
+              </button>
+            </nav>
+          </aside>
+
+          <main className="main-area">
+            <header className="soft-card top-bar">
+              <div className="top-bar-content">
+                <div className="top-bar-left">
+                  <HeaderLoja />
+                  <p className="top-bar-subtitle">Painel de gestão da sua operação</p>
+                </div>
+
+                <div className="top-bar-actions">
+                  <ThemeToggle />
+                  <UserProfile />
+                </div>
+              </div>
+            </header>
+
+            <section>
+              <PageTransition>{children}</PageTransition>
+            </section>
+          </main>
+
+          <OnboardingTour />
         </div>
-
-        <nav className="sidebar-nav">
-          {menuGroups.map((group) => (
-            <div key={group.title} className="menu-group">
-              {!menuFechado && <p className="menu-group-title">{group.title}</p>}
-
-              {group.items.map((item) => {
-                const Icon = item.icon
-                const ativo =
-                  pathname === item.href || pathname.startsWith(item.href)
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`menu-link ${ativo ? "menu-link-active" : ""}`}
-                  >
-                    <Icon size={18} />
-                    {!menuFechado && <span>{item.label}</span>}
-                  </Link>
-                )
-              })}
-            </div>
-          ))}
-
-          <button onClick={sair} className="menu-link-danger">
-            <LogOut size={18} />
-            {!menuFechado && <span>Sair</span>}
-          </button>
-        </nav>
-      </aside>
-
-      <main className="main-area">
-        <header className="soft-card top-bar">
-          <HeaderLoja />
-          <div style={{ display: "flex", gap: 10 }}>
-            <ThemeToggle />
-            <UserProfile />
-          </div>
-        </header>
-
-        <PageTransition>{children}</PageTransition>
-      </main>
-
-      <OnboardingTour />
-    </div>
+      </body>
+    </html>
   )
 }
