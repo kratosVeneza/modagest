@@ -38,6 +38,7 @@ export async function ensureProfile(params?: EnsureProfileParams) {
     return { ok: false, error: selectError.message }
   }
 
+  // Se já existe perfil, não troca plano no login
   if (existingProfile) {
     return {
       ok: true,

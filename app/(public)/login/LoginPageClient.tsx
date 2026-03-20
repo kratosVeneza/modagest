@@ -30,22 +30,18 @@ export default function LoginPageClient({
 
   useEffect(() => {
     verificarSessao()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function verificarSessao() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
 
-  if (session) {
-    await ensureProfile({
-      trialDays: 7,
-      selectedPlan: planoSelecionado,
-    })
-
-    router.push("/dashboard")
+    if (session) {
+      router.push("/dashboard")
+    }
   }
-}
 
   const titulo = useMemo(() => {
     return modo === "entrar" ? "Entrar na sua conta" : "Criar sua conta"
@@ -53,7 +49,7 @@ export default function LoginPageClient({
 
   const subtitulo = useMemo(() => {
     return modo === "entrar"
-      ? "Acesse seu SaaS com email e senha ou continue com Google."
+      ? "Acesse sua conta com email e senha ou continue com Google."
       : "Crie sua conta para começar a usar o sistema."
   }, [modo])
 
@@ -74,64 +70,76 @@ export default function LoginPageClient({
       return
     }
 
-    await ensureProfile({
+    const result = await ensureProfile({
       trialDays: 7,
       selectedPlan: planoSelecionado,
     })
+
+    if (!result.ok) {
+      setCarregando(false)
+      setErro(result.error || "Não foi possível criar o perfil.")
+      return
+    }
 
     setCarregando(false)
     router.push("/dashboard")
   }
 
   async function criarConta(e: React.FormEvent) {
-  e.preventDefault()
-  setCarregando(true)
-  setMensagem("")
-  setErro("")
+    e.preventDefault()
+    setCarregando(true)
+    setMensagem("")
+    setErro("")
 
-  if (senha.length < 6) {
-    setCarregando(false)
-    setErro("A senha deve ter pelo menos 6 caracteres.")
-    return
-  }
+    if (senha.length < 6) {
+      setCarregando(false)
+      setErro("A senha deve ter pelo menos 6 caracteres.")
+      return
+    }
 
-  if (senha !== confirmarSenha) {
-    setCarregando(false)
-    setErro("As senhas não coincidem.")
-    return
-  }
+    if (senha !== confirmarSenha) {
+      setCarregando(false)
+      setErro("As senhas não coincidem.")
+      return
+    }
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password: senha,
-    options: {
-      emailRedirectTo: `${window.location.origin}/login?plan=${planoSelecionado}`,
-    },
-  })
-
-  if (error) {
-    setCarregando(false)
-    setErro(error.message || "Não foi possível criar a conta.")
-    return
-  }
-
-  // Se o Supabase já criar a sessão imediatamente
-  if (data.session) {
-    await ensureProfile({
-      trialDays: 7,
-      selectedPlan: planoSelecionado,
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: senha,
+      options: {
+        emailRedirectTo: `${window.location.origin}/login?plan=${planoSelecionado}`,
+      },
     })
 
-    setCarregando(false)
-    router.push("/dashboard")
-    return
-  }
+    if (error) {
+      setCarregando(false)
+      setErro(error.message || "Não foi possível criar a conta.")
+      return
+    }
 
-  setCarregando(false)
-  setMensagem("Conta criada com sucesso. Verifique seu email para confirmar o cadastro.")
-  setSenha("")
-  setConfirmarSenha("")
-}
+    // Em alguns projetos/configurações o signUp já cria sessão
+    if (data.session) {
+      const result = await ensureProfile({
+        trialDays: 7,
+        selectedPlan: planoSelecionado,
+      })
+
+      if (!result.ok) {
+        setCarregando(false)
+        setErro(result.error || "Não foi possível criar o perfil.")
+        return
+      }
+
+      setCarregando(false)
+      router.push("/dashboard")
+      return
+    }
+
+    setCarregando(false)
+    setMensagem("Conta criada com sucesso. Verifique seu email para confirmar o cadastro.")
+    setSenha("")
+    setConfirmarSenha("")
+  }
 
   async function entrarComGoogle() {
     setCarregando(true)
@@ -155,7 +163,6 @@ export default function LoginPageClient({
   async function onSubmit(e: React.FormEvent) {
     if (modo === "entrar") {
       await entrarComEmail(e)
-      
       return
     }
 
@@ -619,5 +626,4 @@ const linkPlanos: React.CSSProperties = {
   color: "#2563eb",
   fontWeight: 700,
   textDecoration: "none",
-} 
-
+}
