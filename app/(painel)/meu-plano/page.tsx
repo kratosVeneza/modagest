@@ -5,6 +5,7 @@ import { getMySubscription } from "@/lib/getMySubscription"
 import { cancelSubscription } from "@/lib/cancelSubscription"
 import { reactivateSubscription } from "@/lib/reactivateSubscription"
 import { registerManualPayment } from "@/lib/registerManualPayment"
+import { getMyPayments } from "@/lib/getMyPayments"
 
 type Subscription = {
   id: string
@@ -18,8 +19,21 @@ type Subscription = {
   blocked_at?: string | null
 }
 
+type Payment = {
+  id: string
+  amount: number
+  currency: string
+  status: string
+  payment_method: string | null
+  due_date: string | null
+  paid_at: string | null
+  payment_provider: string | null
+  created_at: string
+}
+
 export default function MeuPlanoPage() {
   const [assinatura, setAssinatura] = useState<Subscription | null>(null)
+  const [pagamentos, setPagamentos] = useState<Payment[]>([])
   const [carregando, setCarregando] = useState(true)
   const [cancelando, setCancelando] = useState(false)
   const [reativando, setReativando] = useState(false)
@@ -28,23 +42,33 @@ export default function MeuPlanoPage() {
   const [mensagem, setMensagem] = useState("")
 
   useEffect(() => {
-    carregarAssinatura()
+    carregarTudo()
   }, [])
 
-  async function carregarAssinatura() {
+  async function carregarTudo() {
     setCarregando(true)
     setErro("")
     setMensagem("")
 
-    const result = await getMySubscription()
+    const [subscriptionResult, paymentsResult] = await Promise.all([
+      getMySubscription(),
+      getMyPayments(),
+    ])
 
-    if (!result.ok) {
-      setErro(result.error || "Não foi possível carregar a assinatura.")
+    if (!subscriptionResult.ok) {
+      setErro(subscriptionResult.error || "Não foi possível carregar a assinatura.")
       setCarregando(false)
       return
     }
 
-    setAssinatura(result.subscription as Subscription)
+    if (!paymentsResult.ok) {
+      setErro(paymentsResult.error || "Não foi possível carregar os pagamentos.")
+      setCarregando(false)
+      return
+    }
+
+    setAssinatura(subscriptionResult.subscription as Subscription)
+    setPagamentos((paymentsResult.payments ?? []) as Payment[])
     setCarregando(false)
   }
 
@@ -88,6 +112,7 @@ export default function MeuPlanoPage() {
     setMensagem("Assinatura reativada com sucesso.")
     setAssinatura(result.subscription as Subscription)
     setReativando(false)
+    await carregarTudo()
   }
 
   async function pagarManual() {
@@ -104,8 +129,8 @@ export default function MeuPlanoPage() {
     }
 
     setMensagem("Pagamento registrado com sucesso. Assinatura desbloqueada/reativada.")
-    setAssinatura(result.subscription as Subscription)
     setPagando(false)
+    await carregarTudo()
   }
 
   function nomePlano(plan: string) {
@@ -114,7 +139,7 @@ export default function MeuPlanoPage() {
     return "Profissional"
   }
 
-  function nomeStatus(status: string) {
+  function nomeStatusAssinatura(status: string) {
     if (status === "trialing") return "Em teste grátis"
     if (status === "active") return "Ativo"
     if (status === "past_due") return "Pagamento pendente"
@@ -122,6 +147,37 @@ export default function MeuPlanoPage() {
     if (status === "blocked") return "Bloqueado"
     if (status === "expired") return "Expirado"
     return status
+  }
+
+  function nomeStatusPagamento(status: string) {
+    if (status === "paid") return "Pago"
+    if (status === "pending") return "Pendente"
+    if (status === "failed") return "Falhou"
+    if (status === "refunded") return "Reembolsado"
+    return status
+  }
+
+  function formatarValor(valor: number, moeda = "BRL") {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: moeda || "BRL",
+    }).format(Number(valor || 0))
+  }
+
+  function corStatusPagamento(status: string) {
+    if (status === "paid") return "#065f46"
+    if (status === "pending") return "#92400e"
+    if (status === "failed") return "#991b1b"
+    if (status === "refunded") return "#1d4ed8"
+    return "#334155"
+  }
+
+  function fundoStatusPagamento(status: string) {
+    if (status === "paid") return "#ecfdf5"
+    if (status === "pending") return "#fffbeb"
+    if (status === "failed") return "#fef2f2"
+    if (status === "refunded") return "#eff6ff"
+    return "#f8fafc"
   }
 
   if (carregando) {
@@ -141,7 +197,7 @@ export default function MeuPlanoPage() {
         {erro && <div style={erroBox}>{erro}</div>}
 
         <p><strong>Plano atual:</strong> {nomePlano(assinatura?.plan_slug || "profissional")}</p>
-        <p><strong>Status:</strong> {nomeStatus(assinatura?.status || "-")}</p>
+        <p><strong>Status:</strong> {nomeStatusAssinatura(assinatura?.status || "-")}</p>
         <p>
           <strong>Fim do trial:</strong>{" "}
           {assinatura?.trial_ends_at
@@ -196,6 +252,69 @@ export default function MeuPlanoPage() {
           )}
         </div>
       </div>
+
+      <div style={{ height: 20 }} />
+
+      <div style={card}>
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>Histórico de pagamentos</h2>
+
+        {pagamentos.length === 0 ? (
+          <p style={{ color: "#64748b", margin: 0 }}>
+            Nenhum pagamento encontrado até o momento.
+          </p>
+        ) : (
+          <div style={listaPagamentos}>
+            {pagamentos.map((pagamento) => (
+              <div key={pagamento.id} style={itemPagamento}>
+                <div style={itemPagamentoTopo}>
+                  <div>
+                    <div style={valorPagamento}>
+                      {formatarValor(pagamento.amount, pagamento.currency)}
+                    </div>
+                    <div style={metaPagamento}>
+                      Método: {pagamento.payment_method || "-"} • Provedor:{" "}
+                      {pagamento.payment_provider || "-"}
+                    </div>
+                  </div>
+
+                  <span
+                    style={{
+                      ...tagStatus,
+                      color: corStatusPagamento(pagamento.status),
+                      background: fundoStatusPagamento(pagamento.status),
+                    }}
+                  >
+                    {nomeStatusPagamento(pagamento.status)}
+                  </span>
+                </div>
+
+                <div style={datasPagamento}>
+                  <span>
+                    <strong>Vencimento:</strong>{" "}
+                    {pagamento.due_date
+                      ? new Date(pagamento.due_date).toLocaleDateString("pt-BR")
+                      : "-"}
+                  </span>
+
+                  <span>
+                    <strong>Pago em:</strong>{" "}
+                    {pagamento.paid_at
+                      ? new Date(pagamento.paid_at).toLocaleDateString("pt-BR")
+                      : "-"}
+                  </span>
+
+                  <span>
+                    <strong>Criado em:</strong>{" "}
+                    {pagamento.created_at
+                      ? new Date(pagamento.created_at).toLocaleDateString("pt-BR")
+                      : "-"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -206,7 +325,7 @@ const card: React.CSSProperties = {
   borderRadius: 16,
   padding: 20,
   boxShadow: "0 8px 24px rgba(15,23,42,0.05)",
-  maxWidth: 640,
+  maxWidth: 760,
 }
 
 const acoesWrap: React.CSSProperties = {
@@ -267,3 +386,51 @@ const erroBox: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 600,
 }
+
+const listaPagamentos: React.CSSProperties = {
+  display: "grid",
+  gap: 14,
+}
+
+const itemPagamento: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 16,
+  background: "#fafafa",
+}
+
+const itemPagamentoTopo: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "flex-start",
+  flexWrap: "wrap",
+}
+
+const valorPagamento: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 800,
+  color: "#0f172a",
+}
+
+const metaPagamento: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 13,
+  color: "#64748b",
+}
+
+const datasPagamento: React.CSSProperties = {
+  marginTop: 14,
+  display: "grid",
+  gap: 6,
+  fontSize: 14,
+  color: "#334155",
+}
+
+const tagStatus: React.CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 800,
+}
+
