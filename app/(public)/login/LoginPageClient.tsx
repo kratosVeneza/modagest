@@ -33,14 +33,19 @@ export default function LoginPageClient({
   }, [])
 
   async function verificarSessao() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
-    if (session) {
-      router.push("/dashboard")
-    }
+  if (session) {
+    await ensureProfile({
+      trialDays: 7,
+      selectedPlan: planoSelecionado,
+    })
+
+    router.push("/dashboard")
   }
+}
 
   const titulo = useMemo(() => {
     return modo === "entrar" ? "Entrar na sua conta" : "Criar sua conta"
@@ -79,42 +84,54 @@ export default function LoginPageClient({
   }
 
   async function criarConta(e: React.FormEvent) {
-    e.preventDefault()
-    setCarregando(true)
-    setMensagem("")
-    setErro("")
+  e.preventDefault()
+  setCarregando(true)
+  setMensagem("")
+  setErro("")
 
-    if (senha.length < 6) {
-      setCarregando(false)
-      setErro("A senha deve ter pelo menos 6 caracteres.")
-      return
-    }
+  if (senha.length < 6) {
+    setCarregando(false)
+    setErro("A senha deve ter pelo menos 6 caracteres.")
+    return
+  }
 
-    if (senha !== confirmarSenha) {
-      setCarregando(false)
-      setErro("As senhas não coincidem.")
-      return
-    }
+  if (senha !== confirmarSenha) {
+    setCarregando(false)
+    setErro("As senhas não coincidem.")
+    return
+  }
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password: senha,
-      options: {
-        emailRedirectTo: `${window.location.origin}/login`,
-      },
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: senha,
+    options: {
+      emailRedirectTo: `${window.location.origin}/login?plan=${planoSelecionado}`,
+    },
+  })
+
+  if (error) {
+    setCarregando(false)
+    setErro(error.message || "Não foi possível criar a conta.")
+    return
+  }
+
+  // Se o Supabase já criar a sessão imediatamente
+  if (data.session) {
+    await ensureProfile({
+      trialDays: 7,
+      selectedPlan: planoSelecionado,
     })
 
     setCarregando(false)
-
-    if (error) {
-      setErro(error.message || "Não foi possível criar a conta.")
-      return
-    }
-
-    setMensagem("Conta criada com sucesso. Verifique seu email para confirmar o cadastro.")
-    setSenha("")
-    setConfirmarSenha("")
+    router.push("/dashboard")
+    return
   }
+
+  setCarregando(false)
+  setMensagem("Conta criada com sucesso. Verifique seu email para confirmar o cadastro.")
+  setSenha("")
+  setConfirmarSenha("")
+}
 
   async function entrarComGoogle() {
     setCarregando(true)
@@ -138,6 +155,7 @@ export default function LoginPageClient({
   async function onSubmit(e: React.FormEvent) {
     if (modo === "entrar") {
       await entrarComEmail(e)
+      
       return
     }
 
