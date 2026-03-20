@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import { getMySubscription } from "@/lib/getMySubscription"
 import { cancelSubscription } from "@/lib/cancelSubscription"
+import { reactivateSubscription } from "@/lib/reactivateSubscription"
+import { registerManualPayment } from "@/lib/registerManualPayment"
 
 type Subscription = {
   id: string
@@ -13,12 +15,15 @@ type Subscription = {
   current_period_end: string | null
   cancel_at_period_end: boolean
   canceled_at: string | null
+  blocked_at?: string | null
 }
 
 export default function MeuPlanoPage() {
   const [assinatura, setAssinatura] = useState<Subscription | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [cancelando, setCancelando] = useState(false)
+  const [reativando, setReativando] = useState(false)
+  const [pagando, setPagando] = useState(false)
   const [erro, setErro] = useState("")
   const [mensagem, setMensagem] = useState("")
 
@@ -67,6 +72,42 @@ export default function MeuPlanoPage() {
     setCancelando(false)
   }
 
+  async function reativarPlano() {
+    setReativando(true)
+    setErro("")
+    setMensagem("")
+
+    const result = await reactivateSubscription()
+
+    if (!result.ok) {
+      setErro(result.error || "Não foi possível reativar a assinatura.")
+      setReativando(false)
+      return
+    }
+
+    setMensagem("Assinatura reativada com sucesso.")
+    setAssinatura(result.subscription as Subscription)
+    setReativando(false)
+  }
+
+  async function pagarManual() {
+    setPagando(true)
+    setErro("")
+    setMensagem("")
+
+    const result = await registerManualPayment()
+
+    if (!result.ok) {
+      setErro(result.error || "Não foi possível registrar o pagamento.")
+      setPagando(false)
+      return
+    }
+
+    setMensagem("Pagamento registrado com sucesso. Assinatura desbloqueada/reativada.")
+    setAssinatura(result.subscription as Subscription)
+    setPagando(false)
+  }
+
   function nomePlano(plan: string) {
     if (plan === "essencial") return "Essencial"
     if (plan === "premium") return "Premium"
@@ -87,7 +128,7 @@ export default function MeuPlanoPage() {
     return <div style={{ padding: 24 }}>Carregando assinatura...</div>
   }
 
-  if (erro) {
+  if (erro && !assinatura) {
     return <div style={{ padding: 24, color: "#b91c1c" }}>{erro}</div>
   }
 
@@ -97,6 +138,7 @@ export default function MeuPlanoPage() {
 
       <div style={card}>
         {mensagem && <div style={sucessoBox}>{mensagem}</div>}
+        {erro && <div style={erroBox}>{erro}</div>}
 
         <p><strong>Plano atual:</strong> {nomePlano(assinatura?.plan_slug || "profissional")}</p>
         <p><strong>Status:</strong> {nomeStatus(assinatura?.status || "-")}</p>
@@ -117,16 +159,42 @@ export default function MeuPlanoPage() {
           {assinatura?.cancel_at_period_end ? "Sim" : "Não"}
         </p>
 
-        {!assinatura?.cancel_at_period_end && (
-          <button
-            type="button"
-            onClick={cancelarPlano}
-            disabled={cancelando}
-            style={botaoCancelar}
-          >
-            {cancelando ? "Cancelando..." : "Cancelar assinatura"}
-          </button>
-        )}
+        <div style={acoesWrap}>
+          {!assinatura?.cancel_at_period_end && (
+            <button
+              type="button"
+              onClick={cancelarPlano}
+              disabled={cancelando}
+              style={botaoCancelar}
+            >
+              {cancelando ? "Cancelando..." : "Cancelar assinatura"}
+            </button>
+          )}
+
+          {assinatura?.cancel_at_period_end && (
+            <button
+              type="button"
+              onClick={reativarPlano}
+              disabled={reativando}
+              style={botaoReativar}
+            >
+              {reativando ? "Reativando..." : "Reativar assinatura"}
+            </button>
+          )}
+
+          {(assinatura?.status === "blocked" ||
+            assinatura?.status === "past_due" ||
+            assinatura?.status === "canceled") && (
+            <button
+              type="button"
+              onClick={pagarManual}
+              disabled={pagando}
+              style={botaoPagar}
+            >
+              {pagando ? "Processando..." : "Registrar pagamento manual"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -138,13 +206,39 @@ const card: React.CSSProperties = {
   borderRadius: 16,
   padding: 20,
   boxShadow: "0 8px 24px rgba(15,23,42,0.05)",
-  maxWidth: 560,
+  maxWidth: 640,
+}
+
+const acoesWrap: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  marginTop: 20,
 }
 
 const botaoCancelar: React.CSSProperties = {
-  marginTop: 18,
   border: "none",
   background: "#dc2626",
+  color: "#fff",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+}
+
+const botaoReativar: React.CSSProperties = {
+  border: "none",
+  background: "#2563eb",
+  color: "#fff",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+}
+
+const botaoPagar: React.CSSProperties = {
+  border: "none",
+  background: "#059669",
   color: "#fff",
   padding: "12px 16px",
   borderRadius: 12,
@@ -156,6 +250,17 @@ const sucessoBox: React.CSSProperties = {
   background: "#ecfdf5",
   color: "#065f46",
   border: "1px solid #a7f3d0",
+  padding: "12px 14px",
+  borderRadius: 12,
+  marginBottom: 14,
+  fontSize: 14,
+  fontWeight: 600,
+}
+
+const erroBox: React.CSSProperties = {
+  background: "#fef2f2",
+  color: "#991b1b",
+  border: "1px solid #fecaca",
   padding: "12px 14px",
   borderRadius: 12,
   marginBottom: 14,
