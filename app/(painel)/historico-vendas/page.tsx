@@ -10,6 +10,8 @@ import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 import AnimatedModal from "../../components/AnimatedModal"
 import HelpTooltip from "../../components/HelpTooltip"
 import HelpBanner from "../../components/InfoBanner"
+import { getMyPlanAccess } from "@/lib/getMyPlanAccess"
+import FeatureBlockedCard from "@/app/components/FeatureBlockedCard"
 
 type VendaBanco = {
   id: number
@@ -104,6 +106,9 @@ function montarDataISO(dataInput: string) {
 }
 
 export default function HistoricoVendas() {
+  const [loadingAccess, setLoadingAccess] = useState(true)
+  const [hasAccess, setHasAccess] = useState(false)
+
   const [vendas, setVendas] = useState<VendaExibicao[]>([])
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
@@ -121,8 +126,20 @@ export default function HistoricoVendas() {
   const [salvandoPagamento, setSalvandoPagamento] = useState(false)
 
   useEffect(() => {
-    carregarVendas()
+    validarAcesso()
   }, [])
+
+  useEffect(() => {
+    if (hasAccess) {
+      carregarVendas()
+    }
+  }, [hasAccess])
+
+  async function validarAcesso() {
+    const result = await getMyPlanAccess("historico_vendas")
+    setHasAccess(result.hasAccess)
+    setLoadingAccess(false)
+  }
 
   function calcularStatusPagamento(
     valorTotal: number,
@@ -549,6 +566,21 @@ export default function HistoricoVendas() {
     })
 
     doc.save("historico_vendas.pdf")
+  }
+
+  if (loadingAccess) {
+    return <div style={{ padding: 24 }}>Carregando...</div>
+  }
+
+  if (!hasAccess) {
+    return (
+      <div style={{ padding: 24 }}>
+        <FeatureBlockedCard
+          title="Histórico de vendas é do plano Profissional"
+          description="Atualize seu plano para acompanhar todas as vendas, pagamentos e saldos em aberto."
+        />
+      </div>
+    )
   }
 
   return (

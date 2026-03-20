@@ -1,5 +1,4 @@
 "use client"
-
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import jsPDF from "jspdf"
@@ -9,6 +8,8 @@ import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import AnimatedModal from "../../components/AnimatedModal"
 import HelpTooltip from "../../components/HelpTooltip"
 import HelpBanner from "../../components/InfoBanner"
+import { getMyPlanAccess } from "@/lib/getMyPlanAccess"
+import FeatureBlockedCard from "@/app/components/FeatureBlockedCard"
 
 type SalePayment = {
   id: number
@@ -88,6 +89,9 @@ function montarDataISO(dataInput: string) {
 }
 
 export default function Financeiro() {
+  const [loadingAccess, setLoadingAccess] = useState(true)
+  const [hasAccess, setHasAccess] = useState(false)
+
   const [pagamentosVendas, setPagamentosVendas] = useState<SalePayment[]>([])
   const [movimentacoes, setMovimentacoes] = useState<FinancialTransaction[]>([])
   const [mensagem, setMensagem] = useState("")
@@ -96,7 +100,6 @@ export default function Financeiro() {
   const [busca, setBusca] = useState("")
   const [filtroStatus, setFiltroStatus] = useState("Todos")
   const [filtroTipo, setFiltroTipo] = useState("Todos")
-
   const [modalAberto, setModalAberto] = useState(false)
   const [idEdicao, setIdEdicao] = useState<number | null>(null)
   const [tipo, setTipo] = useState<"entrada" | "saida">("saida")
@@ -108,8 +111,20 @@ export default function Financeiro() {
   const [dataPagamento, setDataPagamento] = useState("")
 
   useEffect(() => {
-    carregarFinanceiro()
+    validarAcesso()
   }, [])
+
+  useEffect(() => {
+    if (hasAccess) {
+      carregarFinanceiro()
+    }
+  }, [hasAccess])
+
+  async function validarAcesso() {
+    const result = await getMyPlanAccess("financeiro")
+    setHasAccess(result.hasAccess)
+    setLoadingAccess(false)
+  }
 
   async function carregarFinanceiro() {
     setMensagem("")
@@ -304,7 +319,6 @@ export default function Financeiro() {
 
   async function marcarComoPago(item: FinancialTransaction) {
     setMensagem("")
-
     if (item.status === "pago") return
 
     const {
@@ -519,6 +533,21 @@ export default function Financeiro() {
     })
 
     doc.save("financeiro_completo.pdf")
+  }
+
+  if (loadingAccess) {
+    return <div style={{ padding: 24 }}>Carregando...</div>
+  }
+
+  if (!hasAccess) {
+    return (
+      <div style={{ padding: 24 }}>
+        <FeatureBlockedCard
+          title="Financeiro é do plano Profissional"
+          description="Atualize seu plano para controlar entradas, saídas e lucro da sua loja."
+        />
+      </div>
+    )
   }
 
   return (
