@@ -87,7 +87,19 @@ export default function PainelLayout({
         return
       }
 
-      await ensureProfile({ trialDays: 7 })
+      const planoStorage =
+  typeof window !== "undefined"
+    ? localStorage.getItem("modagest_selected_plan") || undefined
+    : undefined
+
+await ensureProfile({
+  trialDays: 7,
+  selectedPlan: planoStorage,
+})
+
+if (typeof window !== "undefined" && planoStorage) {
+  localStorage.removeItem("modagest_selected_plan")
+}
       setCarregandoAuth(false)
     }
 

@@ -26,12 +26,22 @@ export default function LoginPageClient({
   const [mensagem, setMensagem] = useState("")
   const [erro, setErro] = useState("")
 
-  const planoSelecionado = initialPlan || "profissional"
+  const [planoSelecionado, setPlanoSelecionado] = useState(initialPlan || "profissional")
+
 
   useEffect(() => {
     verificarSessao()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+  if (typeof window === "undefined") return
+
+  const planoStorage = localStorage.getItem("modagest_selected_plan")
+  if (planoStorage) {
+    setPlanoSelecionado(planoStorage)
+  }
+}, [])
 
   async function verificarSessao() {
     const {
@@ -80,6 +90,10 @@ export default function LoginPageClient({
       setErro(result.error || "Não foi possível criar o perfil.")
       return
     }
+
+    if (typeof window !== "undefined") {
+  localStorage.removeItem("modagest_selected_plan")
+}
 
     setCarregando(false)
     router.push("/dashboard")
@@ -133,12 +147,16 @@ export default function LoginPageClient({
       setCarregando(false)
       router.push("/dashboard")
       return
+
     }
 
     setCarregando(false)
     setMensagem("Conta criada com sucesso. Verifique seu email para confirmar o cadastro.")
     setSenha("")
     setConfirmarSenha("")
+    if (typeof window !== "undefined") {
+  localStorage.removeItem("modagest_selected_plan")
+}
   }
 
   async function entrarComGoogle() {

@@ -103,15 +103,23 @@ export default function PlanosPage() {
                 ))}
               </div>
 
-              <Link
-                href={`/login?plan=${plano.slug}`}
-                style={{
-                  ...botaoPlano,
-                  ...(plano.destaque ? botaoPlanoDestaque : {}),
-                }}
-              >
-                Escolher plano
-              </Link>
+              <button
+  type="button"
+  onClick={() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("modagest_selected_plan", plano.slug)
+      window.location.href = `/login?plan=${plano.slug}`
+    }
+  }}
+  style={{
+    ...botaoPlano,
+    ...(plano.destaque ? botaoPlanoDestaque : {}),
+    border: "none",
+    cursor: "pointer",
+  }}
+>
+  Escolher plano
+</button>
             </div>
           ))}
         </div>
