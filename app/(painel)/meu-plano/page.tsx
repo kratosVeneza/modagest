@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { getMySubscription } from "@/lib/getMySubscription"
+import { cancelSubscription } from "@/lib/cancelSubscription"
 
 type Subscription = {
+  id: string
   plan_slug: string
   status: string
   trial_ends_at: string | null
@@ -16,7 +18,9 @@ type Subscription = {
 export default function MeuPlanoPage() {
   const [assinatura, setAssinatura] = useState<Subscription | null>(null)
   const [carregando, setCarregando] = useState(true)
+  const [cancelando, setCancelando] = useState(false)
   const [erro, setErro] = useState("")
+  const [mensagem, setMensagem] = useState("")
 
   useEffect(() => {
     carregarAssinatura()
@@ -25,6 +29,7 @@ export default function MeuPlanoPage() {
   async function carregarAssinatura() {
     setCarregando(true)
     setErro("")
+    setMensagem("")
 
     const result = await getMySubscription()
 
@@ -36,6 +41,30 @@ export default function MeuPlanoPage() {
 
     setAssinatura(result.subscription as Subscription)
     setCarregando(false)
+  }
+
+  async function cancelarPlano() {
+    const confirmado = window.confirm(
+      "Tem certeza que deseja cancelar? Você continuará com acesso até o fim do período atual."
+    )
+
+    if (!confirmado) return
+
+    setCancelando(true)
+    setErro("")
+    setMensagem("")
+
+    const result = await cancelSubscription()
+
+    if (!result.ok) {
+      setErro(result.error || "Não foi possível cancelar a assinatura.")
+      setCancelando(false)
+      return
+    }
+
+    setMensagem("Assinatura cancelada com sucesso. O acesso continuará até o fim do período atual.")
+    setAssinatura(result.subscription as Subscription)
+    setCancelando(false)
   }
 
   function nomePlano(plan: string) {
@@ -67,6 +96,8 @@ export default function MeuPlanoPage() {
       <h1 style={{ marginTop: 0 }}>Meu Plano</h1>
 
       <div style={card}>
+        {mensagem && <div style={sucessoBox}>{mensagem}</div>}
+
         <p><strong>Plano atual:</strong> {nomePlano(assinatura?.plan_slug || "profissional")}</p>
         <p><strong>Status:</strong> {nomeStatus(assinatura?.status || "-")}</p>
         <p>
@@ -85,6 +116,17 @@ export default function MeuPlanoPage() {
           <strong>Cancelar ao fim do período:</strong>{" "}
           {assinatura?.cancel_at_period_end ? "Sim" : "Não"}
         </p>
+
+        {!assinatura?.cancel_at_period_end && (
+          <button
+            type="button"
+            onClick={cancelarPlano}
+            disabled={cancelando}
+            style={botaoCancelar}
+          >
+            {cancelando ? "Cancelando..." : "Cancelar assinatura"}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -97,4 +139,26 @@ const card: React.CSSProperties = {
   padding: 20,
   boxShadow: "0 8px 24px rgba(15,23,42,0.05)",
   maxWidth: 560,
+}
+
+const botaoCancelar: React.CSSProperties = {
+  marginTop: 18,
+  border: "none",
+  background: "#dc2626",
+  color: "#fff",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+}
+
+const sucessoBox: React.CSSProperties = {
+  background: "#ecfdf5",
+  color: "#065f46",
+  border: "1px solid #a7f3d0",
+  padding: "12px 14px",
+  borderRadius: 12,
+  marginBottom: 14,
+  fontSize: 14,
+  fontWeight: 600,
 }

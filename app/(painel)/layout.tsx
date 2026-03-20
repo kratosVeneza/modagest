@@ -11,6 +11,8 @@ import ThemeToggle from "../components/ThemeToggle"
 import PageTransition from "../components/PageTransition"
 import OnboardingTour from "../components/OnboardingTour"
 import { ensureProfile } from "@/lib/ensureProfile"
+import { ensureSubscription } from "@/lib/ensureSubscription"
+import { checkSubscriptionAccess } from "@/lib/checkSubscriptionAccess"
 import {
   LayoutDashboard,
   Package,
@@ -71,55 +73,76 @@ export default function PainelLayout({
   }, [])
 
   useEffect(() => {
-    let mounted = true
+  let mounted = true
 
-    async function validarSessao() {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession()
+  async function validarSessaoEAssinatura() {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession()
 
-      if (!mounted) return
+    if (!mounted) return
 
-      if (error || !session) {
-        await supabase.auth.signOut()
-        router.replace("/login")
-        return
-      }
-
-      const planoStorage =
-  typeof window !== "undefined"
-    ? localStorage.getItem("modagest_selected_plan") || undefined
-    : undefined
-
-await ensureProfile({
-  trialDays: 7,
-  selectedPlan: planoStorage,
-})
-
-if (typeof window !== "undefined" && planoStorage) {
-  localStorage.removeItem("modagest_selected_plan")
-}
-      setCarregandoAuth(false)
+    if (error || !session) {
+      await supabase.auth.signOut()
+      router.replace("/login")
+      return
     }
 
-    validarSessao()
+    const planoStorage =
+      typeof window !== "undefined"
+        ? localStorage.getItem("modagest_selected_plan") || undefined
+        : undefined
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!mounted) return
-
-      if (!session) {
-        router.replace("/login")
-      }
+    await ensureProfile({
+      trialDays: 7,
+      selectedPlan: planoStorage,
     })
 
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
+    await ensureSubscription({
+      trialDays: 7,
+      selectedPlan: planoStorage,
+    })
+
+    if (typeof window !== "undefined" && planoStorage) {
+      localStorage.removeItem("modagest_selected_plan")
     }
-  }, [router])
+
+    const accessResult = await checkSubscriptionAccess()
+
+    if (!mounted) return
+
+    if (!accessResult.ok) {
+      router.replace("/meu-plano")
+      return
+    }
+
+    if (!accessResult.hasAccess && pathname !== "/meu-plano") {
+      router.replace("/meu-plano")
+      return
+    }
+
+    setCarregandoAuth(false)
+  }
+
+  validarSessaoEAssinatura()
+
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    if (!mounted) return
+
+    if (!session) {
+      router.replace("/login")
+    }
+  })
+
+  return () => {
+    mounted = false
+    subscription.unsubscribe()
+  }
+}, [router, pathname])
+, [router]
 
   async function sair() {
     await supabase.auth.signOut()
