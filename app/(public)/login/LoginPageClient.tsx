@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 import { Chrome, Mail, Lock, UserPlus, LogIn, ArrowLeft } from "lucide-react"
 import { ensureProfile } from "@/lib/ensureProfile"
+import { ensureSubscription } from "@/lib/ensureSubscription"
 
 type Modo = "entrar" | "criar"
 
@@ -85,6 +86,18 @@ export default function LoginPageClient({
       selectedPlan: planoSelecionado,
     })
 
+    const subscriptionResult = await ensureSubscription({
+  trialDays: 7,
+  selectedPlan: planoSelecionado,
+})
+
+if (!subscriptionResult.ok) {
+  setCarregando(false)
+  setErro(subscriptionResult.error || "Não foi possível criar a assinatura.")
+  return
+}
+
+
     if (!result.ok) {
       setCarregando(false)
       setErro(result.error || "Não foi possível criar o perfil.")
@@ -137,6 +150,18 @@ export default function LoginPageClient({
         trialDays: 7,
         selectedPlan: planoSelecionado,
       })
+
+      const subscriptionResult = await ensureSubscription({
+  trialDays: 7,
+  selectedPlan: planoSelecionado,
+})
+
+if (!subscriptionResult.ok) {
+  setCarregando(false)
+  setErro(subscriptionResult.error || "Não foi possível criar a assinatura.")
+  return
+}
+
 
       if (!result.ok) {
         setCarregando(false)

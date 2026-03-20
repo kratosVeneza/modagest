@@ -1,37 +1,40 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { getMyProfile } from "@/lib/getMyProfile"
+import { getMySubscription } from "@/lib/getMySubscription"
 
-type Profile = {
+type Subscription = {
   plan_slug: string
-  subscription_status: string
+  status: string
   trial_ends_at: string | null
-  email: string | null
+  current_period_start: string | null
+  current_period_end: string | null
+  cancel_at_period_end: boolean
+  canceled_at: string | null
 }
 
 export default function MeuPlanoPage() {
-  const [perfil, setPerfil] = useState<Profile | null>(null)
+  const [assinatura, setAssinatura] = useState<Subscription | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState("")
 
   useEffect(() => {
-    carregarPerfil()
+    carregarAssinatura()
   }, [])
 
-  async function carregarPerfil() {
+  async function carregarAssinatura() {
     setCarregando(true)
     setErro("")
 
-    const result = await getMyProfile()
+    const result = await getMySubscription()
 
     if (!result.ok) {
-      setErro(result.error || "Não foi possível carregar o plano.")
+      setErro(result.error || "Não foi possível carregar a assinatura.")
       setCarregando(false)
       return
     }
 
-    setPerfil(result.profile as Profile)
+    setAssinatura(result.subscription as Subscription)
     setCarregando(false)
   }
 
@@ -41,8 +44,18 @@ export default function MeuPlanoPage() {
     return "Profissional"
   }
 
+  function nomeStatus(status: string) {
+    if (status === "trialing") return "Em teste grátis"
+    if (status === "active") return "Ativo"
+    if (status === "past_due") return "Pagamento pendente"
+    if (status === "canceled") return "Cancelado"
+    if (status === "blocked") return "Bloqueado"
+    if (status === "expired") return "Expirado"
+    return status
+  }
+
   if (carregando) {
-    return <div style={{ padding: 24 }}>Carregando plano...</div>
+    return <div style={{ padding: 24 }}>Carregando assinatura...</div>
   }
 
   if (erro) {
@@ -54,15 +67,24 @@ export default function MeuPlanoPage() {
       <h1 style={{ marginTop: 0 }}>Meu Plano</h1>
 
       <div style={card}>
-        <p><strong>Plano atual:</strong> {nomePlano(perfil?.plan_slug || "profissional")}</p>
-        <p><strong>Status:</strong> {perfil?.subscription_status || "-"}</p>
+        <p><strong>Plano atual:</strong> {nomePlano(assinatura?.plan_slug || "profissional")}</p>
+        <p><strong>Status:</strong> {nomeStatus(assinatura?.status || "-")}</p>
         <p>
-          <strong>Trial até:</strong>{" "}
-          {perfil?.trial_ends_at
-            ? new Date(perfil.trial_ends_at).toLocaleDateString("pt-BR")
+          <strong>Fim do trial:</strong>{" "}
+          {assinatura?.trial_ends_at
+            ? new Date(assinatura.trial_ends_at).toLocaleDateString("pt-BR")
             : "-"}
         </p>
-        <p><strong>Email:</strong> {perfil?.email || "-"}</p>
+        <p>
+          <strong>Período atual até:</strong>{" "}
+          {assinatura?.current_period_end
+            ? new Date(assinatura.current_period_end).toLocaleDateString("pt-BR")
+            : "-"}
+        </p>
+        <p>
+          <strong>Cancelar ao fim do período:</strong>{" "}
+          {assinatura?.cancel_at_period_end ? "Sim" : "Não"}
+        </p>
       </div>
     </div>
   )
@@ -74,5 +96,5 @@ const card: React.CSSProperties = {
   borderRadius: 16,
   padding: 20,
   boxShadow: "0 8px 24px rgba(15,23,42,0.05)",
-  maxWidth: 520,
+  maxWidth: 560,
 }
