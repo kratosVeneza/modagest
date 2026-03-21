@@ -77,7 +77,7 @@ export default function HomePage() {
             width={0}
             height={0}
             sizes= "100vw"
-            style={{ width: "250px", height: "auto" }}
+            style={{ width: "350px", height: "auto" }}
             priority
           />
         </div>
