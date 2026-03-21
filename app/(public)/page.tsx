@@ -74,9 +74,10 @@ export default function HomePage() {
           <Image
             src="/images/logo.png"
             alt="Logo Modagest"
-            width={180}
-            height={52}
-            style={{ height: "auto", width: "auto", maxWidth: "180px" }}
+            width={0}
+            height={0}
+            sizes= "100vw"
+            style={{ width: "180px", height: "auto" }}
             priority
           />
         </div>
