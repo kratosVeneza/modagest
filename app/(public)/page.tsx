@@ -418,7 +418,7 @@ const heroBannerBox: React.CSSProperties = {
 }
 
 const heroBannerImage: React.CSSProperties = {
-  objectFit: "contain",
+  objectFit: "cover",
 }
 
 const secao: React.CSSProperties = {
@@ -606,7 +606,7 @@ const bannerColuna: React.CSSProperties = {
 const bannerCard: React.CSSProperties = {
   position: "relative",
   width: "100%",
-  minHeight: 240,
+  minHeight: 280,
   borderRadius: 24,
   overflow: "hidden",
   background: "#ffffff",
@@ -614,11 +614,11 @@ const bannerCard: React.CSSProperties = {
 }
 
 const bannerGrande: React.CSSProperties = {
-  minHeight: 500,
+  minHeight: 560,
 }
 
 const bannerImage: React.CSSProperties = {
-  objectFit: "contain",
+  objectFit: "cover",
 }
 
 const beneficiosBox: React.CSSProperties = {
