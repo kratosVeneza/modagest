@@ -49,7 +49,11 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
   let assinaturaAtual = subscription
 
   const pendingPlanResult = await applyPendingPlanIfDue(assinaturaAtual)
-  if (pendingPlanResult.ok && pendingPlanResult.updated && pendingPlanResult.subscription) {
+  if (
+    pendingPlanResult.ok &&
+    pendingPlanResult.updated &&
+    pendingPlanResult.subscription
+  ) {
     assinaturaAtual = pendingPlanResult.subscription
   }
 
@@ -61,36 +65,41 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
     ? new Date(assinaturaAtual.current_period_end)
     : null
 
+  // ACTIVE:
+  // Se ainda está dentro do período, acessa normalmente.
+  // Se venceu, vira past_due e perde acesso até pagamento/reativação.
   if (assinaturaAtual.status === "active") {
-    if (currentPeriodEnd && now > currentPeriodEnd) {
-      const novoFim = new Date(currentPeriodEnd)
-      novoFim.setMonth(novoFim.getMonth() + 1)
-
-      const { data: renewedSubscription } = await supabase
-        .from("subscriptions")
-        .update({
-          current_period_start: currentPeriodEnd.toISOString(),
-          current_period_end: novoFim.toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", assinaturaAtual.id)
-        .select("*")
-        .single()
-
+    if (currentPeriodEnd && now <= currentPeriodEnd) {
       return {
         ok: true,
         hasAccess: true,
-        subscription: renewedSubscription || assinaturaAtual,
+        subscription: assinaturaAtual,
       }
     }
 
+    const { data: updatedSubscription } = await supabase
+      .from("subscriptions")
+      .update({
+        status: "past_due",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", assinaturaAtual.id)
+      .select("*")
+      .single()
+
     return {
       ok: true,
-      hasAccess: true,
-      subscription: assinaturaAtual,
+      hasAccess: false,
+      reason: "Assinatura vencida aguardando pagamento.",
+      subscription: updatedSubscription || {
+        ...assinaturaAtual,
+        status: "past_due",
+      },
     }
   }
 
+  // TRIALING:
+  // Acesso até trial_ends_at. Depois bloqueia.
   if (assinaturaAtual.status === "trialing") {
     if (trialEndsAt && now <= trialEndsAt) {
       return {
@@ -100,7 +109,7 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
       }
     }
 
-    await supabase
+    const { data: updatedSubscription } = await supabase
       .from("subscriptions")
       .update({
         status: "blocked",
@@ -108,18 +117,22 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
         updated_at: new Date().toISOString(),
       })
       .eq("id", assinaturaAtual.id)
+      .select("*")
+      .single()
 
     return {
       ok: true,
       hasAccess: false,
       reason: "Período de teste expirado.",
-      subscription: {
+      subscription: updatedSubscription || {
         ...assinaturaAtual,
         status: "blocked",
       },
     }
   }
 
+  // CANCELED:
+  // Continua ativo até o fim do período pago. Depois bloqueia.
   if (assinaturaAtual.status === "canceled") {
     if (currentPeriodEnd && now <= currentPeriodEnd) {
       return {
@@ -129,7 +142,7 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
       }
     }
 
-    await supabase
+    const { data: updatedSubscription } = await supabase
       .from("subscriptions")
       .update({
         status: "blocked",
@@ -137,18 +150,23 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
         updated_at: new Date().toISOString(),
       })
       .eq("id", assinaturaAtual.id)
+      .select("*")
+      .single()
 
     return {
       ok: true,
       hasAccess: false,
       reason: "Assinatura encerrada.",
-      subscription: {
+      subscription: updatedSubscription || {
         ...assinaturaAtual,
         status: "blocked",
       },
     }
   }
 
+  // PAST_DUE:
+  // Se ainda está no período, você pode optar por tolerância.
+  // Como seu sistema hoje usa current_period_end como limite, mantemos assim.
   if (assinaturaAtual.status === "past_due") {
     if (currentPeriodEnd && now <= currentPeriodEnd) {
       return {
@@ -158,7 +176,7 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
       }
     }
 
-    await supabase
+    const { data: updatedSubscription } = await supabase
       .from("subscriptions")
       .update({
         status: "blocked",
@@ -166,19 +184,24 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
         updated_at: new Date().toISOString(),
       })
       .eq("id", assinaturaAtual.id)
+      .select("*")
+      .single()
 
     return {
       ok: true,
       hasAccess: false,
       reason: "Pagamento pendente e prazo expirado.",
-      subscription: {
+      subscription: updatedSubscription || {
         ...assinaturaAtual,
         status: "blocked",
       },
     }
   }
 
-  if (assinaturaAtual.status === "blocked" || assinaturaAtual.status === "expired") {
+  if (
+    assinaturaAtual.status === "blocked" ||
+    assinaturaAtual.status === "expired"
+  ) {
     return {
       ok: true,
       hasAccess: false,
