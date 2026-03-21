@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import {
   BarChart3,
   Boxes,
@@ -70,11 +71,14 @@ export default function HomePage() {
     <div style={pagina}>
       <header style={header}>
         <div style={logoWrap}>
-          <div style={logo}>M</div>
-          <div>
-            <div style={logoTitulo}>ModaGest</div>
-            <div style={logoSub}>Gestão para lojas</div>
-          </div>
+          <Image
+            src="/images/logo.png"
+            alt="Logo Modagest"
+            width={180}
+            height={52}
+            style={{ height: "auto", width: "auto", maxWidth: "180px" }}
+            priority
+          />
         </div>
 
         <nav style={nav}>
@@ -93,18 +97,21 @@ export default function HomePage() {
       <section style={hero}>
         <div style={heroTexto}>
           <div style={badge}>7 dias grátis para testar</div>
+
           <h1 style={heroTitulo}>
-            Controle sua loja com mais clareza, lucro e organização.
+            Controle vendas, estoque, financeiro e relatórios em um só lugar.
           </h1>
+
           <p style={heroDesc}>
-            O ModaGest ajuda você a gerenciar produtos, estoque, vendas, recebimentos,
-            despesas e relatórios em um só lugar.
+            O Modagest foi criado para ajudar pequenas e médias lojas a organizar
+            a operação, ganhar clareza nos números e vender com mais controle.
           </p>
 
           <div style={heroAcoes}>
             <Link href="/login" style={botaoPrimario}>
               Começar teste grátis
             </Link>
+
             <Link href="/planos" style={botaoSecundario}>
               Ver planos
             </Link>
@@ -112,30 +119,20 @@ export default function HomePage() {
 
           <div style={heroLista}>
             <span>• Sem cartão para começar</span>
-            <span>• Login com Google</span>
+            <span>• 7 dias grátis</span>
             <span>• Painel completo</span>
           </div>
         </div>
 
-        <div style={heroCard}>
-          <div style={cardTopo}>Visão do sistema</div>
-          <div style={heroMetricas}>
-            <div style={miniCard}>
-              <span style={miniLabel}>Recebido</span>
-              <strong>R$ 4.580,00</strong>
-            </div>
-            <div style={miniCard}>
-              <span style={miniLabel}>Em aberto</span>
-              <strong>R$ 720,00</strong>
-            </div>
-            <div style={miniCard}>
-              <span style={miniLabel}>Lucro</span>
-              <strong>R$ 1.940,00</strong>
-            </div>
-            <div style={miniCard}>
-              <span style={miniLabel}>Estoque baixo</span>
-              <strong>3 itens</strong>
-            </div>
+        <div style={heroVisual}>
+          <div style={heroBannerBox}>
+            <Image
+              src="/images/banner1.png"
+              alt="Painel do Modagest"
+              fill
+              style={heroBannerImage}
+              priority
+            />
           </div>
         </div>
       </section>
@@ -171,6 +168,7 @@ export default function HomePage() {
               }}
             >
               {plano.destaque && <div style={tagDestaque}>Mais escolhido</div>}
+
               <h3 style={planoNome}>{plano.nome}</h3>
               <div style={planoPreco}>{plano.preco}</div>
 
@@ -191,10 +189,82 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section style={secao}>
+  <div style={vitrineTopo}>
+    <div>
+      <h2 style={secaoTitulo}>Veja o sistema em ação</h2>
+      <p style={secaoSub}>
+        Dashboards, relatórios, vendas, financeiro e organização da operação em uma interface moderna.
+      </p>
+    </div>
+
+    <div style={miniBadge}>
+      Gestão visual e prática
+    </div>
+  </div>
+
+  <div style={gridBanners}>
+    <div style={{ ...bannerCard, ...bannerGrande }}>
+      <Image
+        src="/images/banner2.png"
+        alt="Painel de gestão Modagest"
+        fill
+        style={bannerImage}
+      />
+    </div>
+
+    <div style={bannerColuna}>
+      <div style={bannerCard}>
+        <Image
+          src="/images/banner3.png"
+          alt="Controle financeiro e relatórios"
+          fill
+          style={bannerImage}
+        />
+      </div>
+
+      <div style={bannerCard}>
+        <Image
+          src="/images/banner4.png"
+          alt="Controle de vendas e operação"
+          fill
+          style={bannerImage}
+        />
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style={secao}>
+  <div style={beneficiosBox}>
+    <div style={beneficioCard}>
+      <h3 style={beneficioNumero}>+ organização</h3>
+      <p style={beneficioTexto}>
+        Centralize produtos, estoque, vendas, clientes e relatórios em um só sistema.
+      </p>
+    </div>
+
+    <div style={beneficioCard}>
+      <h3 style={beneficioNumero}>+ controle</h3>
+      <p style={beneficioTexto}>
+        Acompanhe entradas, saídas, recebimentos, pendências e indicadores do negócio.
+      </p>
+    </div>
+
+    <div style={beneficioCard}>
+      <h3 style={beneficioNumero}>+ clareza</h3>
+      <p style={beneficioTexto}>
+        Tome decisões melhores com dashboard, relatórios e visão do que está funcionando.
+      </p>
+    </div>
+  </div>
+</section>
+
+
       <section style={ctaFinal}>
         <h2 style={{ margin: 0, fontSize: 34 }}>Pronto para testar?</h2>
         <p style={{ margin: "10px 0 0 0", color: "rgba(255,255,255,0.85)" }}>
-          Crie sua conta e experimente o ModaGest por 7 dias.
+          Crie sua conta e experimente o Modagest por 7 dias.
         </p>
 
         <div style={{ marginTop: 20 }}>
@@ -229,30 +299,6 @@ const logoWrap: React.CSSProperties = {
   gap: 12,
 }
 
-const logo: React.CSSProperties = {
-  width: 44,
-  height: 44,
-  borderRadius: 14,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "linear-gradient(135deg, #60a5fa, #2563eb)",
-  color: "#fff",
-  fontWeight: 800,
-  fontSize: 20,
-}
-
-const logoTitulo: React.CSSProperties = {
-  fontWeight: 800,
-  fontSize: 20,
-  color: "#0f172a",
-}
-
-const logoSub: React.CSSProperties = {
-  fontSize: 13,
-  color: "#64748b",
-}
-
 const nav: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -280,8 +326,9 @@ const hero: React.CSSProperties = {
   margin: "0 auto",
   padding: "40px 24px 30px",
   display: "grid",
-  gridTemplateColumns: "1.2fr 0.8fr",
+  gridTemplateColumns: "1fr 1fr",
   gap: 28,
+  alignItems: "center",
 }
 
 const heroTexto: React.CSSProperties = {
@@ -304,7 +351,7 @@ const badge: React.CSSProperties = {
 
 const heroTitulo: React.CSSProperties = {
   fontSize: 52,
-  lineHeight: 1.1,
+  lineHeight: 1.08,
   fontWeight: 900,
   margin: 0,
   color: "#0f172a",
@@ -353,39 +400,25 @@ const heroLista: React.CSSProperties = {
   fontSize: 14,
 }
 
-const heroCard: React.CSSProperties = {
-  background: "linear-gradient(180deg, #0f172a, #111827)",
-  color: "#fff",
-  borderRadius: 28,
-  padding: 24,
-  boxShadow: "0 25px 60px rgba(15,23,42,0.18)",
-}
-
-const cardTopo: React.CSSProperties = {
-  fontWeight: 800,
-  marginBottom: 18,
-  color: "rgba(255,255,255,0.8)",
-}
-
-const heroMetricas: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 14,
-}
-
-const miniCard: React.CSSProperties = {
-  background: "rgba(255,255,255,0.08)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 18,
-  padding: 16,
+const heroVisual: React.CSSProperties = {
   display: "flex",
-  flexDirection: "column",
-  gap: 8,
+  alignItems: "center",
+  justifyContent: "center",
 }
 
-const miniLabel: React.CSSProperties = {
-  fontSize: 13,
-  color: "rgba(255,255,255,0.72)",
+const heroBannerBox: React.CSSProperties = {
+  position: "relative",
+  width: "100%",
+  maxWidth: 560,
+  aspectRatio: "16 / 10",
+  borderRadius: 24,
+  overflow: "hidden",
+  background: "#e2e8f0",
+  boxShadow: "0 25px 60px rgba(15,23,42,0.12)",
+}
+
+const heroBannerImage: React.CSSProperties = {
+  objectFit: "cover",
 }
 
 const secao: React.CSSProperties = {
@@ -511,7 +544,7 @@ const botaoPlano: React.CSSProperties = {
   display: "inline-block",
   textDecoration: "none",
   width: "100%",
-  textAlign: "center" as const,
+  textAlign: "center",
   padding: "14px 16px",
   borderRadius: 14,
   background: "#2563eb",
@@ -538,3 +571,81 @@ const ctaFinalBtn: React.CSSProperties = {
   borderRadius: 14,
   fontWeight: 800,
 }
+const vitrineTopo: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  flexWrap: "wrap",
+  marginBottom: 20,
+}
+
+const miniBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "8px 12px",
+  borderRadius: 999,
+  background: "#eff6ff",
+  color: "#2563eb",
+  fontWeight: 800,
+  fontSize: 13,
+}
+
+const gridBanners: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1.4fr 1fr",
+  gap: 18,
+  alignItems: "stretch",
+}
+
+const bannerColuna: React.CSSProperties = {
+  display: "grid",
+  gap: 18,
+}
+
+const bannerCard: React.CSSProperties = {
+  position: "relative",
+  width: "100%",
+  minHeight: 240,
+  borderRadius: 24,
+  overflow: "hidden",
+  background: "#e2e8f0",
+  boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+}
+
+const bannerGrande: React.CSSProperties = {
+  minHeight: 500,
+}
+
+const bannerImage: React.CSSProperties = {
+  objectFit: "cover",
+}
+
+const beneficiosBox: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 18,
+}
+
+const beneficioCard: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 22,
+  padding: 24,
+  boxShadow: "0 12px 30px rgba(15,23,42,0.04)",
+}
+
+const beneficioNumero: React.CSSProperties = {
+  margin: 0,
+  fontSize: 28,
+  fontWeight: 900,
+  color: "#2563eb",
+}
+
+const beneficioTexto: React.CSSProperties = {
+  marginTop: 12,
+  color: "#64748b",
+  lineHeight: 1.7,
+  fontSize: 15,
+}
+
