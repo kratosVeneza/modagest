@@ -64,6 +64,7 @@ export default function PainelLayout({
 }) {
   const router = useRouter()
   const pathname = usePathname()
+
   const [menuFechado, setMenuFechado] = useState(false)
   const [carregandoAuth, setCarregandoAuth] = useState(true)
 
@@ -73,76 +74,87 @@ export default function PainelLayout({
   }, [])
 
   useEffect(() => {
-  let mounted = true
+    let mounted = true
 
-  async function validarSessaoEAssinatura() {
+    async function validarSessaoEAssinatura() {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession()
+
+        if (!mounted) return
+
+        if (error || !session) {
+          await supabase.auth.signOut()
+          if (mounted) {
+            setCarregandoAuth(false)
+          }
+          router.replace("/login")
+          return
+        }
+
+        const planoStorage =
+          typeof window !== "undefined"
+            ? localStorage.getItem("modagest_selected_plan") || undefined
+            : undefined
+
+        await ensureProfile({
+          trialDays: 7,
+          selectedPlan: planoStorage,
+        })
+
+        await ensureSubscription({
+          trialDays: 7,
+          selectedPlan: planoStorage,
+        })
+
+        if (typeof window !== "undefined" && planoStorage) {
+          localStorage.removeItem("modagest_selected_plan")
+        }
+
+        const accessResult = await checkSubscriptionAccess()
+
+        if (!mounted) return
+
+        if (!accessResult.ok) {
+          setCarregandoAuth(false)
+          router.replace("/meu-plano")
+          return
+        }
+
+        if (!accessResult.hasAccess && pathname !== "/meu-plano") {
+          setCarregandoAuth(false)
+          router.replace("/meu-plano")
+          return
+        }
+
+        setCarregandoAuth(false)
+      } catch (err) {
+        console.error("Erro no layout do painel:", err)
+        if (mounted) {
+          setCarregandoAuth(false)
+        }
+      }
+    }
+
+    validarSessaoEAssinatura()
+
     const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession()
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return
 
-    if (!mounted) return
-
-    if (error || !session) {
-      await supabase.auth.signOut()
-      router.replace("/login")
-      return
-    }
-
-    const planoStorage =
-      typeof window !== "undefined"
-        ? localStorage.getItem("modagest_selected_plan") || undefined
-        : undefined
-
-    await ensureProfile({
-      trialDays: 7,
-      selectedPlan: planoStorage,
+      if (!session) {
+        router.replace("/login")
+      }
     })
 
-    await ensureSubscription({
-      trialDays: 7,
-      selectedPlan: planoStorage,
-    })
-
-    if (typeof window !== "undefined" && planoStorage) {
-      localStorage.removeItem("modagest_selected_plan")
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
     }
-
-    const accessResult = await checkSubscriptionAccess()
-
-    if (!mounted) return
-
-    if (!accessResult.ok) {
-      router.replace("/meu-plano")
-      return
-    }
-
-    if (!accessResult.hasAccess && pathname !== "/meu-plano") {
-      router.replace("/meu-plano")
-      return
-    }
-
-    setCarregandoAuth(false)
-  }
-
-  validarSessaoEAssinatura()
-
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange(async (_event, session) => {
-    if (!mounted) return
-
-    if (!session) {
-      router.replace("/login")
-    }
-  })
-
-  return () => {
-    mounted = false
-    subscription.unsubscribe()
-  }
-}, [router, pathname])
-, [router]
+  }, [router, pathname])
 
   async function sair() {
     await supabase.auth.signOut()
@@ -156,11 +168,7 @@ export default function PainelLayout({
   }
 
   if (carregandoAuth) {
-    return (
-      <html lang="pt-BR">
-        <body style={{ padding: 32 }}>Carregando...</body>
-      </html>
-    )
+    return <div style={{ padding: 32 }}>Carregando...</div>
   }
 
   return (
@@ -184,7 +192,11 @@ export default function PainelLayout({
                 className="sidebar-toggle-btn"
                 title={menuFechado ? "Abrir menu" : "Fechar menu"}
               >
-                {menuFechado ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+                {menuFechado ? (
+                  <PanelLeftOpen size={18} />
+                ) : (
+                  <PanelLeftClose size={18} />
+                )}
               </button>
             </div>
 
@@ -197,6 +209,7 @@ export default function PainelLayout({
                     {group.items.map((item) => {
                       const ativo =
                         pathname === item.href || pathname.startsWith(`${item.href}/`)
+
                       const Icon = item.icon
 
                       return (
