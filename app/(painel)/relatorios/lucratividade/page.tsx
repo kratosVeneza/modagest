@@ -8,6 +8,8 @@ import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import HelpTooltip from "../../../components/HelpTooltip"
 import HelpBanner from "../../../components/InfoBanner"
+import BackButton from "@/app/components/BackButton"
+
 
 type Sale = {
   id: number
@@ -314,6 +316,9 @@ export default function RelatorioLucratividadePage() {
 
   return (
     <div>
+    <div style={{ marginBottom: 12 }}>
+      <BackButton label="← Voltar" />
+    </div>
       <h2 className="page-title">Relatório de Lucratividade</h2>
       <p className="page-subtitle">
         Veja quais produtos realmente dão mais retorno para o negócio.

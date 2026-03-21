@@ -8,6 +8,8 @@ import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import HelpTooltip from "../../../components/HelpTooltip"
 import HelpBanner from "../../../components/InfoBanner"
+import BackButton from "@/app/components/BackButton"
+
 
 type FinancialTransaction = {
   id: number
@@ -269,6 +271,9 @@ export default function RelatorioDespesasPage() {
 
   return (
     <div>
+    <div style={{ marginBottom: 12 }}>
+      <BackButton label="← Voltar" />
+    </div>
       <h2 className="page-title">Relatório de Despesas</h2>
       <p className="page-subtitle">
         Acompanhe os gastos pagos e pendentes da operação.

@@ -8,6 +8,7 @@ import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
 import HelpTooltip from "../../../components/HelpTooltip"
 import HelpBanner from "../../../components/InfoBanner"
+import BackButton from "@/app/components/BackButton"
 
 type Sale = {
   id: number
@@ -347,6 +348,9 @@ export default function RelatorioVendasPage() {
 
   return (
     <div>
+     <div style={{ marginBottom: 12 }}>
+      <BackButton label="← Voltar" />
+    </div>
       <h2 className="page-title">Relatório de Vendas</h2>
       <p className="page-subtitle">
         Analise as vendas registradas, o valor vendido, recebido e o saldo em aberto.
