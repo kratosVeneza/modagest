@@ -413,12 +413,12 @@ const heroBannerBox: React.CSSProperties = {
   aspectRatio: "16 / 10",
   borderRadius: 24,
   overflow: "hidden",
-  background: "#e2e8f0",
+  background: "#ffffff",
   boxShadow: "0 25px 60px rgba(15,23,42,0.12)",
 }
 
 const heroBannerImage: React.CSSProperties = {
-  objectFit: "cover",
+  objectFit: "contain",
 }
 
 const secao: React.CSSProperties = {
@@ -609,7 +609,7 @@ const bannerCard: React.CSSProperties = {
   minHeight: 240,
   borderRadius: 24,
   overflow: "hidden",
-  background: "#e2e8f0",
+  background: "#ffffff",
   boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
 }
 
@@ -618,7 +618,7 @@ const bannerGrande: React.CSSProperties = {
 }
 
 const bannerImage: React.CSSProperties = {
-  objectFit: "cover",
+  objectFit: "contain",
 }
 
 const beneficiosBox: React.CSSProperties = {
