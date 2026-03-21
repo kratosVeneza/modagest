@@ -6,6 +6,7 @@ import { cancelSubscription } from "@/lib/cancelSubscription"
 import { reactivateSubscription } from "@/lib/reactivateSubscription"
 import { registerManualPayment } from "@/lib/registerManualPayment"
 import { getMyPayments } from "@/lib/getMyPayments"
+import { changeSubscriptionPlan } from "@/lib/changeSubscriptionPlan"
 
 type Subscription = {
   id: string
@@ -17,6 +18,7 @@ type Subscription = {
   cancel_at_period_end: boolean
   canceled_at: string | null
   blocked_at?: string | null
+  pending_plan_slug?: string | null
 }
 
 type Payment = {
@@ -38,6 +40,7 @@ export default function MeuPlanoPage() {
   const [cancelando, setCancelando] = useState(false)
   const [reativando, setReativando] = useState(false)
   const [pagando, setPagando] = useState(false)
+  const [trocandoPlano, setTrocandoPlano] = useState(false)
   const [erro, setErro] = useState("")
   const [mensagem, setMensagem] = useState("")
 
@@ -50,26 +53,32 @@ export default function MeuPlanoPage() {
     setErro("")
     setMensagem("")
 
-    const [subscriptionResult, paymentsResult] = await Promise.all([
-      getMySubscription(),
-      getMyPayments(),
-    ])
+    try {
+      const [subscriptionResult, paymentsResult] = await Promise.all([
+        getMySubscription(),
+        getMyPayments(),
+      ])
 
-    if (!subscriptionResult.ok) {
-      setErro(subscriptionResult.error || "Não foi possível carregar a assinatura.")
+      if (!subscriptionResult.ok) {
+        setErro(subscriptionResult.error || "Não foi possível carregar a assinatura.")
+        setCarregando(false)
+        return
+      }
+
+      if (!paymentsResult.ok) {
+        setErro(paymentsResult.error || "Não foi possível carregar os pagamentos.")
+        setCarregando(false)
+        return
+      }
+
+      setAssinatura(subscriptionResult.subscription as Subscription)
+      setPagamentos((paymentsResult.payments ?? []) as Payment[])
       setCarregando(false)
-      return
-    }
-
-    if (!paymentsResult.ok) {
-      setErro(paymentsResult.error || "Não foi possível carregar os pagamentos.")
+    } catch (error) {
+      console.error("Erro ao carregar Meu Plano:", error)
+      setErro("Erro inesperado ao carregar a página.")
       setCarregando(false)
-      return
     }
-
-    setAssinatura(subscriptionResult.subscription as Subscription)
-    setPagamentos((paymentsResult.payments ?? []) as Payment[])
-    setCarregando(false)
   }
 
   async function cancelarPlano() {
@@ -91,9 +100,12 @@ export default function MeuPlanoPage() {
       return
     }
 
-    setMensagem("Assinatura cancelada com sucesso. O acesso continuará até o fim do período atual.")
+    setMensagem(
+      "Assinatura cancelada com sucesso. O acesso continuará até o fim do período atual."
+    )
     setAssinatura(result.subscription as Subscription)
     setCancelando(false)
+    await carregarTudo()
   }
 
   async function reativarPlano() {
@@ -130,6 +142,31 @@ export default function MeuPlanoPage() {
 
     setMensagem("Pagamento registrado com sucesso. Assinatura desbloqueada/reativada.")
     setPagando(false)
+    await carregarTudo()
+  }
+
+  async function trocarPlano(novoPlano: string) {
+    setTrocandoPlano(true)
+    setErro("")
+    setMensagem("")
+
+    const result = await changeSubscriptionPlan(novoPlano)
+
+    if (!result.ok) {
+      setErro(result.error || "Não foi possível trocar o plano.")
+      setTrocandoPlano(false)
+      return
+    }
+
+    if (result.type === "upgrade") {
+      setMensagem(`Plano alterado com sucesso para ${nomePlano(novoPlano)}.`)
+    } else {
+      setMensagem(
+        `Mudança para ${nomePlano(novoPlano)} agendada para o próximo ciclo.`
+      )
+    }
+
+    setTrocandoPlano(false)
     await carregarTudo()
   }
 
@@ -180,6 +217,10 @@ export default function MeuPlanoPage() {
     return "#f8fafc"
   }
 
+  function isPlanoAtual(plano: string) {
+    return assinatura?.plan_slug === plano
+  }
+
   if (carregando) {
     return <div style={{ padding: 24 }}>Carregando assinatura...</div>
   }
@@ -196,24 +237,49 @@ export default function MeuPlanoPage() {
         {mensagem && <div style={sucessoBox}>{mensagem}</div>}
         {erro && <div style={erroBox}>{erro}</div>}
 
-        <p><strong>Plano atual:</strong> {nomePlano(assinatura?.plan_slug || "profissional")}</p>
-        <p><strong>Status:</strong> {nomeStatusAssinatura(assinatura?.status || "-")}</p>
+        <p>
+          <strong>Plano atual:</strong> {nomePlano(assinatura?.plan_slug || "profissional")}
+        </p>
+
+        <p>
+          <strong>Status:</strong> {nomeStatusAssinatura(assinatura?.status || "-")}
+        </p>
+
         <p>
           <strong>Fim do trial:</strong>{" "}
           {assinatura?.trial_ends_at
             ? new Date(assinatura.trial_ends_at).toLocaleDateString("pt-BR")
             : "-"}
         </p>
+
         <p>
           <strong>Período atual até:</strong>{" "}
           {assinatura?.current_period_end
             ? new Date(assinatura.current_period_end).toLocaleDateString("pt-BR")
             : "-"}
         </p>
+
         <p>
           <strong>Cancelar ao fim do período:</strong>{" "}
           {assinatura?.cancel_at_period_end ? "Sim" : "Não"}
         </p>
+
+        {assinatura?.pending_plan_slug && (
+          <p>
+            <strong>Plano agendado para próximo ciclo:</strong>{" "}
+            {nomePlano(assinatura.pending_plan_slug)}
+          </p>
+        )}
+
+        {assinatura?.cancel_at_period_end && assinatura?.current_period_end && (
+          <div style={alertaInfo}>
+            Sua assinatura foi cancelada, mas continua ativa até{" "}
+            <strong>
+              {new Date(assinatura.current_period_end).toLocaleDateString("pt-BR")}
+            </strong>
+            .
+          </div>
+        )}
 
         <div style={acoesWrap}>
           {!assinatura?.cancel_at_period_end && (
@@ -256,6 +322,54 @@ export default function MeuPlanoPage() {
       <div style={{ height: 20 }} />
 
       <div style={card}>
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>Trocar plano</h2>
+
+        <p style={{ marginTop: 0, color: "#64748b" }}>
+          Upgrades são aplicados imediatamente. Downgrades ficam agendados para o próximo ciclo.
+        </p>
+
+        <div style={acoesPlanosBox}>
+          <button
+            type="button"
+            onClick={() => trocarPlano("essencial")}
+            disabled={trocandoPlano || isPlanoAtual("essencial")}
+            style={{
+              ...botaoSecundario,
+              ...(isPlanoAtual("essencial") ? botaoDesabilitado : {}),
+            }}
+          >
+            {trocandoPlano ? "Processando..." : "Mudar para Essencial"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => trocarPlano("profissional")}
+            disabled={trocandoPlano || isPlanoAtual("profissional")}
+            style={{
+              ...botaoPrimario,
+              ...(isPlanoAtual("profissional") ? botaoDesabilitado : {}),
+            }}
+          >
+            {trocandoPlano ? "Processando..." : "Fazer upgrade para Profissional"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => trocarPlano("premium")}
+            disabled={trocandoPlano || isPlanoAtual("premium")}
+            style={{
+              ...botaoPremium,
+              ...(isPlanoAtual("premium") ? botaoDesabilitado : {}),
+            }}
+          >
+            {trocandoPlano ? "Processando..." : "Fazer upgrade para Premium"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ height: 20 }} />
+
+      <div style={card}>
         <h2 style={{ marginTop: 0, marginBottom: 16 }}>Histórico de pagamentos</h2>
 
         {pagamentos.length === 0 ? (
@@ -271,6 +385,7 @@ export default function MeuPlanoPage() {
                     <div style={valorPagamento}>
                       {formatarValor(pagamento.amount, pagamento.currency)}
                     </div>
+
                     <div style={metaPagamento}>
                       Método: {pagamento.payment_method || "-"} • Provedor:{" "}
                       {pagamento.payment_provider || "-"}
@@ -335,6 +450,13 @@ const acoesWrap: React.CSSProperties = {
   marginTop: 20,
 }
 
+const acoesPlanosBox: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  marginTop: 16,
+}
+
 const botaoCancelar: React.CSSProperties = {
   border: "none",
   background: "#dc2626",
@@ -363,6 +485,52 @@ const botaoPagar: React.CSSProperties = {
   borderRadius: 12,
   fontWeight: 700,
   cursor: "pointer",
+}
+
+const botaoPrimario: React.CSSProperties = {
+  border: "none",
+  background: "#2563eb",
+  color: "#fff",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+}
+
+const botaoSecundario: React.CSSProperties = {
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  color: "#111827",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+}
+
+const botaoPremium: React.CSSProperties = {
+  border: "none",
+  background: "#7c3aed",
+  color: "#fff",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+}
+
+const botaoDesabilitado: React.CSSProperties = {
+  opacity: 0.55,
+  cursor: "not-allowed",
+}
+
+const alertaInfo: React.CSSProperties = {
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  border: "1px solid #bfdbfe",
+  padding: "12px 14px",
+  borderRadius: 12,
+  marginTop: 14,
+  fontSize: 14,
+  fontWeight: 600,
 }
 
 const sucessoBox: React.CSSProperties = {
@@ -433,4 +601,3 @@ const tagStatus: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
 }
-
