@@ -272,7 +272,7 @@ export default function RelatorioDespesasPage() {
   return (
     <div>
     <div style={{ marginBottom: 12 }}>
-      <BackButton label="← Voltar" />
+      <BackButton label=" Voltar" />
     </div>
       <h2 className="page-title">Relatório de Despesas</h2>
       <p className="page-subtitle">

@@ -334,7 +334,7 @@ export default function RelatorioRecebimentosPage() {
   return (
     <div>
     <div style={{ marginBottom: 12 }}>
-      <BackButton label="← Voltar" />
+      <BackButton label=" Voltar" />
     </div>
       <h2 className="page-title">Relatório de Recebimentos</h2>
       <p className="page-subtitle">
