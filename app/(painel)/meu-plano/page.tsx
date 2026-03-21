@@ -265,11 +265,11 @@ export default function MeuPlanoPage() {
         </p>
 
         {assinatura?.pending_plan_slug && (
-          <p>
-            <strong>Plano agendado para próximo ciclo:</strong>{" "}
-            {nomePlano(assinatura.pending_plan_slug)}
-          </p>
-        )}
+  <div style={alertaAgendamento}>
+    Mudança agendada para o próximo ciclo:{" "}
+    <strong>{nomePlano(assinatura.pending_plan_slug)}</strong>
+  </div>
+)}
 
         {assinatura?.cancel_at_period_end && assinatura?.current_period_end && (
           <div style={alertaInfo}>
@@ -600,4 +600,15 @@ const tagStatus: React.CSSProperties = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: 800,
+}
+
+const alertaAgendamento: React.CSSProperties = {
+  background: "#fffbeb",
+  color: "#92400e",
+  border: "1px solid #fde68a",
+  padding: "12px 14px",
+  borderRadius: 12,
+  marginTop: 14,
+  fontSize: 14,
+  fontWeight: 600,
 }
