@@ -1,12 +1,20 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { getMySubscription } from "@/lib/getMySubscription"
 import { cancelSubscription } from "@/lib/cancelSubscription"
 import { reactivateSubscription } from "@/lib/reactivateSubscription"
 import { registerManualPayment } from "@/lib/registerManualPayment"
 import { getMyPayments } from "@/lib/getMyPayments"
 import { changeSubscriptionPlan } from "@/lib/changeSubscriptionPlan"
+import {
+  BadgeCheck,
+  AlertTriangle,
+  CreditCard,
+  ArrowUpRight,
+  Crown,
+  ShieldCheck,
+} from "lucide-react"
 
 type Subscription = {
   id: string
@@ -161,9 +169,7 @@ export default function MeuPlanoPage() {
     if (result.type === "upgrade") {
       setMensagem(`Plano alterado com sucesso para ${nomePlano(novoPlano)}.`)
     } else {
-      setMensagem(
-        `Mudança para ${nomePlano(novoPlano)} agendada para o próximo ciclo.`
-      )
+      setMensagem(`Mudança para ${nomePlano(novoPlano)} agendada para o próximo ciclo.`)
     }
 
     setTrocandoPlano(false)
@@ -221,6 +227,74 @@ export default function MeuPlanoPage() {
     return assinatura?.plan_slug === plano
   }
 
+  const statusVisual = useMemo(() => {
+    const status = assinatura?.status || ""
+
+    if (status === "active") {
+      return {
+        titulo: "Assinatura ativa",
+        descricao: "Seu acesso está liberado normalmente.",
+        fundo: "#ecfdf5",
+        borda: "#a7f3d0",
+        cor: "#065f46",
+        icon: <BadgeCheck size={18} />,
+      }
+    }
+
+    if (status === "trialing") {
+      return {
+        titulo: "Teste grátis em andamento",
+        descricao: "Seu acesso está liberado durante o período de teste.",
+        fundo: "#eff6ff",
+        borda: "#bfdbfe",
+        cor: "#1d4ed8",
+        icon: <ShieldCheck size={18} />,
+      }
+    }
+
+    if (status === "past_due") {
+      return {
+        titulo: "Pagamento pendente",
+        descricao: "Seu período venceu e é necessário regularizar para continuar usando o sistema.",
+        fundo: "#fffbeb",
+        borda: "#fde68a",
+        cor: "#92400e",
+        icon: <AlertTriangle size={18} />,
+      }
+    }
+
+    if (status === "blocked") {
+      return {
+        titulo: "Acesso bloqueado",
+        descricao: "Seu acesso foi bloqueado. Regularize o pagamento ou reative a assinatura.",
+        fundo: "#fef2f2",
+        borda: "#fecaca",
+        cor: "#991b1b",
+        icon: <AlertTriangle size={18} />,
+      }
+    }
+
+    if (status === "canceled") {
+      return {
+        titulo: "Assinatura cancelada",
+        descricao: "A renovação automática foi desativada, mas seu acesso continua até o fim do período atual.",
+        fundo: "#fff7ed",
+        borda: "#fdba74",
+        cor: "#9a3412",
+        icon: <AlertTriangle size={18} />,
+      }
+    }
+
+    return {
+      titulo: "Status da assinatura",
+      descricao: "Consulte abaixo os detalhes do seu plano.",
+      fundo: "#f8fafc",
+      borda: "#e5e7eb",
+      cor: "#334155",
+      icon: <CreditCard size={18} />,
+    }
+  }, [assinatura])
+
   if (carregando) {
     return <div style={{ padding: 24 }}>Carregando assinatura...</div>
   }
@@ -231,45 +305,83 @@ export default function MeuPlanoPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1 style={{ marginTop: 0 }}>Meu Plano</h1>
+      <div style={heroCard}>
+        <div style={heroTop}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 30 }}>Meu Plano</h1>
+            <p style={heroSub}>
+              Gerencie sua assinatura, acompanhe o status e escolha o melhor plano para a sua loja.
+            </p>
+          </div>
 
-      <div style={card}>
+          <div style={planoBadge}>
+            <Crown size={16} />
+            {nomePlano(assinatura?.plan_slug || "profissional")}
+          </div>
+        </div>
+
+        <div
+          style={{
+            ...statusBox,
+            background: statusVisual.fundo,
+            borderColor: statusVisual.borda,
+            color: statusVisual.cor,
+          }}
+        >
+          <div style={statusIcon}>{statusVisual.icon}</div>
+          <div>
+            <div style={statusTitulo}>{statusVisual.titulo}</div>
+            <div style={statusDesc}>{statusVisual.descricao}</div>
+          </div>
+        </div>
+
         {mensagem && <div style={sucessoBox}>{mensagem}</div>}
         {erro && <div style={erroBox}>{erro}</div>}
+      </div>
 
-        <p>
-          <strong>Plano atual:</strong> {nomePlano(assinatura?.plan_slug || "profissional")}
-        </p>
+      <div style={gridResumo}>
+        <div style={miniCard}>
+          <span style={miniLabel}>Plano atual</span>
+          <strong style={miniValue}>{nomePlano(assinatura?.plan_slug || "profissional")}</strong>
+        </div>
 
-        <p>
-          <strong>Status:</strong> {nomeStatusAssinatura(assinatura?.status || "-")}
-        </p>
+        <div style={miniCard}>
+          <span style={miniLabel}>Status</span>
+          <strong style={miniValue}>{nomeStatusAssinatura(assinatura?.status || "-")}</strong>
+        </div>
 
-        <p>
-          <strong>Fim do trial:</strong>{" "}
-          {assinatura?.trial_ends_at
-            ? new Date(assinatura.trial_ends_at).toLocaleDateString("pt-BR")
-            : "-"}
-        </p>
+        <div style={miniCard}>
+          <span style={miniLabel}>Fim do trial</span>
+          <strong style={miniValue}>
+            {assinatura?.trial_ends_at
+              ? new Date(assinatura.trial_ends_at).toLocaleDateString("pt-BR")
+              : "-"}
+          </strong>
+        </div>
 
-        <p>
-          <strong>Período atual até:</strong>{" "}
-          {assinatura?.current_period_end
-            ? new Date(assinatura.current_period_end).toLocaleDateString("pt-BR")
-            : "-"}
-        </p>
+        <div style={miniCard}>
+          <span style={miniLabel}>Período atual até</span>
+          <strong style={miniValue}>
+            {assinatura?.current_period_end
+              ? new Date(assinatura.current_period_end).toLocaleDateString("pt-BR")
+              : "-"}
+          </strong>
+        </div>
+      </div>
 
-        <p>
-          <strong>Cancelar ao fim do período:</strong>{" "}
-          {assinatura?.cancel_at_period_end ? "Sim" : "Não"}
-        </p>
+      <div style={{ height: 20 }} />
+
+      <div style={card}>
+        <h2 style={{ marginTop: 0, marginBottom: 10 }}>Status da assinatura</h2>
+
+        <p><strong>Cancelar ao fim do período:</strong> {assinatura?.cancel_at_period_end ? "Sim" : "Não"}</p>
 
         {assinatura?.pending_plan_slug && (
-  <div style={alertaAgendamento}>
-    Mudança agendada para o próximo ciclo:{" "}
-    <strong>{nomePlano(assinatura.pending_plan_slug)}</strong>
-  </div>
-)}
+          <div style={alertaAgendamento}>
+            Mudança agendada para o próximo ciclo:{" "}
+            <strong>{nomePlano(assinatura.pending_plan_slug)}</strong>
+          </div>
+        )}
 
         {assinatura?.cancel_at_period_end && assinatura?.current_period_end && (
           <div style={alertaInfo}>
@@ -313,7 +425,7 @@ export default function MeuPlanoPage() {
               disabled={pagando}
               style={botaoPagar}
             >
-              {pagando ? "Processando..." : "Registrar pagamento manual"}
+              {pagando ? "Processando..." : "Regularizar pagamento"}
             </button>
           )}
         </div>
@@ -322,48 +434,114 @@ export default function MeuPlanoPage() {
       <div style={{ height: 20 }} />
 
       <div style={card}>
-        <h2 style={{ marginTop: 0, marginBottom: 16 }}>Trocar plano</h2>
+        <div style={tituloPlanoHeader}>
+          <div>
+            <h2 style={{ marginTop: 0, marginBottom: 8 }}>Upgrade ou troca de plano</h2>
+            <p style={subtleText}>
+              Upgrades são aplicados imediatamente. Downgrades ficam agendados para o próximo ciclo.
+            </p>
+          </div>
 
-        <p style={{ marginTop: 0, color: "#64748b" }}>
-          Upgrades são aplicados imediatamente. Downgrades ficam agendados para o próximo ciclo.
-        </p>
+          <div style={ctaUpgrade}>
+            <ArrowUpRight size={16} />
+            Mais recursos
+          </div>
+        </div>
 
-        <div style={acoesPlanosBox}>
-          <button
-            type="button"
-            onClick={() => trocarPlano("essencial")}
-            disabled={trocandoPlano || isPlanoAtual("essencial")}
-            style={{
-              ...botaoSecundario,
-              ...(isPlanoAtual("essencial") ? botaoDesabilitado : {}),
-            }}
-          >
-            {trocandoPlano ? "Processando..." : "Mudar para Essencial"}
-          </button>
+        <div style={planosGrid}>
+          <div style={{ ...planoCard, ...(isPlanoAtual("essencial") ? planoAtualCard : {}) }}>
+            <div style={planoHeader}>
+              <h3 style={planoNome}>Essencial</h3>
+              <span style={planoPreco}>R$ 39/mês</span>
+            </div>
 
-          <button
-            type="button"
-            onClick={() => trocarPlano("profissional")}
-            disabled={trocandoPlano || isPlanoAtual("profissional")}
-            style={{
-              ...botaoPrimario,
-              ...(isPlanoAtual("profissional") ? botaoDesabilitado : {}),
-            }}
-          >
-            {trocandoPlano ? "Processando..." : "Fazer upgrade para Profissional"}
-          </button>
+            <ul style={listaBeneficios}>
+              <li>Produtos</li>
+              <li>Estoque</li>
+              <li>Pedidos</li>
+              <li>Vendas</li>
+              <li>Clientes</li>
+            </ul>
 
-          <button
-            type="button"
-            onClick={() => trocarPlano("premium")}
-            disabled={trocandoPlano || isPlanoAtual("premium")}
-            style={{
-              ...botaoPremium,
-              ...(isPlanoAtual("premium") ? botaoDesabilitado : {}),
-            }}
-          >
-            {trocandoPlano ? "Processando..." : "Fazer upgrade para Premium"}
-          </button>
+            <button
+              type="button"
+              onClick={() => trocarPlano("essencial")}
+              disabled={trocandoPlano || isPlanoAtual("essencial")}
+              style={{
+                ...botaoSecundario,
+                ...(isPlanoAtual("essencial") ? botaoDesabilitado : {}),
+              }}
+            >
+              {isPlanoAtual("essencial")
+                ? "Plano atual"
+                : trocandoPlano
+                ? "Processando..."
+                : "Mudar para Essencial"}
+            </button>
+          </div>
+
+          <div style={{ ...planoCard, ...planoDestaque, ...(isPlanoAtual("profissional") ? planoAtualCard : {}) }}>
+            <div style={tagMaisVendido}>Mais vendido</div>
+
+            <div style={planoHeader}>
+              <h3 style={planoNome}>Profissional</h3>
+              <span style={planoPreco}>R$ 89/mês</span>
+            </div>
+
+            <ul style={listaBeneficios}>
+              <li>Tudo do Essencial</li>
+              <li>Financeiro</li>
+              <li>Histórico de vendas</li>
+              <li>Relatórios avançados</li>
+              <li>Exportações</li>
+            </ul>
+
+            <button
+              type="button"
+              onClick={() => trocarPlano("profissional")}
+              disabled={trocandoPlano || isPlanoAtual("profissional")}
+              style={{
+                ...botaoPrimario,
+                ...(isPlanoAtual("profissional") ? botaoDesabilitado : {}),
+              }}
+            >
+              {isPlanoAtual("profissional")
+                ? "Plano atual"
+                : trocandoPlano
+                ? "Processando..."
+                : "Fazer upgrade para Profissional"}
+            </button>
+          </div>
+
+          <div style={{ ...planoCard, ...(isPlanoAtual("premium") ? planoAtualCard : {}) }}>
+            <div style={planoHeader}>
+              <h3 style={planoNome}>Premium</h3>
+              <span style={planoPreco}>R$ 179/mês</span>
+            </div>
+
+            <ul style={listaBeneficios}>
+              <li>Tudo do Profissional</li>
+              <li>Suporte prioritário</li>
+              <li>Recursos premium futuros</li>
+              <li>Expansões exclusivas</li>
+            </ul>
+
+            <button
+              type="button"
+              onClick={() => trocarPlano("premium")}
+              disabled={trocandoPlano || isPlanoAtual("premium")}
+              style={{
+                ...botaoPremium,
+                ...(isPlanoAtual("premium") ? botaoDesabilitado : {}),
+              }}
+            >
+              {isPlanoAtual("premium")
+                ? "Plano atual"
+                : trocandoPlano
+                ? "Processando..."
+                : "Fazer upgrade para Premium"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -434,13 +612,98 @@ export default function MeuPlanoPage() {
   )
 }
 
+const heroCard: React.CSSProperties = {
+  background: "linear-gradient(135deg, #0f172a, #1e293b)",
+  color: "#fff",
+  borderRadius: 20,
+  padding: 24,
+  maxWidth: 980,
+  boxShadow: "0 16px 40px rgba(15,23,42,0.15)",
+}
+
+const heroTop: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  alignItems: "flex-start",
+  flexWrap: "wrap",
+}
+
+const heroSub: React.CSSProperties = {
+  margin: "8px 0 0 0",
+  color: "rgba(255,255,255,0.8)",
+  lineHeight: 1.6,
+}
+
+const planoBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  background: "rgba(255,255,255,0.12)",
+  color: "#fff",
+  padding: "10px 14px",
+  borderRadius: 999,
+  fontWeight: 800,
+}
+
+const statusBox: React.CSSProperties = {
+  marginTop: 18,
+  border: "1px solid",
+  borderRadius: 16,
+  padding: 16,
+  display: "flex",
+  gap: 12,
+  alignItems: "flex-start",
+}
+
+const statusIcon: React.CSSProperties = {
+  marginTop: 2,
+}
+
+const statusTitulo: React.CSSProperties = {
+  fontWeight: 800,
+  marginBottom: 4,
+}
+
+const statusDesc: React.CSSProperties = {
+  lineHeight: 1.5,
+}
+
+const gridResumo: React.CSSProperties = {
+  marginTop: 20,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 14,
+  maxWidth: 980,
+}
+
+const miniCard: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  padding: 18,
+  boxShadow: "0 8px 24px rgba(15,23,42,0.05)",
+}
+
+const miniLabel: React.CSSProperties = {
+  display: "block",
+  fontSize: 13,
+  color: "#64748b",
+  marginBottom: 8,
+}
+
+const miniValue: React.CSSProperties = {
+  fontSize: 18,
+  color: "#0f172a",
+}
+
 const card: React.CSSProperties = {
   background: "#fff",
   border: "1px solid #e5e7eb",
   borderRadius: 16,
   padding: 20,
   boxShadow: "0 8px 24px rgba(15,23,42,0.05)",
-  maxWidth: 760,
+  maxWidth: 980,
 }
 
 const acoesWrap: React.CSSProperties = {
@@ -450,11 +713,90 @@ const acoesWrap: React.CSSProperties = {
   marginTop: 20,
 }
 
-const acoesPlanosBox: React.CSSProperties = {
+const tituloPlanoHeader: React.CSSProperties = {
   display: "flex",
-  gap: 12,
+  justifyContent: "space-between",
+  gap: 16,
+  alignItems: "flex-start",
   flexWrap: "wrap",
-  marginTop: 16,
+  marginBottom: 16,
+}
+
+const subtleText: React.CSSProperties = {
+  margin: 0,
+  color: "#64748b",
+}
+
+const ctaUpgrade: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  background: "#eff6ff",
+  color: "#2563eb",
+  padding: "10px 14px",
+  borderRadius: 999,
+  fontWeight: 800,
+}
+
+const planosGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 16,
+}
+
+const planoCard: React.CSSProperties = {
+  position: "relative",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+  padding: 18,
+  background: "#fff",
+}
+
+const planoAtualCard: React.CSSProperties = {
+  border: "2px solid #2563eb",
+  boxShadow: "0 10px 26px rgba(37,99,235,0.10)",
+}
+
+const planoDestaque: React.CSSProperties = {
+  background: "#f8fbff",
+}
+
+const tagMaisVendido: React.CSSProperties = {
+  position: "absolute",
+  top: 14,
+  right: 14,
+  background: "#2563eb",
+  color: "#fff",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 800,
+}
+
+const planoHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "center",
+  marginBottom: 14,
+}
+
+const planoNome: React.CSSProperties = {
+  margin: 0,
+  fontSize: 22,
+  color: "#0f172a",
+}
+
+const planoPreco: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#2563eb",
+}
+
+const listaBeneficios: React.CSSProperties = {
+  margin: "0 0 18px 18px",
+  padding: 0,
+  color: "#334155",
+  lineHeight: 1.8,
 }
 
 const botaoCancelar: React.CSSProperties = {
@@ -488,6 +830,7 @@ const botaoPagar: React.CSSProperties = {
 }
 
 const botaoPrimario: React.CSSProperties = {
+  width: "100%",
   border: "none",
   background: "#2563eb",
   color: "#fff",
@@ -498,6 +841,7 @@ const botaoPrimario: React.CSSProperties = {
 }
 
 const botaoSecundario: React.CSSProperties = {
+  width: "100%",
   border: "1px solid #d1d5db",
   background: "#fff",
   color: "#111827",
@@ -508,6 +852,7 @@ const botaoSecundario: React.CSSProperties = {
 }
 
 const botaoPremium: React.CSSProperties = {
+  width: "100%",
   border: "none",
   background: "#7c3aed",
   color: "#fff",
@@ -533,13 +878,24 @@ const alertaInfo: React.CSSProperties = {
   fontWeight: 600,
 }
 
+const alertaAgendamento: React.CSSProperties = {
+  background: "#fffbeb",
+  color: "#92400e",
+  border: "1px solid #fde68a",
+  padding: "12px 14px",
+  borderRadius: 12,
+  marginTop: 14,
+  fontSize: 14,
+  fontWeight: 600,
+}
+
 const sucessoBox: React.CSSProperties = {
   background: "#ecfdf5",
   color: "#065f46",
   border: "1px solid #a7f3d0",
   padding: "12px 14px",
   borderRadius: 12,
-  marginBottom: 14,
+  marginTop: 14,
   fontSize: 14,
   fontWeight: 600,
 }
@@ -550,7 +906,7 @@ const erroBox: React.CSSProperties = {
   border: "1px solid #fecaca",
   padding: "12px 14px",
   borderRadius: 12,
-  marginBottom: 14,
+  marginTop: 14,
   fontSize: 14,
   fontWeight: 600,
 }
@@ -600,15 +956,4 @@ const tagStatus: React.CSSProperties = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: 800,
-}
-
-const alertaAgendamento: React.CSSProperties = {
-  background: "#fffbeb",
-  color: "#92400e",
-  border: "1px solid #fde68a",
-  padding: "12px 14px",
-  borderRadius: 12,
-  marginTop: 14,
-  fontSize: 14,
-  fontWeight: 600,
 }
