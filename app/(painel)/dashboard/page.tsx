@@ -134,6 +134,7 @@ type Periodo = "hoje" | "7dias" | "30dias" | "mes"
 type Loja = {
   nome_loja?: string | null
   logo_url?: string | null
+  meta_faturamento?: number | null
 }
 
 const CORES = ["#2563eb", "#059669", "#dc2626", "#d97706", "#7c3aed", "#0891b2"]
@@ -152,6 +153,9 @@ export default function Dashboard() {
   const [produtosLista, setProdutosLista] = useState<Produto[]>([])
   const [clientesLista, setClientesLista] = useState<Cliente[]>([])
   const [periodo, setPeriodo] = useState<Periodo>("7dias")
+  const [metaFaturamento, setMetaFaturamento] = useState(10000)
+  const [editandoMeta, setEditandoMeta] = useState(false)
+  const [novaMeta, setNovaMeta] = useState("")
 
   const [faturamentoPrincipal, setFaturamentoPrincipal] = useState(0)
   const [recebidoPrincipal, setRecebidoPrincipal] = useState(0)
@@ -211,15 +215,18 @@ export default function Dashboard() {
     }
 
     const { data: lojaData } = await supabase
-      .from("stores")
-      .select("nome_loja, logo_url")
+  .from("stores")
+  .select("nome_loja, logo_url, meta_faturamento")
       .eq("user_id", user.id)
       .maybeSingle()
 
     const loja = (lojaData ?? null) as Loja | null
     if (loja?.nome_loja) setNomeLoja(loja.nome_loja)
     if (loja?.logo_url) setLogoUrl(loja.logo_url)
-
+    if (loja?.meta_faturamento !== null && loja?.meta_faturamento !== undefined) {
+  setMetaFaturamento(Number(loja.meta_faturamento))
+}
+  
     const { data: vendasData, error: vendasError } = await supabase
       .from("sales")
       .select("*")
@@ -984,19 +991,44 @@ const resumoExecutivo = useMemo<{ texto: string; href?: string }[]>(() => {
   emAbertoPrincipal,
 ])
 
-
   const textoComparacao =
     periodo === "hoje"
       ? "vs ontem"
       : periodo === "mes"
       ? "vs mês anterior"
       : "vs período anterior"
-const metaFaturamento = 10000
+   const progressoFaturamento = Math.min(
+  (faturamentoPrincipal / (metaFaturamento || 1)) * 100, 100
+   )
+   async function salvarMetaFaturamento() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-const progressoFaturamento = Math.min(
-  (faturamentoPrincipal / metaFaturamento) * 100,
-  100
-)
+  if (!user) return
+
+  const valor = Number(novaMeta)
+
+  if (!valor || valor <= 0) {
+    alert("Digite um valor válido")
+    return
+  }
+
+  const { error } = await supabase
+    .from("stores")
+    .update({ meta_faturamento: valor })
+    .eq("user_id", user.id)
+
+  if (error) {
+    alert("Erro ao salvar meta")
+    return
+  }
+
+  setMetaFaturamento(valor)
+  setNovaMeta("")
+  setEditandoMeta(false)
+}
+
   function exportarDashboardCSV() {
     const linhas: string[] = []
 
@@ -1359,22 +1391,69 @@ const progressoFaturamento = Math.min(
   </div>
 
   <div style={{ marginTop: 18 }}>
-    <div style={metaHeader}>
-      <strong style={metaValorAtual}>R$ {faturamentoPrincipal.toFixed(2)}</strong>
-      <span style={metaValorMeta}>de R$ {metaFaturamento.toFixed(2)}</span>
-    </div>
+  {editandoMeta ? (
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <input
+        type="number"
+        placeholder="Digite a meta"
+        value={novaMeta}
+        onChange={(e) => setNovaMeta(e.target.value)}
+        style={{
+          padding: "8px 10px",
+          borderRadius: 8,
+          border: "1px solid #ccc",
+        }}
+      />
 
-    <div style={metaBarra}>
-      <div style={{ ...metaBarraProgresso, width: `${progressoFaturamento}%` }} />
-    </div>
+      <button className="btn btn-primary" onClick={salvarMetaFaturamento}>
+        Salvar
+      </button>
 
-    <div style={metaRodape}>
-      <span>{progressoFaturamento.toFixed(0)}% da meta atingida</span>
-      <span>
-        Falta R$ {Math.max(metaFaturamento - faturamentoPrincipal, 0).toFixed(2)}
-      </span>
+      <button className="btn btn-secondary" onClick={() => setEditandoMeta(false)}>
+        Cancelar
+      </button>
     </div>
-  </div>
+  ) : (
+    <>
+      <div style={metaHeader}>
+        <strong style={metaValorAtual}>
+          R$ {faturamentoPrincipal.toFixed(2)}
+        </strong>
+
+        <span style={metaValorMeta}>
+          de R$ {metaFaturamento.toFixed(2)}
+        </span>
+      </div>
+
+      <div style={metaBarra}>
+        <div
+          style={{
+            ...metaBarraProgresso,
+            width: `${progressoFaturamento}%`,
+          }}
+        />
+      </div>
+
+      <div style={metaRodape}>
+        <span>{progressoFaturamento.toFixed(0)}%</span>
+
+        <span>
+          Falta R${" "}
+          {Math.max(metaFaturamento - faturamentoPrincipal, 0).toFixed(2)}
+        </span>
+      </div>
+
+      <button
+        className="btn btn-secondary"
+        style={{ marginTop: 12 }}
+        onClick={() => setEditandoMeta(true)}
+      >
+        Definir meta
+      </button>
+    </>
+  )}
+</div>
+
 </div>
     <div className="grid-3" style={{ marginBottom: 24 }}>
       <div className="metric-card">
