@@ -918,44 +918,43 @@ const categoriaPrincipal = useMemo(() => {
   return principal
 }, [graficoCategorias])
 
-const resumoExecutivo = useMemo(() => {
-  const linhas: {
-    texto: string
-    href?: string
-  }[] = []
+const resumoExecutivo = useMemo<{ texto: string; href?: string }[]>(() => {
+  const linhas: { texto: string; href?: string }[] = []
 
-  if (resultadoLiquidoPeriodo > 0) {
+  if (faturamentoPrincipal > faturamentoComparacao) {
     linhas.push({
-      texto: `Seu resultado líquido está positivo em R$ ${resultadoLiquidoPeriodo.toFixed(2)}.`,
+      texto: `Seu faturamento cresceu em relação ao período anterior.`,
     })
-  } else if (resultadoLiquidoPeriodo < 0) {
+  } else if (faturamentoPrincipal < faturamentoComparacao) {
     linhas.push({
-      texto: `Seu resultado líquido está negativo em R$ ${Math.abs(resultadoLiquidoPeriodo).toFixed(2)}.`,
+      texto: `Seu faturamento caiu em relação ao período anterior.`,
+    })
+  }
+
+  if (lucroBrutoPeriodo < faturamentoPrincipal * 0.2 && faturamentoPrincipal > 0) {
+    linhas.push({
+      texto: `Sua margem está baixa. Revise preços ou custos.`,
+      href: "/produtos",
+    })
+  }
+
+  if (saldoAtual < 0) {
+    linhas.push({
+      texto: `Seu caixa está negativo. Atenção urgente.`,
       href: "/financeiro",
     })
-  } else {
+  }
+
+  if (despesasPendentes > recebidoPrincipal * 0.5 && despesasPendentes > 0) {
     linhas.push({
-      texto: "Seu resultado líquido está zerado neste período.",
+      texto: `Você tem muitas despesas pendentes.`,
+      href: "/financeiro",
     })
   }
 
-  if (melhorDiaRecebimento) {
+  if (estoqueBaixo > 0) {
     linhas.push({
-      texto: `O melhor dia de recebimento foi ${melhorDiaRecebimento.dia}, com R$ ${melhorDiaRecebimento.total.toFixed(2)}.`,
-      href: "/relatorios",
-    })
-  }
-
-  if (formaPagamentoPrincipal) {
-    linhas.push({
-      texto: `A forma de pagamento mais usada foi ${formaPagamentoPrincipal.name}.`,
-      href: "/relatorios",
-    })
-  }
-
-  if (categoriaPrincipal) {
-    linhas.push({
-      texto: `A categoria com maior faturamento foi ${categoriaPrincipal.name}.`,
+      texto: `${estoqueBaixo} produto(s) com estoque baixo.`,
       href: "/produtos",
     })
   }
@@ -967,12 +966,21 @@ const resumoExecutivo = useMemo(() => {
     })
   }
 
+  if (linhas.length === 0) {
+    linhas.push({
+      texto: "Tudo sob controle. Sua operação está saudável.",
+    })
+  }
+
   return linhas
 }, [
-  resultadoLiquidoPeriodo,
-  melhorDiaRecebimento,
-  formaPagamentoPrincipal,
-  categoriaPrincipal,
+  faturamentoPrincipal,
+  faturamentoComparacao,
+  lucroBrutoPeriodo,
+  saldoAtual,
+  despesasPendentes,
+  recebidoPrincipal,
+  estoqueBaixo,
   emAbertoPrincipal,
 ])
 
@@ -983,7 +991,12 @@ const resumoExecutivo = useMemo(() => {
       : periodo === "mes"
       ? "vs mês anterior"
       : "vs período anterior"
+const metaFaturamento = 10000
 
+const progressoFaturamento = Math.min(
+  (faturamentoPrincipal / metaFaturamento) * 100,
+  100
+)
   function exportarDashboardCSV() {
     const linhas: string[] = []
 
@@ -1315,41 +1328,6 @@ const resumoExecutivo = useMemo(() => {
     <span className="chart-badge">Insights</span>
   </div>
 
-  <div style={resumoExecutivoBox}>
-    {resumoExecutivo.length > 0 ? (
-      resumoExecutivo.map((linha, index) => {
-  const conteudo = (
-    <>
-      <span style={resumoExecutivoPonto}>•</span>
-      <span>{linha.texto}</span>
-    </>
-  )
-
-  if (linha.href) {
-    return (
-      <Link
-        key={`resumo-${index}`}
-        href={linha.href}
-        style={{ ...resumoExecutivoLinha, cursor: "pointer" }}
-      >
-        {conteudo}
-      </Link>
-    )
-  }
-
-  return (
-    <div key={`${linha.texto}-${index}`} style={resumoExecutivoLinha}>
-      {conteudo}
-    </div>
-  )
-})
-
-    ) : (
-      <div style={{ color: "#64748b" }}>
-        Ainda não há dados suficientes para gerar insights automáticos.
-      </div>
-    )}
-  </div>
 </div>
       <p className="dashboard-block-subtitle">
         Sugestões automáticas com base nos seus indicadores
@@ -1369,7 +1347,35 @@ const resumoExecutivo = useMemo(() => {
 </div>
 
 
+<div className="section-card" style={{ marginBottom: 24 }}>
+  <div className="chart-header-row">
+    <div>
+      <h3 className="dashboard-block-title">Meta de faturamento</h3>
+      <p className="dashboard-block-subtitle">
+        Acompanhe o quanto falta para atingir sua meta no período
+      </p>
+    </div>
+    <span className="chart-badge">Meta</span>
+  </div>
 
+  <div style={{ marginTop: 18 }}>
+    <div style={metaHeader}>
+      <strong style={metaValorAtual}>R$ {faturamentoPrincipal.toFixed(2)}</strong>
+      <span style={metaValorMeta}>de R$ {metaFaturamento.toFixed(2)}</span>
+    </div>
+
+    <div style={metaBarra}>
+      <div style={{ ...metaBarraProgresso, width: `${progressoFaturamento}%` }} />
+    </div>
+
+    <div style={metaRodape}>
+      <span>{progressoFaturamento.toFixed(0)}% da meta atingida</span>
+      <span>
+        Falta R$ {Math.max(metaFaturamento - faturamentoPrincipal, 0).toFixed(2)}
+      </span>
+    </div>
+  </div>
+</div>
     <div className="grid-3" style={{ marginBottom: 24 }}>
       <div className="metric-card">
         <div className="metric-top-row">
@@ -2072,4 +2078,50 @@ const resumoExecutivoPonto: React.CSSProperties = {
   fontWeight: 900,
   color: "#2563eb",
   lineHeight: 1.2,
+}
+
+const metaHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "baseline",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 12,
+}
+
+const metaValorAtual: React.CSSProperties = {
+  fontSize: 30,
+  fontWeight: 900,
+  color: "#0f172a",
+}
+
+const metaValorMeta: React.CSSProperties = {
+  fontSize: 14,
+  color: "#64748b",
+  fontWeight: 700,
+}
+
+const metaBarra: React.CSSProperties = {
+  width: "100%",
+  height: 14,
+  background: "#e5e7eb",
+  borderRadius: 999,
+  overflow: "hidden",
+}
+
+const metaBarraProgresso: React.CSSProperties = {
+  height: "100%",
+  background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
+  borderRadius: 999,
+  transition: "width 0.3s ease",
+}
+
+const metaRodape: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  marginTop: 10,
+  fontSize: 14,
+  color: "#475569",
 }
