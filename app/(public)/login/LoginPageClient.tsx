@@ -11,7 +11,7 @@ import { ensureSubscription } from "@/lib/ensureSubscription"
 type Modo = "entrar" | "criar"
 
 type LoginPageClientProps = {
-  initialPlan: string
+  initialPlan?: string | null
 }
 
 export default function LoginPageClient({
@@ -27,8 +27,7 @@ export default function LoginPageClient({
   const [mensagem, setMensagem] = useState("")
   const [erro, setErro] = useState("")
 
-  const [planoSelecionado, setPlanoSelecionado] = useState(initialPlan || "profissional")
-
+  const [planoSelecionado, setPlanoSelecionado] = useState<string | null>(null)
 
   useEffect(() => {
     verificarSessao()
@@ -36,13 +35,22 @@ export default function LoginPageClient({
   }, [])
 
   useEffect(() => {
-  if (typeof window === "undefined") return
+    if (typeof window === "undefined") return
 
-  const planoStorage = localStorage.getItem("modagest_selected_plan")
-  if (planoStorage) {
-    setPlanoSelecionado(planoStorage)
-  }
-}, [])
+    const planoStorage = localStorage.getItem("modagest_selected_plan")
+
+    if (planoStorage && ["essencial", "profissional", "premium"].includes(planoStorage)) {
+      setPlanoSelecionado(planoStorage)
+      return
+    }
+
+    if (initialPlan && ["essencial", "profissional", "premium"].includes(initialPlan)) {
+      setPlanoSelecionado(initialPlan)
+      return
+    }
+
+    setPlanoSelecionado(null)
+  }, [initialPlan])
 
   async function verificarSessao() {
     const {
@@ -64,6 +72,20 @@ export default function LoginPageClient({
       : "Crie sua conta para começar a usar o sistema."
   }, [modo])
 
+  function limparPlanoSelecionado() {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("modagest_selected_plan")
+    }
+    setPlanoSelecionado(null)
+  }
+
+  function nomePlano(plan: string | null) {
+    if (plan === "essencial") return "Essencial"
+    if (plan === "premium") return "Premium"
+    if (plan === "profissional") return "Profissional"
+    return ""
+  }
+
   async function entrarComEmail(e: React.FormEvent) {
     e.preventDefault()
     setCarregando(true)
@@ -83,20 +105,19 @@ export default function LoginPageClient({
 
     const result = await ensureProfile({
       trialDays: 7,
-      selectedPlan: planoSelecionado,
+      selectedPlan: planoSelecionado || undefined,
     })
 
     const subscriptionResult = await ensureSubscription({
-  trialDays: 7,
-  selectedPlan: planoSelecionado,
-})
+      trialDays: 7,
+      selectedPlan: planoSelecionado || undefined,
+    })
 
-if (!subscriptionResult.ok) {
-  setCarregando(false)
-  setErro(subscriptionResult.error || "Não foi possível criar a assinatura.")
-  return
-}
-
+    if (!subscriptionResult.ok) {
+      setCarregando(false)
+      setErro(subscriptionResult.error || "Não foi possível criar a assinatura.")
+      return
+    }
 
     if (!result.ok) {
       setCarregando(false)
@@ -105,8 +126,8 @@ if (!subscriptionResult.ok) {
     }
 
     if (typeof window !== "undefined") {
-  localStorage.removeItem("modagest_selected_plan")
-}
+      localStorage.removeItem("modagest_selected_plan")
+    }
 
     setCarregando(false)
     router.push("/dashboard")
@@ -130,11 +151,13 @@ if (!subscriptionResult.ok) {
       return
     }
 
+    const redirectPlanSuffix = planoSelecionado ? `?plan=${planoSelecionado}` : ""
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password: senha,
       options: {
-        emailRedirectTo: `${window.location.origin}/login?plan=${planoSelecionado}`,
+        emailRedirectTo: `${window.location.origin}/login${redirectPlanSuffix}`,
       },
     })
 
@@ -144,24 +167,22 @@ if (!subscriptionResult.ok) {
       return
     }
 
-    // Em alguns projetos/configurações o signUp já cria sessão
     if (data.session) {
       const result = await ensureProfile({
         trialDays: 7,
-        selectedPlan: planoSelecionado,
+        selectedPlan: planoSelecionado || undefined,
       })
 
       const subscriptionResult = await ensureSubscription({
-  trialDays: 7,
-  selectedPlan: planoSelecionado,
-})
+        trialDays: 7,
+        selectedPlan: planoSelecionado || undefined,
+      })
 
-if (!subscriptionResult.ok) {
-  setCarregando(false)
-  setErro(subscriptionResult.error || "Não foi possível criar a assinatura.")
-  return
-}
-
+      if (!subscriptionResult.ok) {
+        setCarregando(false)
+        setErro(subscriptionResult.error || "Não foi possível criar a assinatura.")
+        return
+      }
 
       if (!result.ok) {
         setCarregando(false)
@@ -169,19 +190,23 @@ if (!subscriptionResult.ok) {
         return
       }
 
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("modagest_selected_plan")
+      }
+
       setCarregando(false)
       router.push("/dashboard")
       return
-
     }
 
     setCarregando(false)
     setMensagem("Conta criada com sucesso. Verifique seu email para confirmar o cadastro.")
     setSenha("")
     setConfirmarSenha("")
+
     if (typeof window !== "undefined") {
-  localStorage.removeItem("modagest_selected_plan")
-}
+      localStorage.removeItem("modagest_selected_plan")
+    }
   }
 
   async function entrarComGoogle() {
@@ -242,12 +267,20 @@ if (!subscriptionResult.ok) {
               flexWrap: "wrap",
             }}
           >
-            <Link href="/" style={linkTopo}>
+            <Link
+              href="/"
+              style={linkTopo}
+              onClick={limparPlanoSelecionado}
+            >
               <ArrowLeft size={16} />
               Voltar para a página inicial
             </Link>
 
-            <Link href="/planos" style={linkTopoSecundario}>
+            <Link
+              href="/planos"
+              style={linkTopoSecundario}
+              onClick={limparPlanoSelecionado}
+            >
               Ver planos
             </Link>
           </div>
@@ -288,16 +321,14 @@ if (!subscriptionResult.ok) {
             <h2 style={tituloStyle}>{titulo}</h2>
             <p style={subtituloStyle}>{subtitulo}</p>
 
-            <div style={planoSelecionadoBox}>
-              <span style={planoSelecionadoLabel}>Plano selecionado</span>
-              <strong style={planoSelecionadoValor}>
-                {planoSelecionado === "essencial"
-                  ? "Essencial"
-                  : planoSelecionado === "premium"
-                  ? "Premium"
-                  : "Profissional"}
-              </strong>
-            </div>
+            {planoSelecionado && (
+              <div style={planoSelecionadoBox}>
+                <span style={planoSelecionadoLabel}>Plano selecionado</span>
+                <strong style={planoSelecionadoValor}>
+                  {nomePlano(planoSelecionado)}
+                </strong>
+              </div>
+            )}
 
             {erro && <div style={erroBox}>{erro}</div>}
             {mensagem && <div style={sucessoBox}>{mensagem}</div>}
@@ -384,7 +415,11 @@ if (!subscriptionResult.ok) {
 
             <p style={rodapePlanos}>
               Ainda está conhecendo o sistema?{" "}
-              <Link href="/planos" style={linkPlanos}>
+              <Link
+                href="/planos"
+                style={linkPlanos}
+                onClick={limparPlanoSelecionado}
+              >
                 Ver planos
               </Link>
             </p>
@@ -604,65 +639,66 @@ const divisorTexto: React.CSSProperties = {
 
 const formStyle: React.CSSProperties = {
   display: "grid",
-  gap: 14,
+  gap: 16,
 }
 
 const labelStyle: React.CSSProperties = {
   display: "block",
+  marginBottom: 8,
   fontSize: 14,
-  fontWeight: 700,
-  marginBottom: 6,
+  fontWeight: 600,
   color: "#0f172a",
 }
 
 const inputWrap: React.CSSProperties = {
+  height: 52,
+  border: "1px solid #dbe3ee",
+  borderRadius: 14,
+  padding: "0 14px",
   display: "flex",
   alignItems: "center",
   gap: 10,
-  border: "1px solid #d1d5db",
-  borderRadius: 14,
-  padding: "0 14px",
-  height: 48,
+  background: "#fff",
 }
 
 const inputStyle: React.CSSProperties = {
   border: "none",
   outline: "none",
-  flex: 1,
-  fontSize: 14,
-  background: "transparent",
+  width: "100%",
+  fontSize: 15,
   color: "#0f172a",
+  background: "transparent",
 }
 
 const submitBtn: React.CSSProperties = {
-  width: "100%",
-  height: 50,
-  border: "none",
+  height: 52,
   borderRadius: 14,
+  border: "none",
   background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
   color: "#fff",
+  fontWeight: 800,
+  fontSize: 15,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   gap: 10,
-  fontWeight: 800,
   cursor: "pointer",
-  marginTop: 6,
-  boxShadow: "0 14px 30px rgba(37,99,235,0.24)",
+  boxShadow: "0 14px 30px rgba(37,99,235,0.25)",
 }
 
 const rodapeTexto: React.CSSProperties = {
-  fontSize: 13,
-  color: "#64748b",
-  marginTop: 16,
+  marginTop: 18,
+  marginBottom: 8,
   textAlign: "center",
+  color: "#64748b",
+  fontSize: 14,
 }
 
 const rodapePlanos: React.CSSProperties = {
-  fontSize: 14,
-  color: "#64748b",
-  marginTop: 12,
+  margin: 0,
   textAlign: "center",
+  color: "#64748b",
+  fontSize: 14,
 }
 
 const linkPlanos: React.CSSProperties = {
