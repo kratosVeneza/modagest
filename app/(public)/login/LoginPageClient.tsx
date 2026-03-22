@@ -26,7 +26,6 @@ export default function LoginPageClient({
   const [carregando, setCarregando] = useState(false)
   const [mensagem, setMensagem] = useState("")
   const [erro, setErro] = useState("")
-
   const [planoSelecionado, setPlanoSelecionado] = useState<string | null>(null)
 
   useEffect(() => {
@@ -62,16 +61,6 @@ export default function LoginPageClient({
     }
   }
 
-  const titulo = useMemo(() => {
-    return modo === "entrar" ? "Entrar na sua conta" : "Criar sua conta"
-  }, [modo])
-
-  const subtitulo = useMemo(() => {
-    return modo === "entrar"
-      ? "Acesse sua conta com email e senha ou continue com Google."
-      : "Crie sua conta para começar a usar o sistema."
-  }, [modo])
-
   function limparPlanoSelecionado() {
     if (typeof window !== "undefined") {
       localStorage.removeItem("modagest_selected_plan")
@@ -85,6 +74,16 @@ export default function LoginPageClient({
     if (plan === "profissional") return "Profissional"
     return ""
   }
+
+  const titulo = useMemo(() => {
+    return modo === "entrar" ? "Entrar na sua conta" : "Criar sua conta"
+  }, [modo])
+
+  const subtitulo = useMemo(() => {
+    return modo === "entrar"
+      ? "Acesse sua conta com email e senha ou continue com Google."
+      : "Crie sua conta para começar a usar o sistema."
+  }, [modo])
 
   async function entrarComEmail(e: React.FormEvent) {
     e.preventDefault()
@@ -267,20 +266,12 @@ export default function LoginPageClient({
               flexWrap: "wrap",
             }}
           >
-            <Link
-              href="/"
-              style={linkTopo}
-              onClick={limparPlanoSelecionado}
-            >
+            <Link href="/" style={linkTopo} onClick={limparPlanoSelecionado}>
               <ArrowLeft size={16} />
               Voltar para a página inicial
             </Link>
 
-            <Link
-              href="/planos"
-              style={linkTopoSecundario}
-              onClick={limparPlanoSelecionado}
-            >
+            <Link href="/planos" style={linkTopoSecundario}>
               Ver planos
             </Link>
           </div>
@@ -324,9 +315,7 @@ export default function LoginPageClient({
             {planoSelecionado && (
               <div style={planoSelecionadoBox}>
                 <span style={planoSelecionadoLabel}>Plano selecionado</span>
-                <strong style={planoSelecionadoValor}>
-                  {nomePlano(planoSelecionado)}
-                </strong>
+                <strong style={planoSelecionadoValor}>{nomePlano(planoSelecionado)}</strong>
               </div>
             )}
 
@@ -399,11 +388,7 @@ export default function LoginPageClient({
 
               <button type="submit" disabled={carregando} style={submitBtn}>
                 {modo === "entrar" ? <LogIn size={18} /> : <UserPlus size={18} />}
-                {carregando
-                  ? "Aguarde..."
-                  : modo === "entrar"
-                  ? "Entrar"
-                  : "Criar conta"}
+                {carregando ? "Aguarde..." : modo === "entrar" ? "Entrar" : "Criar conta"}
               </button>
             </form>
 
@@ -415,11 +400,7 @@ export default function LoginPageClient({
 
             <p style={rodapePlanos}>
               Ainda está conhecendo o sistema?{" "}
-              <Link
-                href="/planos"
-                style={linkPlanos}
-                onClick={limparPlanoSelecionado}
-              >
+              <Link href="/planos" style={linkPlanos}>
                 Ver planos
               </Link>
             </p>

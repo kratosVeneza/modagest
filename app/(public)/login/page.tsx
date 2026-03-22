@@ -1,12 +1,16 @@
-type LoginPageProps = {
-  searchParams?: Promise<{ plan?: string }>
-}
-
 import LoginPageClient from "./LoginPageClient"
 
-export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const params = await searchParams
-  const initialPlan = params?.plan || "profissional"
+type LoginPageProps = {
+  searchParams?: {
+    plan?: string
+  }
+}
 
-  return <LoginPageClient initialPlan={initialPlan} />
+export default function LoginPage({ searchParams }: LoginPageProps) {
+  const plano =
+    searchParams?.plan && ["essencial", "profissional", "premium"].includes(searchParams.plan)
+      ? searchParams.plan
+      : null
+
+  return <LoginPageClient initialPlan={plano} />
 }
