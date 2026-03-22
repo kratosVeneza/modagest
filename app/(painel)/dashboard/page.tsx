@@ -836,42 +836,145 @@ const produtoMaisLucrativo = useMemo(() => {
 }, [todasVendas, produtosLista])
 
 const acoesSugeridas = useMemo(() => {
-  const acoes: { titulo: string; descricao: string; href: string }[] = []
+  const acoes: {
+    titulo: string
+    descricao: string
+    href: string
+    prioridade: number
+  }[] = []
 
-  if (produtosAbaixoDoMinimo.length > 0) {
+  if (saldoAtual < 0) {
     acoes.push({
-      titulo: "Repor estoque",
-      descricao: "Existem produtos abaixo do estoque mínimo.",
-      href: "/estoque",
+      titulo: "Corrigir caixa negativo",
+      descricao: "Seu caixa está negativo. Revise despesas e entradas.",
+      href: "/financeiro",
+      prioridade: 1,
     })
   }
 
   if (emAbertoPrincipal > 0) {
     acoes.push({
-      titulo: "Cobrar recebimentos",
-      descricao: "Há valores em aberto de vendas ativas.",
+      titulo: "Cobrar clientes",
+      descricao: `Você tem R$ ${emAbertoPrincipal.toFixed(2)} em aberto.`,
       href: "/historico-vendas",
+      prioridade: 2,
+    })
+  }
+
+  if (produtosAbaixoDoMinimo.length > 0) {
+    acoes.push({
+      titulo: "Repor estoque",
+      descricao: `${produtosAbaixoDoMinimo.length} produto(s) com estoque baixo.`,
+      href: "/estoque",
+      prioridade: 3,
     })
   }
 
   if (despesasPendentes > 0) {
     acoes.push({
-      titulo: "Revisar despesas pendentes",
-      descricao: "Há saídas ainda não pagas no financeiro.",
+      titulo: "Pagar despesas",
+      descricao: "Existem despesas pendentes no financeiro.",
       href: "/financeiro",
+      prioridade: 4,
     })
   }
 
   if (acoes.length === 0) {
     acoes.push({
-      titulo: "Acompanhar relatórios",
-      descricao: "Sua operação está em dia. Veja os relatórios detalhados.",
+      titulo: "Acompanhar crescimento",
+      descricao: "Seu sistema está organizado. Analise os relatórios.",
+      href: "/relatorios",
+      prioridade: 5,
+    })
+  }
+
+  return acoes.sort((a, b) => a.prioridade - b.prioridade).slice(0, 3)
+}, [saldoAtual, emAbertoPrincipal, produtosAbaixoDoMinimo.length, despesasPendentes])
+
+const melhorDiaRecebimento = useMemo(() => {
+  if (!graficoDias.length) return null
+
+  const melhor = [...graficoDias].sort((a, b) => b.total - a.total)[0]
+  if (!melhor || melhor.total <= 0) return null
+
+  return melhor
+}, [graficoDias])
+
+const formaPagamentoPrincipal = useMemo(() => {
+  if (!graficoFormasPagamento.length) return null
+
+  const principal = [...graficoFormasPagamento].sort((a, b) => b.value - a.value)[0]
+  if (!principal || principal.value <= 0) return null
+
+  return principal
+}, [graficoFormasPagamento])
+
+const categoriaPrincipal = useMemo(() => {
+  if (!graficoCategorias.length) return null
+
+  const principal = [...graficoCategorias].sort((a, b) => b.value - a.value)[0]
+  if (!principal || principal.value <= 0) return null
+
+  return principal
+}, [graficoCategorias])
+
+const resumoExecutivo = useMemo(() => {
+  const linhas: {
+    texto: string
+    href?: string
+  }[] = []
+
+  if (resultadoLiquidoPeriodo > 0) {
+    linhas.push({
+      texto: `Seu resultado líquido está positivo em R$ ${resultadoLiquidoPeriodo.toFixed(2)}.`,
+    })
+  } else if (resultadoLiquidoPeriodo < 0) {
+    linhas.push({
+      texto: `Seu resultado líquido está negativo em R$ ${Math.abs(resultadoLiquidoPeriodo).toFixed(2)}.`,
+      href: "/financeiro",
+    })
+  } else {
+    linhas.push({
+      texto: "Seu resultado líquido está zerado neste período.",
+    })
+  }
+
+  if (melhorDiaRecebimento) {
+    linhas.push({
+      texto: `O melhor dia de recebimento foi ${melhorDiaRecebimento.dia}, com R$ ${melhorDiaRecebimento.total.toFixed(2)}.`,
       href: "/relatorios",
     })
   }
 
-  return acoes.slice(0, 3)
-}, [produtosAbaixoDoMinimo.length, emAbertoPrincipal, despesasPendentes])
+  if (formaPagamentoPrincipal) {
+    linhas.push({
+      texto: `A forma de pagamento mais usada foi ${formaPagamentoPrincipal.name}.`,
+      href: "/relatorios",
+    })
+  }
+
+  if (categoriaPrincipal) {
+    linhas.push({
+      texto: `A categoria com maior faturamento foi ${categoriaPrincipal.name}.`,
+      href: "/produtos",
+    })
+  }
+
+  if (emAbertoPrincipal > 0) {
+    linhas.push({
+      texto: `Há R$ ${emAbertoPrincipal.toFixed(2)} em aberto para receber.`,
+      href: "/historico-vendas",
+    })
+  }
+
+  return linhas
+}, [
+  resultadoLiquidoPeriodo,
+  melhorDiaRecebimento,
+  formaPagamentoPrincipal,
+  categoriaPrincipal,
+  emAbertoPrincipal,
+])
 
 
   const textoComparacao =
@@ -1201,6 +1304,53 @@ const acoesSugeridas = useMemo(() => {
   <div className="chart-header-row">
     <div>
       <h3 className="dashboard-block-title">O que fazer agora</h3>
+      <div className="section-card" style={{ marginBottom: 24 }}>
+  <div className="chart-header-row">
+    <div>
+      <h3 className="dashboard-block-title">Resumo executivo automático</h3>
+      <p className="dashboard-block-subtitle">
+        Leitura rápida do período com base nos seus dados
+      </p>
+    </div>
+    <span className="chart-badge">Insights</span>
+  </div>
+
+  <div style={resumoExecutivoBox}>
+    {resumoExecutivo.length > 0 ? (
+      resumoExecutivo.map((linha, index) => {
+  const conteudo = (
+    <>
+      <span style={resumoExecutivoPonto}>•</span>
+      <span>{linha.texto}</span>
+    </>
+  )
+
+  if (linha.href) {
+    return (
+      <Link
+        key={`resumo-${index}`}
+        href={linha.href}
+        style={{ ...resumoExecutivoLinha, cursor: "pointer" }}
+      >
+        {conteudo}
+      </Link>
+    )
+  }
+
+  return (
+    <div key={`${linha.texto}-${index}`} style={resumoExecutivoLinha}>
+      {conteudo}
+    </div>
+  )
+})
+
+    ) : (
+      <div style={{ color: "#64748b" }}>
+        Ainda não há dados suficientes para gerar insights automáticos.
+      </div>
+    )}
+  </div>
+</div>
       <p className="dashboard-block-subtitle">
         Sugestões automáticas com base nos seus indicadores
       </p>
@@ -1896,4 +2046,30 @@ const acaoCard: React.CSSProperties = {
   borderRadius: 16,
   padding: 18,
   boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
+  transition: "all 0.2s ease",
+}
+
+const resumoExecutivoBox: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  marginTop: 16,
+}
+
+const resumoExecutivoLinha: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 10,
+  padding: "14px 16px",
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  color: "#334155",
+  lineHeight: 1.6,
+  fontSize: 14,
+}
+
+const resumoExecutivoPonto: React.CSSProperties = {
+  fontWeight: 900,
+  color: "#2563eb",
+  lineHeight: 1.2,
 }
