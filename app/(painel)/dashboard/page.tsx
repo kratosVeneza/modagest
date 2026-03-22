@@ -19,6 +19,7 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
+import Link from "next/link"
 import {
   DollarSign,
   ShoppingBag,
@@ -761,6 +762,117 @@ const alertasDashboard = useMemo(() => {
   return alertas
 }, [produtosAbaixoDoMinimo.length, saldoAtual, saldoPrevisto, emAbertoPrincipal])
 
+const insightPrincipal = useMemo(() => {
+  if (resultadoLiquidoPeriodo > 0 && faturamentoPrincipal > 0) {
+    return {
+      titulo: "Sua operação está positiva",
+      texto: `Você fechou o período com resultado líquido de R$ ${resultadoLiquidoPeriodo.toFixed(
+        2
+      )}.`,
+      tipo: "success" as const,
+    }
+  }
+
+  if (resultadoLiquidoPeriodo < 0) {
+    return {
+      titulo: "Sua operação precisa de atenção",
+      texto: `O resultado líquido está negativo em R$ ${Math.abs(
+        resultadoLiquidoPeriodo
+      ).toFixed(2)} no período.`,
+      tipo: "danger" as const,
+    }
+  }
+
+  if (faturamentoPrincipal <= 0) {
+    return {
+      titulo: "Ainda sem movimento no período",
+      texto: "Registre vendas, recebimentos ou despesas para começar a acompanhar seus indicadores.",
+      tipo: "neutral" as const,
+    }
+  }
+
+  return {
+    titulo: "Período equilibrado",
+    texto: "Seu resultado líquido está zerado neste período.",
+    tipo: "neutral" as const,
+  }
+}, [resultadoLiquidoPeriodo, faturamentoPrincipal])
+
+const produtoMaisVendido = useMemo(() => {
+  if (rankingProdutos.length === 0) return null
+  return rankingProdutos[0]
+}, [rankingProdutos])
+
+const produtoMaisLucrativo = useMemo(() => {
+  const mapa = new Map<
+    number,
+    { nome: string; marca: string; categoria: string; lucro: number }
+  >()
+
+  todasVendas
+    .filter((v) => v.status !== "Cancelada")
+    .forEach((venda) => {
+      const produto = produtosLista.find((p) => p.id === venda.product_id)
+      if (!produto) return
+
+      const custoUnitario = Number(produto.custo || 0)
+      const lucroVenda =
+        Number(venda.valor_total) - custoUnitario * Number(venda.quantidade)
+
+      if (!mapa.has(venda.product_id)) {
+        mapa.set(venda.product_id, {
+          nome: produto.nome,
+          marca: produto.marca || "-",
+          categoria: produto.categoria || "-",
+          lucro: 0,
+        })
+      }
+
+      mapa.get(venda.product_id)!.lucro += lucroVenda
+    })
+
+  const lista = Array.from(mapa.values()).sort((a, b) => b.lucro - a.lucro)
+  return lista.length > 0 ? lista[0] : null
+}, [todasVendas, produtosLista])
+
+const acoesSugeridas = useMemo(() => {
+  const acoes: { titulo: string; descricao: string; href: string }[] = []
+
+  if (produtosAbaixoDoMinimo.length > 0) {
+    acoes.push({
+      titulo: "Repor estoque",
+      descricao: "Existem produtos abaixo do estoque mínimo.",
+      href: "/estoque",
+    })
+  }
+
+  if (emAbertoPrincipal > 0) {
+    acoes.push({
+      titulo: "Cobrar recebimentos",
+      descricao: "Há valores em aberto de vendas ativas.",
+      href: "/historico-vendas",
+    })
+  }
+
+  if (despesasPendentes > 0) {
+    acoes.push({
+      titulo: "Revisar despesas pendentes",
+      descricao: "Há saídas ainda não pagas no financeiro.",
+      href: "/financeiro",
+    })
+  }
+
+  if (acoes.length === 0) {
+    acoes.push({
+      titulo: "Acompanhar relatórios",
+      descricao: "Sua operação está em dia. Veja os relatórios detalhados.",
+      href: "/relatorios",
+    })
+  }
+
+  return acoes.slice(0, 3)
+}, [produtosAbaixoDoMinimo.length, emAbertoPrincipal, despesasPendentes])
+
 
   const textoComparacao =
     periodo === "hoje"
@@ -988,6 +1100,125 @@ const alertasDashboard = useMemo(() => {
         </div>
       )}
     </div>
+
+    <div className="dashboard-two-columns" style={{ marginBottom: 24 }}>
+  <div className="section-card">
+    <div className="chart-header-row">
+      <div>
+        <h3 className="dashboard-block-title">Leitura rápida da operação</h3>
+        <p className="dashboard-block-subtitle">
+          Interpretação automática do seu momento atual
+        </p>
+      </div>
+      <span
+        style={{
+          ...insightTag,
+          ...(insightPrincipal.tipo === "success"
+            ? insightSuccess
+            : insightPrincipal.tipo === "danger"
+            ? insightDanger
+            : insightNeutral),
+        }}
+      >
+        {insightPrincipal.titulo}
+      </span>
+    </div>
+
+    <div style={{ marginTop: 14 }}>
+      <p style={{ margin: 0, fontSize: 15, color: "#334155", lineHeight: 1.7 }}>
+        {insightPrincipal.texto}
+      </p>
+    </div>
+
+    <div style={atalhosGrid}>
+      <Link href="/vendas" style={atalhoCard}>
+        <strong>Registrar venda</strong>
+        <span>Adicionar nova venda e atualizar a operação.</span>
+      </Link>
+
+      <Link href="/financeiro" style={atalhoCard}>
+        <strong>Ir para financeiro</strong>
+        <span>Controlar entradas, saídas e pendências.</span>
+      </Link>
+
+      <Link href="/relatorios" style={atalhoCard}>
+        <strong>Ver relatórios</strong>
+        <span>Aprofundar a análise do seu negócio.</span>
+      </Link>
+    </div>
+  </div>
+
+  <div className="section-card">
+    <div className="chart-header-row">
+      <div>
+        <h3 className="dashboard-block-title">Produtos destaque</h3>
+        <p className="dashboard-block-subtitle">
+          O que mais performou na sua operação
+        </p>
+      </div>
+      <span className="chart-badge">Insights</span>
+    </div>
+
+    <div style={destaquesProdutosGrid}>
+      <div style={produtoInsightCard}>
+        <span style={produtoInsightLabel}>Mais vendido</span>
+        <strong style={produtoInsightTitle}>
+          {produtoMaisVendido ? produtoMaisVendido.nome : "Sem dados ainda"}
+        </strong>
+        <span style={produtoInsightMeta}>
+          {produtoMaisVendido
+            ? `${produtoMaisVendido.quantidade} unidade(s) • ${[
+                produtoMaisVendido.marca,
+                produtoMaisVendido.categoria,
+              ]
+                .filter(Boolean)
+                .join(" • ")}`
+            : "Registre vendas para ver este insight."}
+        </span>
+      </div>
+
+      <div style={produtoInsightCard}>
+        <span style={produtoInsightLabel}>Mais lucrativo</span>
+        <strong style={produtoInsightTitle}>
+          {produtoMaisLucrativo ? produtoMaisLucrativo.nome : "Sem dados ainda"}
+        </strong>
+        <span style={produtoInsightMeta}>
+          {produtoMaisLucrativo
+            ? `R$ ${produtoMaisLucrativo.lucro.toFixed(2)} de lucro • ${[
+                produtoMaisLucrativo.marca,
+                produtoMaisLucrativo.categoria,
+              ]
+                .filter(Boolean)
+                .join(" • ")}`
+            : "Cadastre custo e vendas para ver este insight."}
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="section-card" style={{ marginBottom: 24 }}>
+  <div className="chart-header-row">
+    <div>
+      <h3 className="dashboard-block-title">O que fazer agora</h3>
+      <p className="dashboard-block-subtitle">
+        Sugestões automáticas com base nos seus indicadores
+      </p>
+    </div>
+    <span className="chart-badge">Ações</span>
+  </div>
+
+  <div style={acoesGrid}>
+    {acoesSugeridas.map((acao) => (
+      <Link key={acao.titulo} href={acao.href} style={acaoCard}>
+        <strong>{acao.titulo}</strong>
+        <span>{acao.descricao}</span>
+      </Link>
+    ))}
+  </div>
+</div>
+
+
 
     <div className="grid-3" style={{ marginBottom: 24 }}>
       <div className="metric-card">
@@ -1562,4 +1793,107 @@ const alertaInfo: React.CSSProperties = {
   background: "#eff6ff",
   border: "1px solid #bfdbfe",
   color: "#1d4ed8",
+}
+
+const insightTag: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "8px 12px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 800,
+  border: "1px solid transparent",
+}
+
+const insightSuccess: React.CSSProperties = {
+  background: "#ecfdf5",
+  color: "#065f46",
+  borderColor: "#a7f3d0",
+}
+
+const insightDanger: React.CSSProperties = {
+  background: "#fef2f2",
+  color: "#991b1b",
+  borderColor: "#fecaca",
+}
+
+const insightNeutral: React.CSSProperties = {
+  background: "#f8fafc",
+  color: "#334155",
+  borderColor: "#cbd5e1",
+}
+
+const atalhosGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 12,
+  marginTop: 18,
+}
+
+const atalhoCard: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  textDecoration: "none",
+  color: "#0f172a",
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  padding: 16,
+}
+
+const destaquesProdutosGrid: React.CSSProperties = {
+  display: "grid",
+  gap: 14,
+  marginTop: 16,
+}
+
+const produtoInsightCard: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  padding: 16,
+}
+
+const produtoInsightLabel: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  color: "#64748b",
+}
+
+const produtoInsightTitle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#0f172a",
+}
+
+const produtoInsightMeta: React.CSSProperties = {
+  fontSize: 14,
+  color: "#475569",
+  lineHeight: 1.6,
+}
+
+const acoesGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 14,
+  marginTop: 16,
+}
+
+const acaoCard: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  textDecoration: "none",
+  color: "#0f172a",
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  padding: 18,
+  boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
 }
