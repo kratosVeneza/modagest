@@ -316,7 +316,7 @@ export default function MeuPlanoPage() {
 
           <div style={planoBadge}>
             <Crown size={16} />
-            {nomePlano(assinatura?.plan_slug || "profissional")}
+            {assinatura?.plan_slug ? nomePlano(assinatura.plan_slug) : "-"}
           </div>
         </div>
 
@@ -342,7 +342,10 @@ export default function MeuPlanoPage() {
       <div style={gridResumo}>
         <div style={miniCard}>
           <span style={miniLabel}>Plano atual</span>
-          <strong style={miniValue}>{nomePlano(assinatura?.plan_slug || "profissional")}</strong>
+          <strong style={miniValue}>
+  {assinatura?.plan_slug ? nomePlano(assinatura.plan_slug) : "-"}
+</strong>
+
         </div>
 
         <div style={miniCard}>
