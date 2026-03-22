@@ -216,11 +216,30 @@ export default function Dashboard() {
 
     const { data: lojaData } = await supabase
   .from("stores")
+  .select("*")
+  .eq("user_id", user.id)
+  .maybeSingle()
+
+// 👇 SE NÃO EXISTIR, CRIA AUTOMATICAMENTE
+if (!lojaData) {
+  const { error } = await supabase.from("stores").insert([{
+    user_id: user.id,
+    nome_loja: "Minha Loja",
+  },
+])
+
+  if (error) {
+    console.error("Erro ao criar loja:", error)
+  }
+}
+
+    const { data: lojaAtualizada} = await supabase
+  .from("stores")
   .select("nome_loja, logo_url, meta_faturamento")
       .eq("user_id", user.id)
       .maybeSingle()
 
-    const loja = (lojaData ?? null) as Loja | null
+    const loja = (lojaAtualizada ?? null) as Loja | null
     if (loja?.nome_loja) setNomeLoja(loja.nome_loja)
     if (loja?.logo_url) setLogoUrl(loja.logo_url)
     if (loja?.meta_faturamento !== null && loja?.meta_faturamento !== undefined) {
