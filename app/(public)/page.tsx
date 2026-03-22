@@ -11,6 +11,8 @@ import {
   Users,
   ShieldCheck,
   CheckCircle2,
+  Menu,
+  X,
 } from "lucide-react"
 
 const funcionalidades = [
@@ -69,6 +71,7 @@ const planos = [
 
 export default function HomePage() {
   const [screenWidth, setScreenWidth] = useState(1200)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     function handleResize() {
@@ -81,22 +84,28 @@ export default function HomePage() {
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
+  useEffect(() => {
+    if (menuOpen) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = "auto"
+    }
+
+    return () => {
+      document.body.style.overflow = "auto"
+    }
+  }, [menuOpen])
+
   const isMobile = screenWidth < 768
   const isTablet = screenWidth >= 768 && screenWidth < 1024
 
   const logoWidth = isMobile ? 180 : isTablet ? 220 : 260
-  const heroTitleSize = isMobile ? 38 : isTablet ? 44 : 52
+  const heroTitleSize = isMobile ? 36 : isTablet ? 44 : 52
   const sectionTitleSize = isMobile ? 28 : 34
 
   return (
     <div style={pagina}>
-      <header
-        style={{
-          ...header,
-          flexDirection: isMobile ? "column" : "row",
-          alignItems: isMobile ? "flex-start" : "center",
-        }}
-      >
+      <header style={header}>
         <div style={logoWrap}>
           <Image
             src="/images/logo.png"
@@ -109,24 +118,75 @@ export default function HomePage() {
           />
         </div>
 
-        <nav
-          style={{
-            ...nav,
-            width: isMobile ? "100%" : "auto",
-            justifyContent: isMobile ? "flex-start" : "flex-end",
-          }}
-        >
-          <Link href="/planos" style={navLink}>
-            Planos
-          </Link>
-          <Link href="/login" style={navLink}>
-            Entrar
-          </Link>
-          <Link href="/login" style={ctaHeader}>
-            Teste grátis
-          </Link>
-        </nav>
+        {!isMobile && (
+          <nav style={nav}>
+            <Link href="/planos" style={navLink}>
+              Planos
+            </Link>
+            <Link href="/login" style={navLink}>
+              Entrar
+            </Link>
+            <Link href="/login" style={ctaHeader}>
+              Teste grátis
+            </Link>
+          </nav>
+        )}
+
+        {isMobile && (
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            style={menuButton}
+            aria-label="Abrir menu"
+          >
+            <Menu size={26} />
+          </button>
+        )}
       </header>
+
+      {menuOpen && (
+        <div style={menuOverlay} onClick={() => setMenuOpen(false)}>
+          <div style={menuContainer} onClick={(e) => e.stopPropagation()}>
+            <div style={menuHeader}>
+              <span style={menuTitle}>Menu</span>
+              <button
+                type="button"
+                onClick={() => setMenuOpen(false)}
+                style={menuClose}
+                aria-label="Fechar menu"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={menuLinks}>
+              <Link
+                href="/planos"
+                onClick={() => setMenuOpen(false)}
+                style={menuItem}
+              >
+                Planos
+              </Link>
+
+              <Link
+                href="/login"
+                onClick={() => setMenuOpen(false)}
+                style={menuItem}
+              >
+                Entrar
+              </Link>
+
+              <Link
+                href="/login"
+                onClick={() => setMenuOpen(false)}
+                style={menuCTA}
+              >
+                Teste grátis
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section
         style={{
@@ -448,6 +508,94 @@ const ctaHeader: React.CSSProperties = {
   padding: "12px 16px",
   borderRadius: 12,
   fontWeight: 800,
+}
+
+const menuButton: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  width: 44,
+  height: 44,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+  boxShadow: "0 6px 20px rgba(15,23,42,0.06)",
+}
+
+const menuOverlay: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(15,23,42,0.38)",
+  backdropFilter: "blur(4px)",
+  WebkitBackdropFilter: "blur(4px)",
+  zIndex: 999,
+  display: "flex",
+  justifyContent: "flex-end",
+}
+
+const menuContainer: React.CSSProperties = {
+  width: "82%",
+  maxWidth: 340,
+  height: "100%",
+  background: "#ffffff",
+  padding: 20,
+  boxShadow: "-20px 0 40px rgba(15,23,42,0.15)",
+  display: "flex",
+  flexDirection: "column",
+  gap: 20,
+}
+
+const menuHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  paddingBottom: 12,
+  borderBottom: "1px solid #e5e7eb",
+}
+
+const menuTitle: React.CSSProperties = {
+  fontWeight: 800,
+  fontSize: 18,
+  color: "#0f172a",
+}
+
+const menuClose: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  width: 40,
+  height: 40,
+  borderRadius: 10,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+}
+
+const menuLinks: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 14,
+  marginTop: 8,
+}
+
+const menuItem: React.CSSProperties = {
+  textDecoration: "none",
+  color: "#0f172a",
+  fontWeight: 700,
+  fontSize: 17,
+  padding: "10px 4px",
+}
+
+const menuCTA: React.CSSProperties = {
+  textDecoration: "none",
+  background: "#2563eb",
+  color: "#fff",
+  padding: "14px 16px",
+  borderRadius: 12,
+  fontWeight: 800,
+  textAlign: "center",
+  marginTop: 8,
 }
 
 const hero: React.CSSProperties = {
