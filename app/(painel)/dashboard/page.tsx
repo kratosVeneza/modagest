@@ -1003,30 +1003,52 @@ const resumoExecutivo = useMemo<{ texto: string; href?: string }[]>(() => {
    async function salvarMetaFaturamento() {
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser()
 
-  if (!user) return
+  console.log("USER:", user)
+  console.log("USER ERROR:", userError)
 
-  const valor = Number(novaMeta)
-
-  if (!valor || valor <= 0) {
-    alert("Digite um valor válido")
+  if (!user) {
+    alert("Usuário não autenticado.")
     return
   }
 
-  const { error } = await supabase
+  const valor = Number(novaMeta)
+  console.log("VALOR META:", valor)
+
+  if (!valor || valor <= 0) {
+    alert("Digite um valor válido.")
+    return
+  }
+
+  const { data: lojaAtual, error: lojaError } = await supabase
+    .from("stores")
+    .select("id, user_id, nome_loja, meta_faturamento")
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  console.log("LOJA ATUAL:", lojaAtual)
+  console.log("LOJA ERROR:", lojaError)
+
+  const { data, error } = await supabase
     .from("stores")
     .update({ meta_faturamento: valor })
     .eq("user_id", user.id)
+    .select()
+
+  console.log("UPDATE DATA:", data)
+  console.log("UPDATE ERROR:", error)
 
   if (error) {
-    alert("Erro ao salvar meta")
+    alert(`Erro ao salvar meta: ${error.message}`)
     return
   }
 
   setMetaFaturamento(valor)
   setNovaMeta("")
   setEditandoMeta(false)
+  alert("Meta salva com sucesso.")
 }
 
   function exportarDashboardCSV() {
