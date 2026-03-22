@@ -712,6 +712,56 @@ export default function Dashboard() {
     [rankingProdutos]
   )
 
+  const cardLucroPrincipal = useMemo(() => {
+  const positivo = resultadoLiquidoPeriodo >= 0
+  return {
+    titulo: "Resultado líquido",
+    valor: `R$ ${resultadoLiquidoPeriodo.toFixed(2)}`,
+    descricao: positivo
+      ? "Resultado final do período após custos e despesas."
+      : "Atenção: o período está fechando no negativo.",
+    cor: positivo ? "#065f46" : "#991b1b",
+    fundo: positivo ? "#ecfdf5" : "#fef2f2",
+    borda: positivo ? "#a7f3d0" : "#fecaca",
+    icone: positivo ? <TrendingUp size={20} /> : <TrendingDown size={20} />,
+  }
+}, [resultadoLiquidoPeriodo])
+
+const alertasDashboard = useMemo(() => {
+  const alertas: { tipo: "warning" | "danger" | "info"; texto: string }[] = []
+
+  if (produtosAbaixoDoMinimo.length > 0) {
+    alertas.push({
+      tipo: "warning",
+      texto: `${produtosAbaixoDoMinimo.length} produto(s) com estoque baixo.`,
+    })
+  }
+
+  if (saldoAtual < 0) {
+    alertas.push({
+      tipo: "danger",
+      texto: `Caixa atual negativo em R$ ${Math.abs(saldoAtual).toFixed(2)}.`,
+    })
+  }
+
+  if (saldoPrevisto < 0) {
+    alertas.push({
+      tipo: "warning",
+      texto: `Saldo previsto negativo em R$ ${Math.abs(saldoPrevisto).toFixed(2)}.`,
+    })
+  }
+
+  if (emAbertoPrincipal > 0) {
+    alertas.push({
+      tipo: "info",
+      texto: `Há R$ ${emAbertoPrincipal.toFixed(2)} em aberto para receber.`,
+    })
+  }
+
+  return alertas
+}, [produtosAbaixoDoMinimo.length, saldoAtual, saldoPrevisto, emAbertoPrincipal])
+
+
   const textoComparacao =
     periodo === "hoje"
       ? "vs ontem"
@@ -829,385 +879,228 @@ export default function Dashboard() {
   }
 
   return (
-    <div>
-      <h2 className="page-title">Dashboard</h2>
-      <p className="page-subtitle">Resumo comercial e financeiro da operação.</p>
+  <div>
+    <h2 className="page-title">Dashboard</h2>
+    <p className="page-subtitle">Resumo comercial e financeiro da operação.</p>
 
-      <HelpBanner
-        title="Como ler o Dashboard"
-        text="Aqui você acompanha vendas, recebimentos, caixa, saldo previsto, produtos em baixa e desempenho geral da operação. Os filtros por período alteram todos os indicadores."
-      />
+    <HelpBanner
+      title="Como ler o Dashboard"
+      text="Aqui você acompanha vendas, recebimentos, caixa, saldo previsto, produtos em baixa e desempenho geral da operação. Os filtros por período alteram todos os indicadores."
+    />
 
-      {mensagem && <p>{mensagem}</p>}
+    {mensagem && <p>{mensagem}</p>}
 
-      <div className="dashboard-actions">
-        <button onClick={exportarDashboardCSV} className="btn btn-secondary">
-          Exportar CSV
+    <div className="dashboard-actions">
+      <button onClick={exportarDashboardCSV} className="btn btn-secondary">
+        Exportar CSV
+      </button>
+      <button onClick={exportarDashboardPDF} className="btn btn-primary">
+        Exportar PDF
+      </button>
+    </div>
+
+    <div className="period-filter">
+      {periodos.map((item) => (
+        <button
+          key={item.value}
+          type="button"
+          className={`period-btn ${periodo === item.value ? "active" : ""}`}
+          onClick={() => setPeriodo(item.value)}
+        >
+          {item.label}
         </button>
-        <button onClick={exportarDashboardPDF} className="btn btn-primary">
-          Exportar PDF
-        </button>
-      </div>
+      ))}
+    </div>
 
-      <div className="period-filter">
-        {periodos.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={`period-btn ${periodo === item.value ? "active" : ""}`}
-            onClick={() => setPeriodo(item.value)}
+    <div style={heroDashboard}>
+      <div style={heroPrincipal}>
+        <div style={heroHeader}>
+          <div>
+            <p style={heroLabel}>Visão principal</p>
+            <h3 style={heroTitle}>O que sua operação gerou neste período</h3>
+          </div>
+
+          <div
+            style={{
+              ...heroBadge,
+              background: cardLucroPrincipal.fundo,
+              color: cardLucroPrincipal.cor,
+              border: `1px solid ${cardLucroPrincipal.borda}`,
+            }}
           >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {produtosAbaixoDoMinimo.length > 0 && (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: "14px 16px",
-            borderRadius: 14,
-            background: "#fff7ed",
-            border: "1px solid #fdba74",
-            color: "#9a3412",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <AlertTriangle size={18} />
-            <strong>{produtosAbaixoDoMinimo.length} produto(s) com estoque baixo</strong>
-          </div>
-
-          <div style={{ fontSize: 14 }}>
-            {produtosAbaixoDoMinimo
-              .slice(0, 5)
-              .map((p) => `${p.nome} (${p.estoque}/${p.estoque_minimo || 0})`)
-              .join(" • ")}
+            {cardLucroPrincipal.icone}
+            {cardLucroPrincipal.titulo}
           </div>
         </div>
-      )}
 
-      {saldoAtual < 0 && (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: "14px 16px",
-            borderRadius: 14,
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-            color: "#991b1b",
-          }}
-        >
-          <strong>Alerta:</strong> o caixa atual está negativo em R$ {Math.abs(saldoAtual).toFixed(2)}.
-        </div>
-      )}
-
-      {saldoPrevisto < 0 && (
-        <div
-          style={{
-            marginBottom: 20,
-            padding: "14px 16px",
-            borderRadius: 14,
-            background: "#fff7ed",
-            border: "1px solid #fdba74",
-            color: "#9a3412",
-          }}
-        >
-          <strong>Atenção:</strong> o saldo previsto ficará negativo em R$ {Math.abs(saldoPrevisto).toFixed(2)} se todas as pendências acontecerem.
-        </div>
-      )}
-
-      <div className="grid-3" style={{ marginBottom: 24 }}>
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Total vendido
-                <HelpTooltip text="Soma do valor total das vendas ativas no período selecionado, independentemente de terem sido pagas ou não." />
-              </p>
-              <p className="metric-value">R$ {faturamentoPrincipal.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box">
-              <DollarSign size={20} />
-            </div>
-          </div>
-          <div className="trend-row">
-            <span className={`trend-pill trend-${tendenciaVendido.variant}`}>
-              {tendenciaVendido.icon}
-              {tendenciaVendido.label}
+        <div style={heroValorWrap}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <span style={heroValor}>{cardLucroPrincipal.valor}</span>
+            <span style={{ color: "#475569", fontSize: 14 }}>
+              {cardLucroPrincipal.descricao}
             </span>
-            <span className="metric-helper">{textoComparacao}</span>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Total recebido
-                <HelpTooltip text="Soma dos pagamentos realmente recebidos das vendas ativas no período." />
-              </p>
-              <p className="metric-value">R$ {recebidoPrincipal.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box green">
-              <Wallet size={20} />
-            </div>
-          </div>
-          <div className="trend-row">
-            <span className={`trend-pill trend-${tendenciaRecebido.variant}`}>
-              {tendenciaRecebido.icon}
-              {tendenciaRecebido.label}
-            </span>
-            <span className="metric-helper">{textoComparacao}</span>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Em aberto
-                <HelpTooltip text="Valor que ainda falta receber das vendas ativas do período." />
-              </p>
-              <p className="metric-value">R$ {emAbertoPrincipal.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box red">
-              <BadgeDollarSign size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Saldo a receber das vendas ativas</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Saldo atual
-                <HelpTooltip text="Resultado das entradas já pagas menos as saídas já pagas. Representa o caixa real." />
-              </p>
-              <p className="metric-value">R$ {saldoAtual.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box green">
-              <Landmark size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Entradas pagas menos saídas pagas</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Saldo previsto
-                <HelpTooltip text="Mostra como o caixa ficará se todas as entradas e saídas pendentes forem realizadas." />
-              </p>
-              <p className="metric-value">R$ {saldoPrevisto.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box purple">
-              <CircleDollarSign size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Considerando pendências</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Despesas pendentes
-                <HelpTooltip text="Saídas financeiras ainda não pagas, como fornecedor, aluguel, frete ou marketing." />
-              </p>
-              <p className="metric-value">R$ {despesasPendentes.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box orange">
-              <PackageOpen size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Saídas ainda não pagas</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Margem média recebida
-                <HelpTooltip text="Percentual médio de lucro sobre os valores que foram efetivamente recebidos." />
-              </p>
-              <p className="metric-value">{margemMediaPeriodo.toFixed(1)}%</p>
-            </div>
-            <div className="metric-icon-box purple">
-              <Percent size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Sobre os valores recebidos</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Itens vendidos
-                <HelpTooltip text="Quantidade total de itens vendidos no período selecionado." />
-              </p>
-              <p className="metric-value">{produtosVendidosPeriodo}</p>
-            </div>
-            <div className="metric-icon-box purple">
-              <ShoppingBag size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Total no período selecionado</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Estoque baixo
-                <HelpTooltip text="Quantidade de produtos com estoque igual ou abaixo do estoque mínimo definido." />
-              </p>
-              <p className="metric-value">{estoqueBaixo}</p>
-            </div>
-            <div className="metric-icon-box orange">
-              <Boxes size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Produtos no limite mínimo</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Custo recebido
-                <HelpTooltip text="Custo proporcional dos produtos referente ao que foi efetivamente recebido no período." />
-              </p>
-              <p className="metric-value">R$ {custoProdutosPeriodo.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box orange">
-              <PackageOpen size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Custo dos recebimentos do período</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Lucro bruto
-                <HelpTooltip text="Recebimentos menos custo proporcional dos produtos recebidos no período." />
-              </p>
-              <p className="metric-value">R$ {lucroBrutoPeriodo.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box green">
-              <TrendingUp size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Antes das despesas operacionais</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Despesas pagas
-                <HelpTooltip text="Despesas manuais marcadas como pagas dentro do período selecionado." />
-              </p>
-              <p className="metric-value">R$ {despesasPagasPeriodo.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box red">
-              <BadgeDollarSign size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Saídas realizadas no período</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-top-row">
-            <div>
-              <p className="metric-label" style={tituloComAjuda}>
-                Resultado líquido
-                <HelpTooltip text="Lucro bruto menos despesas pagas no período." />
-              </p>
-              <p className="metric-value">R$ {resultadoLiquidoPeriodo.toFixed(2)}</p>
-            </div>
-            <div className="metric-icon-box purple">
-              <CircleDollarSign size={20} />
-            </div>
-          </div>
-          <div className="metric-helper">Resultado final do período</div>
-        </div>
-      </div>
-
-      <div className="dashboard-two-columns" style={{ marginBottom: 24 }}>
-        <div className="chart-shell">
-          <div className="chart-header-row">
-            <div>
-              <h3 className="dashboard-block-title" style={tituloComAjuda}>
-                Recebido por dia
-                <HelpTooltip text="Mostra quanto foi efetivamente recebido em cada dia do período selecionado." />
-              </h3>
-              <p className="dashboard-block-subtitle">Entradas reais de caixa das vendas</p>
-            </div>
-            <span className="chart-badge">Pagamentos</span>
           </div>
 
-          <div style={{ width: "100%", height: 320 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={graficoDias}>
-                <defs>
-                  <linearGradient id="colorRecebido" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#059669" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#059669" stopOpacity={0.03} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="dia" />
-                <YAxis />
-                <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
-                <Area
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#059669"
-                  strokeWidth={3}
-                  fillOpacity={1}
-                  fill="url(#colorRecebido)"
-                  isAnimationActive
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="chart-shell">
-          <div className="chart-header-row">
-            <div>
-              <h3 className="dashboard-block-title" style={tituloComAjuda}>
-                Recebido por forma
-                <HelpTooltip text="Distribui os recebimentos por forma de pagamento, como Pix, dinheiro ou cartão." />
-              </h3>
-              <p className="dashboard-block-subtitle">Distribuição dos pagamentos</p>
+          <div style={heroMiniGrid}>
+            <div style={heroMiniCard}>
+              <span style={heroMiniLabel}>Total vendido</span>
+              <strong style={heroMiniValue}>R$ {faturamentoPrincipal.toFixed(2)}</strong>
+              <span style={heroMiniTrend}>
+                {tendenciaVendido.icon} {tendenciaVendido.label} {textoComparacao}
+              </span>
             </div>
-            <span className="chart-badge">Financeiro</span>
-          </div>
 
-          <div style={{ width: "100%", height: 320 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={graficoFormasPagamento} dataKey="value" nameKey="name" outerRadius={100} label>
-                  {graficoFormasPagamento.map((_, index) => (
-                    <Cell key={index} fill={CORES[index % CORES.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            <div style={heroMiniCard}>
+              <span style={heroMiniLabel}>Total recebido</span>
+              <strong style={heroMiniValue}>R$ {recebidoPrincipal.toFixed(2)}</strong>
+              <span style={heroMiniTrend}>
+                {tendenciaRecebido.icon} {tendenciaRecebido.label} {textoComparacao}
+              </span>
+            </div>
+
+            <div style={heroMiniCard}>
+              <span style={heroMiniLabel}>Despesas pagas</span>
+              <strong style={heroMiniValue}>R$ {despesasPagasPeriodo.toFixed(2)}</strong>
+              <span style={heroMiniTrend}>Saídas realizadas no período</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="chart-shell" style={{ marginBottom: 24 }}>
+      {alertasDashboard.length > 0 && (
+        <div style={alertasGrid}>
+          {alertasDashboard.map((alerta, index) => (
+            <div
+              key={`${alerta.texto}-${index}`}
+              style={{
+                ...alertaCard,
+                ...(alerta.tipo === "danger"
+                  ? alertaDanger
+                  : alerta.tipo === "warning"
+                  ? alertaWarning
+                  : alertaInfo),
+              }}
+            >
+              <AlertTriangle size={18} />
+              <span>{alerta.texto}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
+    <div className="grid-3" style={{ marginBottom: 24 }}>
+      <div className="metric-card">
+        <div className="metric-top-row">
+          <div>
+            <p className="metric-label" style={tituloComAjuda}>
+              Total vendido
+              <HelpTooltip text="Soma do valor total das vendas ativas no período selecionado, independentemente de terem sido pagas ou não." />
+            </p>
+            <p className="metric-value">R$ {faturamentoPrincipal.toFixed(2)}</p>
+          </div>
+          <div className="metric-icon-box">
+            <DollarSign size={20} />
+          </div>
+        </div>
+        <div className="trend-row">
+          <span className={`trend-pill trend-${tendenciaVendido.variant}`}>
+            {tendenciaVendido.icon}
+            {tendenciaVendido.label}
+          </span>
+          <span className="metric-helper">{textoComparacao}</span>
+        </div>
+      </div>
+
+      <div className="metric-card">
+        <div className="metric-top-row">
+          <div>
+            <p className="metric-label" style={tituloComAjuda}>
+              Total recebido
+              <HelpTooltip text="Soma dos pagamentos realmente recebidos das vendas ativas no período." />
+            </p>
+            <p className="metric-value">R$ {recebidoPrincipal.toFixed(2)}</p>
+          </div>
+          <div className="metric-icon-box green">
+            <Wallet size={20} />
+          </div>
+        </div>
+        <div className="trend-row">
+          <span className={`trend-pill trend-${tendenciaRecebido.variant}`}>
+            {tendenciaRecebido.icon}
+            {tendenciaRecebido.label}
+          </span>
+          <span className="metric-helper">{textoComparacao}</span>
+        </div>
+      </div>
+
+      <div className="metric-card">
+        <div className="metric-top-row">
+          <div>
+            <p className="metric-label" style={tituloComAjuda}>
+              Em aberto
+              <HelpTooltip text="Valor que ainda falta receber das vendas ativas do período." />
+            </p>
+            <p className="metric-value">R$ {emAbertoPrincipal.toFixed(2)}</p>
+          </div>
+          <div className="metric-icon-box red">
+            <BadgeDollarSign size={20} />
+          </div>
+        </div>
+        <div className="metric-helper">Saldo a receber das vendas ativas</div>
+      </div>
+
+      <div className="metric-card">
+        <div className="metric-top-row">
+          <div>
+            <p className="metric-label" style={tituloComAjuda}>
+              Saldo atual
+              <HelpTooltip text="Resultado das entradas já pagas menos as saídas já pagas. Representa o caixa real." />
+            </p>
+            <p className="metric-value">R$ {saldoAtual.toFixed(2)}</p>
+          </div>
+          <div className="metric-icon-box green">
+            <Landmark size={20} />
+          </div>
+        </div>
+        <div className="metric-helper">Entradas pagas menos saídas pagas</div>
+      </div>
+
+      <div className="metric-card">
+        <div className="metric-top-row">
+          <div>
+            <p className="metric-label" style={tituloComAjuda}>
+              Saldo previsto
+              <HelpTooltip text="Mostra como o caixa ficará se todas as entradas e saídas pendentes forem realizadas." />
+            </p>
+            <p className="metric-value">R$ {saldoPrevisto.toFixed(2)}</p>
+          </div>
+          <div className="metric-icon-box purple">
+            <CircleDollarSign size={20} />
+          </div>
+        </div>
+        <div className="metric-helper">Considerando pendências</div>
+      </div>
+
+      <div className="metric-card">
+        <div className="metric-top-row">
+          <div>
+            <p className="metric-label" style={tituloComAjuda}>
+              Despesas pendentes
+              <HelpTooltip text="Saídas financeiras ainda não pagas, como fornecedor, aluguel, frete ou marketing." />
+            </p>
+            <p className="metric-value">R$ {despesasPendentes.toFixed(2)}</p>
+          </div>
+          <div className="metric-icon-box orange">
+            <PackageOpen size={20} />
+          </div>
+        </div>
+        <div className="metric-helper">Saídas ainda não pagas</div>
+      </div>
+    </div>
+
+    <div className="dashboard-two-columns" style={{ marginBottom: 24 }}>
+      <div className="chart-shell">
         <div className="chart-header-row">
           <div>
             <h3 className="dashboard-block-title" style={tituloComAjuda}>
@@ -1248,98 +1141,275 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="dashboard-two-columns" style={{ marginBottom: 24 }}>
-        <div className="chart-shell">
-          <div className="chart-header-row">
-            <div>
-              <h3 className="dashboard-block-title" style={tituloComAjuda}>
-                Produtos mais vendidos
-                <HelpTooltip text="Ranking dos produtos com maior quantidade vendida no período selecionado." />
-              </h3>
-              <p className="dashboard-block-subtitle">Ranking do período</p>
-            </div>
-            <span className="chart-badge">Top 5</span>
+      <div className="chart-shell">
+        <div className="chart-header-row">
+          <div>
+            <h3 className="dashboard-block-title" style={tituloComAjuda}>
+              Recebido por dia
+              <HelpTooltip text="Mostra quanto foi efetivamente recebido em cada dia do período selecionado." />
+            </h3>
+            <p className="dashboard-block-subtitle">Entradas reais de caixa das vendas</p>
           </div>
-
-          <div className="bar-list">
-            {rankingProdutos.map((item) => (
-              <div key={`${item.nome}-${item.marca}`} className="bar-list-item">
-                <div className="bar-list-label">
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <span>{item.nome}</span>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>
-                      {[item.marca, item.categoria].filter(Boolean).join(" • ")}
-                    </span>
-                  </div>
-                </div>
-                <div className="bar-list-track">
-                  <div
-                    className="bar-list-fill"
-                    style={{ width: `${(item.quantidade / maiorRanking) * 100}%` }}
-                  />
-                </div>
-                <div className="bar-list-value">{item.quantidade}</div>
-              </div>
-            ))}
-
-            {!carregando && rankingProdutos.length === 0 && (
-              <div className="empty-state">Nenhum produto vendido ainda.</div>
-            )}
-          </div>
+          <span className="chart-badge">Pagamentos</span>
         </div>
 
-        <div className="section-card">
-          <h3 className="dashboard-block-title" style={tituloComAjuda}>
-            Últimas vendas
-            <HelpTooltip text="Mostra as vendas mais recentes do período com total vendido, recebido e saldo em aberto." />
-          </h3>
-          <p className="dashboard-block-subtitle">Vendido, recebido e em aberto</p>
-
-          <div className="data-table-wrap" style={{ marginTop: 16 }}>
-            <table className="premium-table" style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={th}>Cliente</th>
-                  <th style={th}>Produto</th>
-                  <th style={th}>Vendido</th>
-                  <th style={th}>Recebido</th>
-                  <th style={th}>Em aberto</th>
-                  <th style={th}>Data</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {carregando ? (
-                  <tr>
-                    <td colSpan={6} style={{ padding: 20 }}>
-                      Carregando...
-                    </td>
-                  </tr>
-                ) : ultimasVendas.length > 0 ? (
-                  ultimasVendas.map((venda) => (
-                    <tr key={venda.id}>
-                      <td style={td}>{venda.nomeCliente}</td>
-                      <td style={td}>{venda.nomeProduto}</td>
-                      <td style={td}>R$ {venda.valorTotal.toFixed(2)}</td>
-                      <td style={td}>R$ {venda.valorRecebido.toFixed(2)}</td>
-                      <td style={td}>R$ {venda.valorEmAberto.toFixed(2)}</td>
-                      <td style={td}>{formatarData(venda.created_at)}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td style={tdVazio} colSpan={6}>
-                      Nenhuma venda encontrada.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div style={{ width: "100%", height: 320 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={graficoDias}>
+              <defs>
+                <linearGradient id="colorRecebido" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#059669" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#059669" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="dia" />
+              <YAxis />
+              <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
+              <Area
+                type="monotone"
+                dataKey="total"
+                stroke="#059669"
+                strokeWidth={3}
+                fillOpacity={1}
+                fill="url(#colorRecebido)"
+                isAnimationActive
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>
-  )
+
+    <div className="dashboard-two-columns" style={{ marginBottom: 24 }}>
+      <div className="chart-shell">
+        <div className="chart-header-row">
+          <div>
+            <h3 className="dashboard-block-title" style={tituloComAjuda}>
+              Produtos mais vendidos
+              <HelpTooltip text="Ranking dos produtos com maior quantidade vendida no período selecionado." />
+            </h3>
+            <p className="dashboard-block-subtitle">Ranking do período</p>
+          </div>
+          <span className="chart-badge">Top 5</span>
+        </div>
+
+        <div className="bar-list">
+          {rankingProdutos.map((item) => (
+            <div key={`${item.nome}-${item.marca}`} className="bar-list-item">
+              <div className="bar-list-label">
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span>{item.nome}</span>
+                  <span style={{ fontSize: 12, color: "#6b7280" }}>
+                    {[item.marca, item.categoria].filter(Boolean).join(" • ")}
+                  </span>
+                </div>
+              </div>
+              <div className="bar-list-track">
+                <div
+                  className="bar-list-fill"
+                  style={{ width: `${(item.quantidade / maiorRanking) * 100}%` }}
+                />
+              </div>
+              <div className="bar-list-value">{item.quantidade}</div>
+            </div>
+          ))}
+
+          {!carregando && rankingProdutos.length === 0 && (
+            <div className="empty-state">Nenhum produto vendido ainda.</div>
+          )}
+        </div>
+      </div>
+
+      <div className="chart-shell">
+        <div className="chart-header-row">
+          <div>
+            <h3 className="dashboard-block-title" style={tituloComAjuda}>
+              Recebido por forma
+              <HelpTooltip text="Distribui os recebimentos por forma de pagamento, como Pix, dinheiro ou cartão." />
+            </h3>
+            <p className="dashboard-block-subtitle">Distribuição dos pagamentos</p>
+          </div>
+          <span className="chart-badge">Financeiro</span>
+        </div>
+
+        <div style={{ width: "100%", height: 320 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={graficoFormasPagamento} dataKey="value" nameKey="name" outerRadius={100} label>
+                {graficoFormasPagamento.map((_, index) => (
+                  <Cell key={index} fill={CORES[index % CORES.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+
+    <div className="section-card" style={{ marginBottom: 24 }}>
+      <div className="chart-header-row">
+        <div>
+          <h3 className="dashboard-block-title">Indicadores complementares</h3>
+          <p className="dashboard-block-subtitle">
+            Informações adicionais para análise mais detalhada da operação
+          </p>
+        </div>
+        <span className="chart-badge">Apoio gerencial</span>
+      </div>
+
+      <div className="grid-3" style={{ marginTop: 18, marginBottom: 0 }}>
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label" style={tituloComAjuda}>
+                Itens vendidos
+                <HelpTooltip text="Quantidade total de itens vendidos no período selecionado." />
+              </p>
+              <p className="metric-value">{produtosVendidosPeriodo}</p>
+            </div>
+            <div className="metric-icon-box purple">
+              <ShoppingBag size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Total no período selecionado</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label" style={tituloComAjuda}>
+                Estoque baixo
+                <HelpTooltip text="Quantidade de produtos com estoque igual ou abaixo do estoque mínimo definido." />
+              </p>
+              <p className="metric-value">{estoqueBaixo}</p>
+            </div>
+            <div className="metric-icon-box orange">
+              <Boxes size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Produtos no limite mínimo</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label" style={tituloComAjuda}>
+                Pedidos pendentes
+                <HelpTooltip text="Quantidade de pedidos ao fornecedor ainda pendentes, encomendados ou enviados." />
+              </p>
+              <p className="metric-value">{pedidosPendentes}</p>
+            </div>
+            <div className="metric-icon-box">
+              <ShoppingBag size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Reposições em andamento</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label" style={tituloComAjuda}>
+                Custo recebido
+                <HelpTooltip text="Custo proporcional dos produtos referente ao que foi efetivamente recebido no período." />
+              </p>
+              <p className="metric-value">R$ {custoProdutosPeriodo.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box orange">
+              <PackageOpen size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Custo dos recebimentos do período</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label" style={tituloComAjuda}>
+                Lucro bruto
+                <HelpTooltip text="Recebimentos menos custo proporcional dos produtos recebidos no período." />
+              </p>
+              <p className="metric-value">R$ {lucroBrutoPeriodo.toFixed(2)}</p>
+            </div>
+            <div className="metric-icon-box green">
+              <TrendingUp size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Antes das despesas operacionais</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-top-row">
+            <div>
+              <p className="metric-label" style={tituloComAjuda}>
+                Margem média recebida
+                <HelpTooltip text="Percentual médio de lucro sobre os valores que foram efetivamente recebidos." />
+              </p>
+              <p className="metric-value">{margemMediaPeriodo.toFixed(1)}%</p>
+            </div>
+            <div className="metric-icon-box purple">
+              <Percent size={20} />
+            </div>
+          </div>
+          <div className="metric-helper">Sobre os valores recebidos</div>
+        </div>
+      </div>
+    </div>
+
+    <div className="section-card">
+      <h3 className="dashboard-block-title" style={tituloComAjuda}>
+        Últimas vendas
+        <HelpTooltip text="Mostra as vendas mais recentes do período com total vendido, recebido e saldo em aberto." />
+      </h3>
+      <p className="dashboard-block-subtitle">Vendido, recebido e em aberto</p>
+
+      <div className="data-table-wrap" style={{ marginTop: 16 }}>
+        <table className="premium-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={th}>Cliente</th>
+              <th style={th}>Produto</th>
+              <th style={th}>Vendido</th>
+              <th style={th}>Recebido</th>
+              <th style={th}>Em aberto</th>
+              <th style={th}>Data</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {carregando ? (
+              <tr>
+                <td colSpan={6} style={{ padding: 20 }}>
+                  Carregando...
+                </td>
+              </tr>
+            ) : ultimasVendas.length > 0 ? (
+              ultimasVendas.map((venda) => (
+                <tr key={venda.id}>
+                  <td style={td}>{venda.nomeCliente}</td>
+                  <td style={td}>{venda.nomeProduto}</td>
+                  <td style={td}>R$ {venda.valorTotal.toFixed(2)}</td>
+                  <td style={td}>R$ {venda.valorRecebido.toFixed(2)}</td>
+                  <td style={td}>R$ {venda.valorEmAberto.toFixed(2)}</td>
+                  <td style={td}>{formatarData(venda.created_at)}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td style={tdVazio} colSpan={6}>
+                  Nenhuma venda encontrada.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+)
 }
 
 const th = {
@@ -1364,4 +1434,132 @@ const tdVazio = {
 const tituloComAjuda = {
   display: "inline-flex",
   alignItems: "center",
+}
+const heroDashboard: React.CSSProperties = {
+  display: "grid",
+  gap: 16,
+  marginBottom: 24,
+}
+
+const heroPrincipal: React.CSSProperties = {
+  background: "linear-gradient(135deg, #0f172a, #1e3a8a)",
+  borderRadius: 22,
+  padding: 24,
+  color: "#fff",
+  boxShadow: "0 18px 40px rgba(15,23,42,0.12)",
+}
+
+const heroHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  flexWrap: "wrap",
+  marginBottom: 18,
+}
+
+const heroLabel: React.CSSProperties = {
+  margin: 0,
+  fontSize: 13,
+  fontWeight: 700,
+  color: "rgba(255,255,255,0.75)",
+  textTransform: "uppercase",
+  letterSpacing: 0.6,
+}
+
+const heroTitle: React.CSSProperties = {
+  margin: "8px 0 0 0",
+  fontSize: 28,
+  fontWeight: 900,
+  lineHeight: 1.15,
+}
+
+const heroBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "10px 14px",
+  borderRadius: 999,
+  fontSize: 13,
+  fontWeight: 800,
+}
+
+const heroValorWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 18,
+}
+
+const heroValor: React.CSSProperties = {
+  fontSize: 44,
+  fontWeight: 900,
+  lineHeight: 1,
+}
+
+const heroMiniGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 14,
+}
+
+const heroMiniCard: React.CSSProperties = {
+  background: "rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 16,
+  padding: 16,
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+}
+
+const heroMiniLabel: React.CSSProperties = {
+  fontSize: 13,
+  color: "rgba(255,255,255,0.72)",
+}
+
+const heroMiniValue: React.CSSProperties = {
+  fontSize: 24,
+  fontWeight: 900,
+  color: "#fff",
+}
+
+const heroMiniTrend: React.CSSProperties = {
+  fontSize: 13,
+  color: "rgba(255,255,255,0.72)",
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  flexWrap: "wrap",
+}
+
+const alertasGrid: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+}
+
+const alertaCard: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "14px 16px",
+  borderRadius: 14,
+  fontSize: 14,
+  fontWeight: 700,
+}
+
+const alertaWarning: React.CSSProperties = {
+  background: "#fff7ed",
+  border: "1px solid #fdba74",
+  color: "#9a3412",
+}
+
+const alertaDanger: React.CSSProperties = {
+  background: "#fef2f2",
+  border: "1px solid #fecaca",
+  color: "#991b1b",
+}
+
+const alertaInfo: React.CSSProperties = {
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  color: "#1d4ed8",
 }
