@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
+import { useEffect, useState } from "react"
 import {
   BarChart3,
   Boxes,
@@ -67,22 +68,54 @@ const planos = [
 ]
 
 export default function HomePage() {
+  const [screenWidth, setScreenWidth] = useState(1200)
+
+  useEffect(() => {
+    function handleResize() {
+      setScreenWidth(window.innerWidth)
+    }
+
+    handleResize()
+    window.addEventListener("resize", handleResize)
+
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
+
+  const isMobile = screenWidth < 768
+  const isTablet = screenWidth >= 768 && screenWidth < 1024
+
+  const logoWidth = isMobile ? 180 : isTablet ? 220 : 260
+  const heroTitleSize = isMobile ? 38 : isTablet ? 44 : 52
+  const sectionTitleSize = isMobile ? 28 : 34
+
   return (
     <div style={pagina}>
-      <header style={header}>
+      <header
+        style={{
+          ...header,
+          flexDirection: isMobile ? "column" : "row",
+          alignItems: isMobile ? "flex-start" : "center",
+        }}
+      >
         <div style={logoWrap}>
           <Image
             src="/images/logo.png"
             alt="Logo Modagest"
             width={0}
             height={0}
-            sizes= "100vw"
-            style={{ width: "350px", height: "auto" }}
+            sizes="100vw"
+            style={{ width: `${logoWidth}px`, height: "auto" }}
             priority
           />
         </div>
 
-        <nav style={nav}>
+        <nav
+          style={{
+            ...nav,
+            width: isMobile ? "100%" : "auto",
+            justifyContent: isMobile ? "flex-start" : "flex-end",
+          }}
+        >
           <Link href="/planos" style={navLink}>
             Planos
           </Link>
@@ -95,38 +128,76 @@ export default function HomePage() {
         </nav>
       </header>
 
-      <section style={hero}>
+      <section
+        style={{
+          ...hero,
+          gridTemplateColumns: isMobile || isTablet ? "1fr" : "1fr 1fr",
+          padding: isMobile ? "6px 20px 24px" : "10px 24px 30px",
+        }}
+      >
         <div style={heroTexto}>
           <div style={badge}>7 dias grátis para testar</div>
 
-          <h1 style={heroTitulo}>
+          <h1
+            style={{
+              ...heroTitulo,
+              fontSize: heroTitleSize,
+            }}
+          >
             Controle vendas, estoque, financeiro e relatórios em um só lugar.
           </h1>
 
-          <p style={heroDesc}>
+          <p
+            style={{
+              ...heroDesc,
+              fontSize: isMobile ? 16 : 18,
+            }}
+          >
             O Modagest foi criado para ajudar pequenas e médias lojas a organizar
             a operação, ganhar clareza nos números e vender com mais controle.
           </p>
 
-          <div style={heroAcoes}>
-            <Link href="/login" style={botaoPrimario}>
+          <div
+            style={{
+              ...heroAcoes,
+              flexDirection: isMobile ? "column" : "row",
+              alignItems: isMobile ? "stretch" : "center",
+            }}
+          >
+            <Link href="/login" style={{ ...botaoPrimario, textAlign: "center" }}>
               Começar teste grátis
             </Link>
 
-            <Link href="/planos" style={botaoSecundario}>
+            <Link href="/planos" style={{ ...botaoSecundario, textAlign: "center" }}>
               Ver planos
             </Link>
           </div>
 
-          <div style={heroLista}>
+          <div
+            style={{
+              ...heroLista,
+              flexDirection: isMobile ? "column" : "row",
+              gap: isMobile ? 8 : 16,
+            }}
+          >
             <span>• Sem cartão para começar</span>
             <span>• 7 dias grátis</span>
             <span>• Painel completo</span>
           </div>
         </div>
 
-        <div style={heroVisual}>
-          <div style={heroBannerBox}>
+        <div
+          style={{
+            ...heroVisual,
+            marginTop: isMobile ? 10 : 0,
+          }}
+        >
+          <div
+            style={{
+              ...heroBannerBox,
+              maxWidth: isMobile ? "100%" : 560,
+            }}
+          >
             <Image
               src="/images/banner1.png"
               alt="Painel do Modagest"
@@ -138,8 +209,16 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section style={secao}>
-        <h2 style={secaoTitulo}>Tudo que sua loja precisa para operar melhor</h2>
+      <section style={{ ...secao, padding: isMobile ? "26px 20px" : "34px 24px" }}>
+        <h2
+          style={{
+            ...secaoTitulo,
+            fontSize: sectionTitleSize,
+          }}
+        >
+          Tudo que sua loja precisa para operar melhor
+        </h2>
+
         <p style={secaoSub}>
           Organize a operação e acompanhe o financeiro sem planilhas confusas.
         </p>
@@ -155,8 +234,16 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section style={secao}>
-        <h2 style={secaoTitulo}>Planos simples para começar</h2>
+      <section style={{ ...secao, padding: isMobile ? "26px 20px" : "34px 24px" }}>
+        <h2
+          style={{
+            ...secaoTitulo,
+            fontSize: sectionTitleSize,
+          }}
+        >
+          Planos simples para começar
+        </h2>
+
         <p style={secaoSub}>Escolha o plano ideal e teste grátis por 7 dias.</p>
 
         <div style={gridPlanos}>
@@ -190,80 +277,120 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section style={secao}>
-  <div style={vitrineTopo}>
-    <div>
-      <h2 style={secaoTitulo}>Veja o sistema em ação</h2>
-      <p style={secaoSub}>
-        Dashboards, relatórios, vendas, financeiro e organização da operação em uma interface moderna.
-      </p>
-    </div>
+      <section style={{ ...secao, padding: isMobile ? "26px 20px" : "34px 24px" }}>
+        <div
+          style={{
+            ...vitrineTopo,
+            flexDirection: isMobile ? "column" : "row",
+          }}
+        >
+          <div>
+            <h2
+              style={{
+                ...secaoTitulo,
+                fontSize: sectionTitleSize,
+              }}
+            >
+              Veja o sistema em ação
+            </h2>
 
-    <div style={miniBadge}>
-      Gestão visual e prática
-    </div>
-  </div>
+            <p style={secaoSub}>
+              Dashboards, relatórios, vendas, financeiro e organização da operação em uma interface moderna.
+            </p>
+          </div>
 
-  <div style={gridBanners}>
-    <div style={{ ...bannerCard, ...bannerGrande }}>
-      <Image
-        src="/images/banner2.png"
-        alt="Painel de gestão Modagest"
-        fill
-        style={bannerImage}
-      />
-    </div>
+          <div style={miniBadge}>Gestão visual e prática</div>
+        </div>
 
-    <div style={bannerColuna}>
-      <div style={bannerCard}>
-        <Image
-          src="/images/banner3.png"
-          alt="Controle financeiro e relatórios"
-          fill
-          style={bannerImage}
-        />
-      </div>
+        <div
+          style={{
+            ...gridBanners,
+            gridTemplateColumns: isMobile || isTablet ? "1fr" : "1.4fr 1fr",
+          }}
+        >
+          <div
+            style={{
+              ...bannerCard,
+              ...bannerGrande,
+              minHeight: isMobile ? 380 : 560,
+            }}
+          >
+            <Image
+              src="/images/banner2.png"
+              alt="Painel de gestão Modagest"
+              fill
+              style={bannerImage}
+            />
+          </div>
 
-      <div style={bannerCard}>
-        <Image
-          src="/images/banner4.png"
-          alt="Controle de vendas e operação"
-          fill
-          style={bannerImage}
-        />
-      </div>
-    </div>
-  </div>
-</section>
+          <div style={bannerColuna}>
+            <div
+              style={{
+                ...bannerCard,
+                minHeight: isMobile ? 220 : 280,
+              }}
+            >
+              <Image
+                src="/images/banner3.png"
+                alt="Controle financeiro e relatórios"
+                fill
+                style={bannerImage}
+              />
+            </div>
 
-<section style={secao}>
-  <div style={beneficiosBox}>
-    <div style={beneficioCard}>
-      <h3 style={beneficioNumero}>+ organização</h3>
-      <p style={beneficioTexto}>
-        Centralize produtos, estoque, vendas, clientes e relatórios em um só sistema.
-      </p>
-    </div>
+            <div
+              style={{
+                ...bannerCard,
+                minHeight: isMobile ? 220 : 280,
+              }}
+            >
+              <Image
+                src="/images/banner4.png"
+                alt="Controle de vendas e operação"
+                fill
+                style={bannerImage}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
 
-    <div style={beneficioCard}>
-      <h3 style={beneficioNumero}>+ controle</h3>
-      <p style={beneficioTexto}>
-        Acompanhe entradas, saídas, recebimentos, pendências e indicadores do negócio.
-      </p>
-    </div>
+      <section style={{ ...secao, padding: isMobile ? "26px 20px" : "34px 24px" }}>
+        <div style={beneficiosBox}>
+          <div style={beneficioCard}>
+            <h3 style={beneficioNumero}>+ organização</h3>
+            <p style={beneficioTexto}>
+              Centralize produtos, estoque, vendas, clientes e relatórios em um só sistema.
+            </p>
+          </div>
 
-    <div style={beneficioCard}>
-      <h3 style={beneficioNumero}>+ clareza</h3>
-      <p style={beneficioTexto}>
-        Tome decisões melhores com dashboard, relatórios e visão do que está funcionando.
-      </p>
-    </div>
-  </div>
-</section>
+          <div style={beneficioCard}>
+            <h3 style={beneficioNumero}>+ controle</h3>
+            <p style={beneficioTexto}>
+              Acompanhe entradas, saídas, recebimentos, pendências e indicadores do negócio.
+            </p>
+          </div>
 
+          <div style={beneficioCard}>
+            <h3 style={beneficioNumero}>+ clareza</h3>
+            <p style={beneficioTexto}>
+              Tome decisões melhores com dashboard, relatórios e visão do que está funcionando.
+            </p>
+          </div>
+        </div>
+      </section>
 
-      <section style={ctaFinal}>
-        <h2 style={{ margin: 0, fontSize: 34 }}>Pronto para testar?</h2>
+      <section
+        style={{
+          ...ctaFinal,
+          margin: isMobile ? "16px 20px 0" : "20px auto 0",
+          padding: isMobile ? "32px 20px 44px" : "40px 24px 60px",
+        }}
+      >
+        <h2 style={{ margin: 0, fontSize: isMobile ? 28 : 34 }}>
+          Pronto para testar?
+        </h2>
+
         <p style={{ margin: "10px 0 0 0", color: "rgba(255,255,255,0.85)" }}>
           Crie sua conta e experimente o Modagest por 7 dias.
         </p>
@@ -286,7 +413,7 @@ const pagina: React.CSSProperties = {
 const header: React.CSSProperties = {
   maxWidth: 1200,
   margin: "0 auto",
-  padding: "22px 24px",
+  padding: "12px 24px",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
@@ -298,6 +425,7 @@ const logoWrap: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 12,
+  marginBottom: 4,
 }
 
 const nav: React.CSSProperties = {
@@ -325,7 +453,7 @@ const ctaHeader: React.CSSProperties = {
 const hero: React.CSSProperties = {
   maxWidth: 1200,
   margin: "0 auto",
-  padding: "40px 24px 30px",
+  padding: "10px 24px 30px",
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
   gap: 28,
@@ -341,13 +469,13 @@ const heroTexto: React.CSSProperties = {
 const badge: React.CSSProperties = {
   display: "inline-flex",
   width: "fit-content",
-  padding: "8px 12px",
+  padding: "6px 10px",
   borderRadius: 999,
   background: "#eff6ff",
   color: "#2563eb",
   fontWeight: 800,
-  fontSize: 13,
-  marginBottom: 16,
+  fontSize: 12,
+  marginBottom: 10,
 }
 
 const heroTitulo: React.CSSProperties = {
@@ -553,25 +681,6 @@ const botaoPlano: React.CSSProperties = {
   fontWeight: 800,
 }
 
-const ctaFinal: React.CSSProperties = {
-  maxWidth: 1200,
-  margin: "20px auto 0",
-  padding: "40px 24px 60px",
-  textAlign: "center",
-  background: "linear-gradient(135deg, #0f172a, #1e293b)",
-  borderRadius: 28,
-  color: "#fff",
-}
-
-const ctaFinalBtn: React.CSSProperties = {
-  display: "inline-block",
-  textDecoration: "none",
-  background: "#fff",
-  color: "#0f172a",
-  padding: "14px 18px",
-  borderRadius: 14,
-  fontWeight: 800,
-}
 const vitrineTopo: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
@@ -650,3 +759,22 @@ const beneficioTexto: React.CSSProperties = {
   fontSize: 15,
 }
 
+const ctaFinal: React.CSSProperties = {
+  maxWidth: 1200,
+  margin: "20px auto 0",
+  padding: "40px 24px 60px",
+  textAlign: "center",
+  background: "linear-gradient(135deg, #0f172a, #1e293b)",
+  borderRadius: 28,
+  color: "#fff",
+}
+
+const ctaFinalBtn: React.CSSProperties = {
+  display: "inline-block",
+  textDecoration: "none",
+  background: "#fff",
+  color: "#0f172a",
+  padding: "14px 18px",
+  borderRadius: 14,
+  fontWeight: 800,
+}
