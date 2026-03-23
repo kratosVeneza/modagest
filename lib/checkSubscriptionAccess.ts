@@ -61,7 +61,6 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
     ? new Date(assinaturaAtual.current_period_end)
     : null
 
-  // Trial ativo
   if (assinaturaAtual.status === "trialing") {
     if (trialEndsAt && now <= trialEndsAt) {
       return {
@@ -71,7 +70,7 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
       }
     }
 
-    const { data: updatedSubscription } = await supabase
+    const { data: updatedSubscription, error: updateError } = await supabase
       .from("subscriptions")
       .update({
         status: "blocked",
@@ -82,18 +81,23 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
       .select("*")
       .single()
 
+    if (updateError) {
+      return {
+        ok: false,
+        hasAccess: false,
+        reason: updateError.message,
+        subscription: assinaturaAtual,
+      }
+    }
+
     return {
       ok: true,
       hasAccess: false,
       reason: "Período de teste expirado.",
-      subscription: updatedSubscription || {
-        ...assinaturaAtual,
-        status: "blocked",
-      },
+      subscription: updatedSubscription,
     }
   }
 
-  // Assinatura ativa
   if (assinaturaAtual.status === "active") {
     return {
       ok: true,
@@ -102,7 +106,6 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
     }
   }
 
-  // Cancelada: mantém acesso até o fim do período
   if (assinaturaAtual.status === "canceled") {
     if (currentPeriodEnd && now <= currentPeriodEnd) {
       return {
@@ -112,7 +115,7 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
       }
     }
 
-    const { data: updatedSubscription } = await supabase
+    const { data: updatedSubscription, error: updateError } = await supabase
       .from("subscriptions")
       .update({
         status: "blocked",
@@ -123,18 +126,23 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
       .select("*")
       .single()
 
+    if (updateError) {
+      return {
+        ok: false,
+        hasAccess: false,
+        reason: updateError.message,
+        subscription: assinaturaAtual,
+      }
+    }
+
     return {
       ok: true,
       hasAccess: false,
       reason: "Assinatura encerrada.",
-      subscription: updatedSubscription || {
-        ...assinaturaAtual,
-        status: "blocked",
-      },
+      subscription: updatedSubscription,
     }
   }
 
-  // Pagamento pendente: mantém acesso até o fim do período
   if (assinaturaAtual.status === "past_due") {
     if (currentPeriodEnd && now <= currentPeriodEnd) {
       return {
@@ -144,7 +152,7 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
       }
     }
 
-    const { data: updatedSubscription } = await supabase
+    const { data: updatedSubscription, error: updateError } = await supabase
       .from("subscriptions")
       .update({
         status: "blocked",
@@ -155,14 +163,20 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
       .select("*")
       .single()
 
+    if (updateError) {
+      return {
+        ok: false,
+        hasAccess: false,
+        reason: updateError.message,
+        subscription: assinaturaAtual,
+      }
+    }
+
     return {
       ok: true,
       hasAccess: false,
       reason: "Pagamento pendente e prazo expirado.",
-      subscription: updatedSubscription || {
-        ...assinaturaAtual,
-        status: "blocked",
-      },
+      subscription: updatedSubscription,
     }
   }
 
