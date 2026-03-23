@@ -74,76 +74,102 @@ export default function PainelLayout({
   }, [])
 
   useEffect(() => {
-  let mounted = true
+    let mounted = true
 
-  async function validarSessaoEAssinatura() {
+    async function validarSessaoEAssinatura() {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession()
+
+        if (!mounted) return
+
+        if (error || !session) {
+          await supabase.auth.signOut()
+          router.replace("/login")
+          return
+        }
+
+        const planoStorage =
+          typeof window !== "undefined"
+            ? localStorage.getItem("modagest_selected_plan") || undefined
+            : undefined
+
+        await ensureProfile({
+          trialDays: 7,
+          selectedPlan: planoStorage,
+        })
+
+        await ensureSubscription({
+          trialDays: 7,
+          selectedPlan: planoStorage,
+        })
+
+        if (typeof window !== "undefined" && planoStorage) {
+          localStorage.removeItem("modagest_selected_plan")
+        }
+
+        const accessResult = await checkSubscriptionAccess()
+
+        if (!mounted) return
+
+        const paginaLiberadaMesmoBloqueado = pathname === "/meu-plano"
+
+        // Se houve falha na checagem, só redireciona se não estiver em /meu-plano
+        if (!accessResult.ok) {
+          if (!paginaLiberadaMesmoBloqueado) {
+            router.replace("/meu-plano")
+            return
+          }
+
+          setCarregandoAuth(false)
+          return
+        }
+
+        // Se não tem acesso, mas está em /meu-plano, deixa abrir normalmente
+        if (!accessResult.hasAccess) {
+          if (!paginaLiberadaMesmoBloqueado) {
+            router.replace("/meu-plano")
+            return
+          }
+
+          setCarregandoAuth(false)
+          return
+        }
+
+        setCarregandoAuth(false)
+      } catch (error) {
+        console.error("Erro ao validar sessão/assinatura:", error)
+
+        if (!mounted) return
+
+        if (pathname !== "/meu-plano") {
+          router.replace("/meu-plano")
+          return
+        }
+
+        setCarregandoAuth(false)
+      }
+    }
+
+    validarSessaoEAssinatura()
+
     const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession()
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return
 
-    if (!mounted) return
-
-    if (error || !session) {
-      await supabase.auth.signOut()
-      router.replace("/login")
-      return
-    }
-
-    const planoStorage =
-      typeof window !== "undefined"
-        ? localStorage.getItem("modagest_selected_plan") || undefined
-        : undefined
-
-    await ensureProfile({
-      trialDays: 7,
-      selectedPlan: planoStorage,
+      if (!session) {
+        router.replace("/login")
+      }
     })
 
-    await ensureSubscription({
-      trialDays: 7,
-      selectedPlan: planoStorage,
-    })
-
-    if (typeof window !== "undefined" && planoStorage) {
-      localStorage.removeItem("modagest_selected_plan")
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
     }
-
-    const accessResult = await checkSubscriptionAccess()
-
-    if (!mounted) return
-
-    if (!accessResult.ok) {
-      router.replace("/meu-plano")
-      return
-    }
-
-    const paginaLiberadaMesmoBloqueado = pathname === "/meu-plano"
-
-    if (!accessResult.hasAccess && !paginaLiberadaMesmoBloqueado) {
-      router.replace("/meu-plano")
-      return
-    }
-
-    setCarregandoAuth(false)
-  }
-
-  validarSessaoEAssinatura()
-
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange(async (_event, session) => {
-    if (!mounted) return
-    if (!session) {
-      router.replace("/login")
-    }
-  })
-
-  return () => {
-    mounted = false
-    subscription.unsubscribe()
-  }
-}, [router, pathname])
+  }, [router, pathname])
 
   async function sair() {
     await supabase.auth.signOut()
@@ -181,11 +207,7 @@ export default function PainelLayout({
                 className="sidebar-toggle-btn"
                 title={menuFechado ? "Abrir menu" : "Fechar menu"}
               >
-                {menuFechado ? (
-                  <PanelLeftOpen size={18} />
-                ) : (
-                  <PanelLeftClose size={18} />
-                )}
+                {menuFechado ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
               </button>
             </div>
 
