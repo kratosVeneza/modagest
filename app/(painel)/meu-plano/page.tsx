@@ -274,6 +274,7 @@ export default function MeuPlanoPage() {
       }
     }
 
+
     if (status === "canceled") {
       return {
         titulo: "Assinatura cancelada",
@@ -338,6 +339,14 @@ export default function MeuPlanoPage() {
         {mensagem && <div style={sucessoBox}>{mensagem}</div>}
         {erro && <div style={erroBox}>{erro}</div>}
       </div>
+
+      {assinatura?.status === "blocked" && assinatura?.trial_ends_at && (
+  <div style={alertaInfo}>
+    Seu teste grátis terminou em{" "}
+    <strong>{new Date(assinatura.trial_ends_at).toLocaleDateString("pt-BR")}</strong>.
+    Escolha um plano para continuar usando o sistema.
+  </div>
+)}
 
       <div style={gridResumo}>
         <div style={miniCard}>
