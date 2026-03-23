@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { checkSubscriptionAccess } from "@/lib/checkSubscriptionAccess"
 import {
   ResponsiveContainer,
   AreaChart,
@@ -195,6 +196,20 @@ export default function Dashboard() {
   useEffect(() => {
     carregarDashboard()
   }, [])
+
+  useEffect(() => {
+  verificarAcesso()
+}, [])
+
+async function verificarAcesso() {
+  const result = await checkSubscriptionAccess()
+
+  console.log("CHECK ACCESS:", result)
+
+  if (!result.hasAccess) {
+    window.location.href = "/meu-plano"
+  }
+}
 
   useEffect(() => {
     recalcularDashboard()
