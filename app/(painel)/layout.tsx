@@ -67,6 +67,7 @@ export default function PainelLayout({
 
   const [menuFechado, setMenuFechado] = useState(false)
   const [carregandoAuth, setCarregandoAuth] = useState(true)
+  const [assinatura, setAssinatura] = useState<any>(null)
 
   useEffect(() => {
     const salvo = localStorage.getItem("modagest-menu-fechado")
@@ -111,6 +112,8 @@ export default function PainelLayout({
         }
 
         const accessResult = await checkSubscriptionAccess()
+
+        setAssinatura(accessResult.subscription || null)
 
         if (!mounted) return
 
@@ -170,6 +173,13 @@ export default function PainelLayout({
       subscription.unsubscribe()
     }
   }, [router, pathname])
+
+  const diasRestantes = assinatura?.trial_ends_at
+  ? Math.ceil(
+      (new Date(assinatura.trial_ends_at).getTime() - Date.now()) /
+        (1000 * 60 * 60 * 24)
+    )
+  : null
 
   async function sair() {
     await supabase.auth.signOut()
@@ -257,6 +267,44 @@ export default function PainelLayout({
           </aside>
 
           <main className="main-area">
+            {assinatura?.status === "trialing" &&
+    diasRestantes !== null &&
+    diasRestantes >= 0 &&
+    diasRestantes <= 3 && (
+      <div
+        style={{
+          background: "#fef3c7",
+          borderBottom: "1px solid #fde68a",
+          padding: "10px 16px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: 14,
+          fontWeight: 600,
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <span>
+          ⚠️ Seu acesso será bloqueado em {diasRestantes} dia(s). Evite perder seus dados.
+        </span>
+
+        <button
+          onClick={() => router.push("/meu-plano")}
+          style={{
+            background: "#2563eb",
+            color: "#fff",
+            border: "none",
+            padding: "6px 12px",
+            borderRadius: 8,
+            cursor: "pointer",
+            fontWeight: 700,
+          }}
+        >
+          Escolher plano
+        </button>
+      </div>
+    )}
             <header className="soft-card top-bar">
               <div className="top-bar-content">
                 <div className="top-bar-left">
