@@ -296,6 +296,13 @@ export default function MeuPlanoPage() {
     }
   }, [assinatura])
 
+  const diasRestantes = assinatura?.trial_ends_at
+  ? Math.ceil(
+      (new Date(assinatura.trial_ends_at).getTime() - Date.now()) /
+        (1000 * 60 * 60 * 24)
+    )
+  : null
+
   if (carregando) {
     return <div style={{ padding: 24 }}>Carregando assinatura...</div>
   }
@@ -339,6 +346,15 @@ export default function MeuPlanoPage() {
         {mensagem && <div style={sucessoBox}>{mensagem}</div>}
         {erro && <div style={erroBox}>{erro}</div>}
       </div>
+
+      {assinatura?.status === "trialing" &&
+  diasRestantes !== null &&
+  diasRestantes >= 0 &&
+  diasRestantes <= 3 && (
+    <div style={alertaAgendamento}>
+      ⚠️ Seu teste grátis termina em {diasRestantes} dia(s). Escolha um plano para não perder acesso.
+    </div>
+  )}
 
       {assinatura?.status === "blocked" && assinatura?.trial_ends_at && (
   <div style={alertaInfo}>
@@ -405,6 +421,15 @@ export default function MeuPlanoPage() {
           </div>
         )}
 
+        {assinatura?.status === "blocked" && (
+  <div style={alertaInfo}>
+    Para continuar usando o sistema:
+    <br />
+    💰 PIX: <strong>seu-email@pix.com</strong>
+    <br />
+    Após o pagamento, clique em <strong>Regularizar pagamento</strong>.
+  </div>
+)}
         <div style={acoesWrap}>
           {!assinatura?.cancel_at_period_end && (
             <button
@@ -437,7 +462,9 @@ export default function MeuPlanoPage() {
               disabled={pagando}
               style={botaoPagar}
             >
-              {pagando ? "Processando..." : "Regularizar pagamento"}
+              {pagando
+  ? "Processando..."
+  : `Já paguei / Regularizar ${nomePlano(assinatura?.plan_slug || "")}`}
             </button>
           )}
         </div>
