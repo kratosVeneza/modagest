@@ -119,7 +119,6 @@ export default function PainelLayout({
 
         const paginaLiberadaMesmoBloqueado = pathname === "/meu-plano"
 
-        // Se houve falha na checagem, só redireciona se não estiver em /meu-plano
         if (!accessResult.ok) {
           if (!paginaLiberadaMesmoBloqueado) {
             router.replace("/meu-plano")
@@ -130,7 +129,6 @@ export default function PainelLayout({
           return
         }
 
-        // Se não tem acesso, mas está em /meu-plano, deixa abrir normalmente
         if (!accessResult.hasAccess) {
           if (!paginaLiberadaMesmoBloqueado) {
             router.replace("/meu-plano")
@@ -175,11 +173,11 @@ export default function PainelLayout({
   }, [router, pathname])
 
   const diasRestantes = assinatura?.trial_ends_at
-  ? Math.ceil(
-      (new Date(assinatura.trial_ends_at).getTime() - Date.now()) /
-        (1000 * 60 * 60 * 24)
-    )
-  : null
+    ? Math.ceil(
+        (new Date(assinatura.trial_ends_at).getTime() - Date.now()) /
+          (1000 * 60 * 60 * 24)
+      )
+    : null
 
   async function sair() {
     await supabase.auth.signOut()
@@ -202,14 +200,16 @@ export default function PainelLayout({
         <div className={`app-shell ${menuFechado ? "menu-collapsed" : ""}`}>
           <aside className={`sidebar ${menuFechado ? "sidebar-collapsed" : ""}`}>
             <div className="logo-box">
-              <div className="logo-badge">M</div>
+              <div className="logo-box-left">
+                <div className="logo-badge">M</div>
 
-              {!menuFechado && (
-                <div>
-                  <h2 className="logo-title">ModaGest</h2>
-                  <p className="logo-subtitle">Gestão para lojas</p>
-                </div>
-              )}
+                {!menuFechado && (
+                  <div>
+                    <h2 className="logo-title">ModaGest</h2>
+                    <p className="logo-subtitle">Gestão para lojas</p>
+                  </div>
+                )}
+              </div>
 
               <button
                 type="button"
@@ -266,45 +266,46 @@ export default function PainelLayout({
             </nav>
           </aside>
 
-          <main className="main-area">
+          <main className={`main-area ${menuFechado ? "main-area-expanded" : ""}`}>
             {assinatura?.status === "trialing" &&
-    diasRestantes !== null &&
-    diasRestantes >= 0 &&
-    diasRestantes <= 3 && (
-      <div
-        style={{
-          background: "#fef3c7",
-          borderBottom: "1px solid #fde68a",
-          padding: "10px 16px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontSize: 14,
-          fontWeight: 600,
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <span>
-          ⚠️ Seu acesso será bloqueado em {diasRestantes} dia(s). Evite perder seus dados.
-        </span>
+              diasRestantes !== null &&
+              diasRestantes >= 0 &&
+              diasRestantes <= 3 && (
+                <div
+                  style={{
+                    background: "#fef3c7",
+                    borderBottom: "1px solid #fde68a",
+                    padding: "10px 16px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span>
+                    ⚠️ Seu acesso será bloqueado em {diasRestantes} dia(s). Evite perder seus dados.
+                  </span>
 
-        <button
-          onClick={() => router.push("/meu-plano")}
-          style={{
-            background: "#2563eb",
-            color: "#fff",
-            border: "none",
-            padding: "6px 12px",
-            borderRadius: 8,
-            cursor: "pointer",
-            fontWeight: 700,
-          }}
-        >
-          Escolher plano
-        </button>
-      </div>
-    )}
+                  <button
+                    onClick={() => router.push("/meu-plano")}
+                    style={{
+                      background: "#2563eb",
+                      color: "#fff",
+                      border: "none",
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Escolher plano
+                  </button>
+                </div>
+              )}
+
             <header className="soft-card top-bar">
               <div className="top-bar-content">
                 <div className="top-bar-left">
