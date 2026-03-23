@@ -660,6 +660,10 @@ button:hover {
 
   height: 100vh;
 
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
 }
 
  
@@ -693,14 +697,14 @@ button:hover {
 .sidebar-nav {
 
   display: flex;
-
   flex-direction: column;
-
   gap: 10px;
 
-}
+  flex:1;
+  min-height: 0;
+  overflow-y: auto;
 
- 
+}
 
 .menu-link {
 
@@ -2302,8 +2306,6 @@ body.dark .skeleton-row {
 
 }
 
- 
-
 .bar-list-value {
 
   text-align: right;
@@ -2316,8 +2318,6 @@ body.dark .skeleton-row {
 
 }
 
- 
-
 body.dark .trend-up {
 
   background: #14532d;
@@ -2325,8 +2325,6 @@ body.dark .trend-up {
   color: #dcfce7;
 
 }
-
- 
 
 body.dark .trend-down {
 
@@ -2336,8 +2334,6 @@ body.dark .trend-down {
 
 }
 
- 
-
 body.dark .trend-neutral {
 
   background: #374151;
@@ -2345,8 +2341,6 @@ body.dark .trend-neutral {
   color: #e5e7eb;
 
 }
-
- 
 
 body.dark .metric-icon-box {
 
@@ -2356,8 +2350,6 @@ body.dark .metric-icon-box {
 
 }
 
- 
-
 body.dark .metric-icon-box.green {
 
   background: #052e16;
@@ -2365,8 +2357,6 @@ body.dark .metric-icon-box.green {
   color: #a7f3d0;
 
 }
-
- 
 
 body.dark .metric-icon-box.orange {
 
@@ -2376,7 +2366,6 @@ body.dark .metric-icon-box.orange {
 
 }
 
- 
 
 body.dark .metric-icon-box.purple {
 
@@ -2386,8 +2375,6 @@ body.dark .metric-icon-box.purple {
 
 }
 
- 
-
 body.dark .metric-icon-box.red {
 
   background: #450a0a;
@@ -2395,8 +2382,6 @@ body.dark .metric-icon-box.red {
   color: #fecaca;
 
 }
-
- 
 
 body.dark .metric-icon-box.gray {
 
@@ -2406,8 +2391,6 @@ body.dark .metric-icon-box.gray {
 
 }
 
- 
-
 body.dark .chart-badge {
 
   background: #172554;
@@ -2415,8 +2398,6 @@ body.dark .chart-badge {
   color: #bfdbfe;
 
 }
-
- 
 
 body.dark .bar-list-label,
 
@@ -2426,15 +2407,11 @@ body.dark .bar-list-value {
 
 }
 
- 
-
 body.dark .bar-list-track {
 
   background: #1f2937;
 
 }
-
- 
 
 @media (max-width: 700px) {
 
@@ -2443,8 +2420,6 @@ body.dark .bar-list-track {
     grid-template-columns: 1fr;
 
   }
-
- 
 
   .bar-list-value {
 
@@ -2466,8 +2441,6 @@ body.dark .bar-list-track {
 
 }
 
- 
-
 .period-btn {
 
   border: 1px solid #d1d5db;
@@ -2488,8 +2461,6 @@ body.dark .bar-list-track {
 
 }
 
- 
-
 .period-btn.active {
 
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
@@ -2502,8 +2473,6 @@ body.dark .bar-list-track {
 
 }
 
- 
-
 body.dark .period-btn {
 
   background: #111827;
@@ -2513,8 +2482,6 @@ body.dark .period-btn {
   border-color: #374151;
 
 }
-
- 
 
 body.dark .period-btn.active {
 
@@ -2546,8 +2513,6 @@ body.dark .period-btn.active {
 
 }
 
- 
-
 .sidebar-collapsed {
 
   width: 88px;
@@ -2558,15 +2523,11 @@ body.dark .period-btn.active {
 
 }
 
- 
-
 .menu-collapsed .app-shell {
 
   grid-template-columns: 88px 1fr;
 
-}
-
- 
+} 
 
 .sidebar-toggle-btn {
 
@@ -2596,15 +2557,11 @@ body.dark .period-btn.active {
 
 }
 
- 
-
 .menu-group {
 
   margin-bottom: 18px;
 
 }
-
- 
 
 .menu-group-title {
 
@@ -2622,8 +2579,6 @@ body.dark .period-btn.active {
 
 }
 
- 
-
 .menu-group-items {
 
   display: flex;
@@ -2633,8 +2588,6 @@ body.dark .period-btn.active {
   gap: 10px;
 
 }
-
- 
 
 .menu-link-collapsed,
 
@@ -2648,8 +2601,6 @@ body.dark .period-btn.active {
 
 }
 
- 
-
 .menu-link-collapsed .menu-icon,
 
 .menu-link-danger.menu-link-collapsed .menu-icon {
@@ -2659,8 +2610,6 @@ body.dark .period-btn.active {
   min-width: auto;
 
 }
-
- 
 
 @media (max-width: 820px) {
 
@@ -2674,15 +2623,11 @@ body.dark .period-btn.active {
 
   }
 
- 
-
   .menu-collapsed .app-shell {
 
     grid-template-columns: 1fr;
 
   }
-
- 
 
   .menu-link-collapsed,
 
@@ -2696,8 +2641,6 @@ body.dark .period-btn.active {
 
   }
 
- 
-
   .menu-link-collapsed span:not(.menu-icon),
 
   .menu-link-danger.menu-link-collapsed span:not(.menu-icon) {
@@ -2708,12 +2651,23 @@ body.dark .period-btn.active {
 
 }
 
- 
-
 body.dark .sidebar-toggle-btn {
 
   background: rgba(255, 255, 255, 0.08);
 
   color: #f8fafc;
 
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
 }
