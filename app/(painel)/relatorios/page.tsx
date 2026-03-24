@@ -48,6 +48,8 @@ type Produto = {
   nome: string
   sku: string
   estoque: number
+  custo: number
+  preco: number
   user_id: string
 }
 
@@ -110,7 +112,7 @@ export default function RelatoriosPage() {
 
       const { data: productsData, error: productsError } = await supabase
       .from("products")
-      .select("id, nome, sku, estoque, user_id")
+      .select("id, nome, sku, estoque, custo, preco, user_id")
       .eq("user_id", user.id)
 
     if (salesError || paymentsError || transactionsError || productsError) {
@@ -159,14 +161,20 @@ const produtosSemVendaComEstoque = produtosComEstoque.filter(
   (produto) => !idsProdutosVendidos.has(produto.id)
 )
 
+const valorProdutosSemVendaComEstoque = produtosSemVendaComEstoque.reduce(
+  (acc, produto) => acc + Number(produto.estoque || 0) * Number(produto.custo || 0),
+  0
+)
+
     return {
-      totalVendas,
-      totalRecebimentos,
-      totalDespesasPagas,
-      totalDespesasPendentes,
-      totalProdutosComEstoque: produtosComEstoque.length,
-      produtosSemVendaComEstoque: produtosSemVendaComEstoque.length,
-    }
+  totalVendas,
+  totalRecebimentos,
+  totalDespesasPagas,
+  totalDespesasPendentes,
+  totalProdutosComEstoque: produtosComEstoque.length,
+  produtosSemVendaComEstoque: produtosSemVendaComEstoque.length,
+  valorProdutosSemVendaComEstoque,
+}
   }, [sales, payments, transactions])
 
   const cards = [
@@ -280,10 +288,10 @@ const produtosSemVendaComEstoque = produtosComEstoque.filter(
 
 <div className="section-card">
   <h3 style={tituloComAjuda}>
-    Sem venda no estoque
-    <HelpTooltip text="Produtos que ainda têm estoque, mas nunca apareceram em uma venda registrada." />
+    Valor parado no estoque
+    <HelpTooltip text="Soma do custo dos produtos que ainda têm estoque, mas nunca foram vendidos." />
   </h3>
-  <p>{resumo.produtosSemVendaComEstoque}</p>
+  <p>R$ {resumo.valorProdutosSemVendaComEstoque.toFixed(2)}</p>
 </div>
       </div>
 
