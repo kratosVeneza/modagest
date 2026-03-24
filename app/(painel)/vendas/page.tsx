@@ -16,12 +16,17 @@ type Produto = {
   unidade?: string | null
   marca?: string | null
   categoria?: string | null
+  cor?: string | null
+  tamanho?: string | null
 }
+
+
 
 type Cliente = {
   id: number
   nome: string
 }
+
 
 const formasPagamento = [
   "Dinheiro",
@@ -46,6 +51,17 @@ function montarDataISO(dataInput: string) {
   }
 
   return new Date(`${dataInput}T12:00:00-03:00`).toISOString()
+}
+
+function montarNomeProduto(produto: Produto) {
+  return [
+    produto.nome,
+    produto.cor,
+    produto.tamanho,
+    produto.sku,
+  ]
+    .filter(Boolean)
+    .join(" • ")
 }
 
 export default function Vendas() {
@@ -79,10 +95,10 @@ export default function Vendas() {
     }
 
     const { data, error } = await supabase
-      .from("products")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("nome", { ascending: true })
+  .from("products")
+  .select("id, nome, sku, estoque, preco, user_id, unidade, marca, categoria, cor, tamanho")
+  .eq("user_id", user.id)
+  .order("nome", { ascending: true })
 
     if (error) {
       setMensagem("Erro ao carregar produtos.")
@@ -338,10 +354,11 @@ export default function Vendas() {
               <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
                 <option value="">Selecione um produto</option>
                 {produtos.map((produto) => (
-                  <option key={produto.id} value={produto.id}>
-                    {produto.nome} - {produto.sku}
-                  </option>
-                ))}
+  <option key={produto.id} value={produto.id}>
+    {montarNomeProduto(produto)}
+  </option>
+))}
+
               </select>
             </div>
 
@@ -448,7 +465,9 @@ export default function Vendas() {
               Produto
               <HelpTooltip text="Produto selecionado para essa venda." />
             </span>
-            <strong>{produtoSelecionado?.nome || "-"}</strong>
+            <strong>
+  {produtoSelecionado ? montarNomeProduto(produtoSelecionado) : "-"}
+</strong>
           </div>
 
           <div style={resumoLinha}>
