@@ -2,6 +2,7 @@
 
 import "../globals.css"
 import Link from "next/link"
+import Image from "next/image"
 import { supabase } from "@/lib/supabase"
 import { useRouter, usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
@@ -200,16 +201,28 @@ export default function PainelLayout({
         <div className={`app-shell ${menuFechado ? "menu-collapsed" : ""}`}>
           <aside className={`sidebar ${menuFechado ? "sidebar-collapsed" : ""}`}>
             <div className="logo-box">
-              <div className="logo-box-left">
+              {!menuFechado ? (
+                <div className="logo-theme-wrap">
+                  <Image
+                    src="/images/logo-dark.png"
+                    alt="ModaGest"
+                    width={170}
+                    height={46}
+                    className="logo-light-mode"
+                    priority
+                  />
+                  <Image
+                    src="/images/logo-light.png"
+                    alt="ModaGest"
+                    width={170}
+                    height={46}
+                    className="logo-dark-mode"
+                    priority
+                  />
+                </div>
+              ) : (
                 <div className="logo-badge">M</div>
-
-                {!menuFechado && (
-                  <div>
-                    <h2 className="logo-title">ModaGest</h2>
-                    <p className="logo-subtitle">Gestão para lojas</p>
-                  </div>
-                )}
-              </div>
+              )}
 
               <button
                 type="button"

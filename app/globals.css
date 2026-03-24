@@ -849,53 +849,60 @@ button:hover {
  
 
 .logo-box {
-
   display: flex;
-
   align-items: center;
-
+  justify-content: space-between;
   gap: 12px;
-
-  margin-bottom: 28px;
-
+  margin-bottom: 20px;
   padding: 6px 4px 16px 4px;
-
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-
+  flex-shrink: 0;
 }
 
- 
+ logo-theme-wrap {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.logo-light-mode {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.logo-dark-mode {
+  display: none;
+  max-width: 100%;
+  height: auto;
+}
+
+body.dark .logo-light-mode {
+  display: none;
+}
+
+body.dark .logo-dark-mode {
+  display: block;
+}
 
 .logo-badge {
-
   width: 42px;
-
   height: 42px;
-
   border-radius: 12px;
-
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-
   display: flex;
-
   align-items: center;
-
   justify-content: center;
-
   font-weight: 700;
-
   font-size: 18px;
-
 }
 
  
 
 .logo-title {
-
   margin: 0;
-
   font-size: 22px;
-
 }
 
  
