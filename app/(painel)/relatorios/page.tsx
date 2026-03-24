@@ -100,7 +100,7 @@ export default function RelatoriosPage() {
 
     const { data: paymentsData, error: paymentsError } = await supabase
       .from("sale_payments")
-     .select("id, sale_id, valor, status, created_at, user_id")
+     .select("id, sale_id, valor, created_at, user_id")
       .eq("user_id", user.id)
 
     const { data: transactionsData, error: transactionsError } = await supabase
@@ -110,7 +110,7 @@ export default function RelatoriosPage() {
 
       const { data: productsData, error: productsError } = await supabase
       .from("products")
-      .select("id, nome, sku, status, estoque, user_id")
+      .select("id, nome, sku, estoque, user_id")
       .eq("user_id", user.id)
 
     if (salesError || paymentsError || transactionsError || productsError) {
