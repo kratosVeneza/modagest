@@ -204,22 +204,14 @@ export default function PainelLayout({
               {!menuFechado ? (
                 <div className="logo-theme-wrap">
                   <Image
-                    src="/images/logo-dark.png"
-                    alt="ModaGest"
-                    width={170}
-                    height={46}
-                    className="logo-light-mode"
-                    priority
-                  />
-                  <Image
                     src="/images/logo-light.png"
                     alt="ModaGest"
                     width={170}
                     height={46}
-                    className="logo-dark-mode"
                     priority
-                  />
-                </div>
+                 />
+               </div>
+
               ) : (
                 <div className="logo-badge">M</div>
               )}
