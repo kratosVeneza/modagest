@@ -19,6 +19,7 @@ import HelpBanner from "../../components/InfoBanner"
 
 type Sale = {
   id: number
+  product_id: number | null
   valor_total: number
   status?: string
   created_at: string
@@ -42,10 +43,20 @@ type FinancialTransaction = {
   user_id: string
 }
 
+type Produto = {
+  id: number
+  nome: string
+  sku: string
+  estoque: number
+  user_id: string
+}
+
 export default function RelatoriosPage() {
   const [sales, setSales] = useState<Sale[]>([])
   const [payments, setPayments] = useState<SalePayment[]>([])
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
+  const [produtos, setProdutos] = useState<Produto[]>([])
+
   const [mensagem, setMensagem] = useState("")
   const [carregando, setCarregando] = useState(true)
 
@@ -84,12 +95,12 @@ export default function RelatoriosPage() {
 
     const { data: salesData, error: salesError } = await supabase
       .from("sales")
-      .select("id, valor_total, status, created_at, user_id")
+      .select("id, product_id, valor_total, status, created_at, user_id")
       .eq("user_id", user.id)
 
     const { data: paymentsData, error: paymentsError } = await supabase
       .from("sale_payments")
-      .select("id, sale_id, valor, created_at, user_id")
+     .select("id, sale_id, valor, status, created_at, user_id")
       .eq("user_id", user.id)
 
     const { data: transactionsData, error: transactionsError } = await supabase
@@ -97,7 +108,12 @@ export default function RelatoriosPage() {
       .select("id, type, amount, status, created_at, user_id")
       .eq("user_id", user.id)
 
-    if (salesError || paymentsError || transactionsError) {
+      const { data: productsData, error: productsError } = await supabase
+      .from("products")
+      .select("id, nome, sku, status, estoque, user_id")
+      .eq("user_id", user.id)
+
+    if (salesError || paymentsError || transactionsError || productsError) {
       setMensagem("Erro ao carregar o centro de relatórios.")
       setCarregando(false)
       return
@@ -106,6 +122,7 @@ export default function RelatoriosPage() {
     setSales((salesData ?? []) as Sale[])
     setPayments((paymentsData ?? []) as SalePayment[])
     setTransactions((transactionsData ?? []) as FinancialTransaction[])
+    setProdutos((productsData ?? []) as Produto[])
     setCarregando(false)
   }
 
@@ -130,11 +147,25 @@ export default function RelatoriosPage() {
       .filter((item) => item.type === "saida" && item.status === "pendente")
       .reduce((acc, item) => acc + Number(item.amount), 0)
 
+    const idsProdutosVendidos = new Set(
+  vendasAtivas
+    .map((sale: any) => sale.product_id)
+    .filter(Boolean)
+)
+
+const produtosComEstoque = produtos.filter((produto) => Number(produto.estoque) > 0)
+
+const produtosSemVendaComEstoque = produtosComEstoque.filter(
+  (produto) => !idsProdutosVendidos.has(produto.id)
+)
+
     return {
       totalVendas,
       totalRecebimentos,
       totalDespesasPagas,
       totalDespesasPendentes,
+      totalProdutosComEstoque: produtosComEstoque.length,
+      produtosSemVendaComEstoque: produtosSemVendaComEstoque.length,
     }
   }, [sales, payments, transactions])
 
@@ -199,7 +230,14 @@ export default function RelatoriosPage() {
 
       {mensagem && <p>{mensagem}</p>}
 
-      <div className="grid-4" style={{ marginBottom: 24 }}>
+      <div
+  style={{
+    marginBottom: 24,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 16,
+  }}
+>
         <div className="section-card">
           <h3 style={tituloComAjuda}>
             Total vendido
@@ -231,6 +269,22 @@ export default function RelatoriosPage() {
           </h3>
           <p>R$ {resumo.totalDespesasPendentes.toFixed(2)}</p>
         </div>
+
+        <div className="section-card">
+  <h3 style={tituloComAjuda}>
+    Produtos em estoque
+    <HelpTooltip text="Quantidade de produtos que ainda possuem estoque maior que zero." />
+  </h3>
+  <p>{resumo.totalProdutosComEstoque}</p>
+</div>
+
+<div className="section-card">
+  <h3 style={tituloComAjuda}>
+    Sem venda no estoque
+    <HelpTooltip text="Produtos que ainda têm estoque, mas nunca apareceram em uma venda registrada." />
+  </h3>
+  <p>{resumo.produtosSemVendaComEstoque}</p>
+</div>
       </div>
 
       <div

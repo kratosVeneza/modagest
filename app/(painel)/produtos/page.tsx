@@ -24,6 +24,15 @@ type Produto = {
   user_id: string
 }
 
+type ErrosFormulario = {
+  nome?: string
+  categoria?: string
+  tipo?: string
+  estoque?: string
+  custo?: string
+  preco?: string
+}
+
 const categorias = [
   "Roupas",
   "Calçados",
@@ -52,6 +61,8 @@ export default function Produtos() {
   const [modalAberto, setModalAberto] = useState(false)
   const [mensagem, setMensagem] = useState("")
   const [carregando, setCarregando] = useState(true)
+  const [erros, setErros] = useState<ErrosFormulario>({})
+
 
   useEffect(() => {
     carregarProdutos()
@@ -102,19 +113,20 @@ export default function Produtos() {
   }
 
   function limparFormulario() {
-    setNome("")
-    setMarca("")
-    setCategoria("")
-    setTipo("")
-    setUnidade("un")
-    setCor("")
-    setTamanho("")
-    setEstoque("")
-    setEstoqueMinimo("")
-    setCusto("")
-    setPreco("")
-    setIdEmEdicao(null)
-  }
+  setNome("")
+  setMarca("")
+  setCategoria("")
+  setTipo("")
+  setUnidade("un")
+  setCor("")
+  setTamanho("")
+  setEstoque("")
+  setEstoqueMinimo("")
+  setCusto("")
+  setPreco("")
+  setIdEmEdicao(null)
+  setErros({})
+} 
 
   function abrirNovoModal() {
     limparFormulario()
@@ -128,8 +140,33 @@ export default function Produtos() {
     setModalAberto(false)
   }
 
+  function validarFormulario() {
+  const novosErros: ErrosFormulario = {}
+
+  if (!nome.trim()) novosErros.nome = "Informe o nome do produto."
+  if (!categoria.trim()) novosErros.categoria = "Selecione a categoria."
+  if (!tipo.trim()) novosErros.tipo = "Informe o tipo do produto."
+  if (!estoque || Number(estoque) < 0) novosErros.estoque = "Informe um estoque válido."
+  if (!custo || Number(custo) <= 0) novosErros.custo = "Informe um custo válido."
+  if (!preco || Number(preco) <= 0) novosErros.preco = "Informe um preço válido."
+
+  if (preco && custo && Number(preco) < Number(custo)) {
+    novosErros.preco = "O preço de venda não deve ser menor que o custo."
+  }
+
+  setErros(novosErros)
+
+  if (Object.keys(novosErros).length > 0) {
+    setMensagem("Corrija os campos obrigatórios destacados.")
+    return false
+  }
+
+  return true
+}
+
   async function salvarProduto() {
     setMensagem("")
+    setErros({})
 
     const {
       data: { user },
@@ -140,15 +177,9 @@ export default function Produtos() {
       return
     }
 
-    if (!nome || !categoria || !tipo || !estoque || !preco || !custo) {
-      setMensagem("Preencha nome, categoria, tipo, estoque, custo e preço.")
-      return
-    }
-
-    if (Number(preco) < Number(custo)) {
-      setMensagem("O preço de venda não deve ser menor que o custo.")
-      return
-    }
+    if (!validarFormulario()) {
+  return
+}
 
     const payload = {
       nome,
@@ -257,6 +288,30 @@ export default function Produtos() {
       )
     })
   }, [produtos, busca])
+
+  const marcasSugestao = useMemo(() => {
+  return [...new Set(produtos.map((p) => (p.marca || "").trim()).filter(Boolean))]
+}, [produtos])
+
+const categoriasSugestao = useMemo(() => {
+  return [...new Set([...categorias, ...produtos.map((p) => (p.categoria || "").trim())].filter(Boolean))]
+}, [produtos])
+
+const tiposSugestao = useMemo(() => {
+  return [...new Set(produtos.map((p) => (p.tipo || "").trim()).filter(Boolean))]
+}, [produtos])
+
+const coresSugestao = useMemo(() => {
+  return [...new Set(produtos.map((p) => (p.cor || "").trim()).filter(Boolean))]
+}, [produtos])
+
+const tamanhosSugestao = useMemo(() => {
+  return [...new Set(produtos.map((p) => (p.tamanho || "").trim()).filter(Boolean))]
+}, [produtos])
+
+const unidadesSugestao = useMemo(() => {
+  return [...new Set([...unidades, ...produtos.map((p) => (p.unidade || "").trim())].filter(Boolean))]
+}, [produtos])
 
   const custoPreview = Number(custo || 0)
   const precoPreview = Number(preco || 0)
@@ -453,85 +508,105 @@ export default function Produtos() {
 
           <div className="grid-2">
             <div>
-              <label style={labelAjuda}>
-                Nome do produto
-                <HelpTooltip text="Nome principal do produto que será exibido no sistema." />
-              </label>
-              <input
-                placeholder="Nome do produto"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-              />
-            </div>
+  <label style={labelAjuda}>
+    Nome do produto
+    <HelpTooltip text="Nome principal do produto que será exibido no sistema." />
+  </label>
+  <input
+    placeholder="Nome do produto"
+    value={nome}
+    onChange={(e) => setNome(e.target.value)}
+    style={erros.nome ? inputErroStyle : undefined}
+  />
+  {erros.nome && <div style={textoErroStyle}>{erros.nome}</div>}
+</div>
 
             <div>
-              <label style={labelAjuda}>
-                Marca
-                <HelpTooltip text="Marca do produto, útil para organização e relatórios." />
-              </label>
-              <input
-                placeholder="Marca"
-                value={marca}
-                onChange={(e) => setMarca(e.target.value)}
-              />
-            </div>
+  <label style={labelAjuda}>
+    Marca
+    <HelpTooltip text="Marca do produto, útil para organização e relatórios." />
+  </label>
+  <input
+    list="marcas-sugestao"
+    placeholder="Marca"
+    value={marca}
+    onChange={(e) => setMarca(e.target.value)}
+  />
+  <datalist id="marcas-sugestao">
+    {marcasSugestao.map((item) => (
+      <option key={item} value={item} />
+    ))}
+  </datalist>
+</div>
+
+           <div>
+  <label style={labelAjuda}>
+    Categoria
+    <HelpTooltip text="Categoria geral do produto, como roupas, acessórios ou calçados." />
+  </label>
+  <select
+    value={categoria}
+    onChange={(e) => setCategoria(e.target.value)}
+    style={erros.categoria ? inputErroStyle : undefined}
+  >
+    <option value="">Selecione a categoria</option>
+    {categoriasSugestao.map((item) => (
+      <option key={item} value={item}>
+        {item}
+      </option>
+    ))}
+  </select>
+  {erros.categoria && <div style={textoErroStyle}>{erros.categoria}</div>}
+</div>
 
             <div>
-              <label style={labelAjuda}>
-                Categoria
-                <HelpTooltip text="Categoria geral do produto, como roupas, acessórios ou calçados." />
-              </label>
-              <select
-                value={categoria}
-                onChange={(e) => setCategoria(e.target.value)}
-              >
-                <option value="">Selecione a categoria</option>
-                {categorias.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </div>
+  <label style={labelAjuda}>
+    Tipo do produto
+    <HelpTooltip text="Tipo específico do item, como camiseta, tênis, relógio, gel ou pochete." />
+  </label>
+  <input
+    list="tipos-sugestao"
+    placeholder="Tipo do produto"
+    value={tipo}
+    onChange={(e) => setTipo(e.target.value)}
+    style={erros.tipo ? inputErroStyle : undefined}
+  />
+  <datalist id="tipos-sugestao">
+    {tiposSugestao.map((item) => (
+      <option key={item} value={item} />
+    ))}
+  </datalist>
+  {erros.tipo && <div style={textoErroStyle}>{erros.tipo}</div>}
+</div>
 
             <div>
-              <label style={labelAjuda}>
-                Tipo do produto
-                <HelpTooltip text="Tipo específico do item, como camiseta, tênis, relógio, gel ou pochete." />
-              </label>
-              <input
-                placeholder="Tipo do produto"
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value)}
-              />
-            </div>
+  <label style={labelAjuda}>
+    Unidade
+    <HelpTooltip text="Forma de controle da quantidade, como unidade, par, caixa, sachê ou kit." />
+  </label>
+  <select value={unidade} onChange={(e) => setUnidade(e.target.value)}>
+    {unidadesSugestao.map((item) => (
+      <option key={item} value={item}>
+        {item}
+      </option>
+    ))}
+  </select>
+</div>
 
             <div>
-              <label style={labelAjuda}>
-                Unidade
-                <HelpTooltip text="Forma de controle da quantidade, como unidade, par, caixa, sachê ou kit." />
-              </label>
-              <select value={unidade} onChange={(e) => setUnidade(e.target.value)}>
-                {unidades.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={labelAjuda}>
-                Estoque
-                <HelpTooltip text="Quantidade atual disponível desse produto no sistema." />
-              </label>
-              <input
-                placeholder="Estoque"
-                type="number"
-                value={estoque}
-                onChange={(e) => setEstoque(e.target.value)}
-              />
-            </div>
+  <label style={labelAjuda}>
+    Estoque
+    <HelpTooltip text="Quantidade atual disponível desse produto no sistema." />
+  </label>
+  <input
+    placeholder="Estoque"
+    type="number"
+    value={estoque}
+    onChange={(e) => setEstoque(e.target.value)}
+    style={erros.estoque ? inputErroStyle : undefined}
+  />
+  {erros.estoque && <div style={textoErroStyle}>{erros.estoque}</div>}
+</div>
 
             <div>
               <label style={labelAjuda}>
@@ -546,57 +621,73 @@ export default function Produtos() {
               />
             </div>
 
-            <div>
-              <label style={labelAjuda}>
-                Custo
-                <HelpTooltip text="Valor pago para comprar ou repor esse produto." />
-              </label>
-              <input
-                placeholder="Custo"
-                type="number"
-                step="0.01"
-                value={custo}
-                onChange={(e) => setCusto(e.target.value)}
-              />
-            </div>
+           <div>
+  <label style={labelAjuda}>
+    Custo
+    <HelpTooltip text="Valor pago para comprar ou repor esse produto." />
+  </label>
+  <input
+    placeholder="Custo"
+    type="number"
+    step="0.01"
+    value={custo}
+    onChange={(e) => setCusto(e.target.value)}
+    style={erros.custo ? inputErroStyle : undefined}
+  />
+  {erros.custo && <div style={textoErroStyle}>{erros.custo}</div>}
+</div>
+
 
             <div>
-              <label style={labelAjuda}>
-                Preço de venda
-                <HelpTooltip text="Valor cobrado do cliente na venda desse produto." />
-              </label>
-              <input
-                placeholder="Preço de venda"
-                type="number"
-                step="0.01"
-                value={preco}
-                onChange={(e) => setPreco(e.target.value)}
-              />
-            </div>
+  <label style={labelAjuda}>
+    Preço de venda
+    <HelpTooltip text="Valor cobrado do cliente na venda desse produto." />
+  </label>
+  <input
+    placeholder="Preço de venda"
+    type="number"
+    step="0.01"
+    value={preco}
+    onChange={(e) => setPreco(e.target.value)}
+    style={erros.preco ? inputErroStyle : undefined}
+  />
+  {erros.preco && <div style={textoErroStyle}>{erros.preco}</div>}
+</div>
 
             <div>
-              <label style={labelAjuda}>
-                Cor
-                <HelpTooltip text="Cor do produto, quando isso for relevante para a venda." />
-              </label>
-              <input
-                placeholder="Cor (opcional)"
-                value={cor}
-                onChange={(e) => setCor(e.target.value)}
-              />
-            </div>
-
+  <label style={labelAjuda}>
+    Cor
+    <HelpTooltip text="Cor do produto, quando isso for relevante para a venda." />
+  </label>
+  <input
+    list="cores-sugestao"
+    placeholder="Cor (opcional)"
+    value={cor}
+    onChange={(e) => setCor(e.target.value)}
+  />
+  <datalist id="cores-sugestao">
+    {coresSugestao.map((item) => (
+      <option key={item} value={item} />
+    ))}
+  </datalist>
+</div>
             <div>
-              <label style={labelAjuda}>
-                Tamanho
-                <HelpTooltip text="Tamanho do produto, quando isso for relevante para controle e venda." />
-              </label>
-              <input
-                placeholder="Tamanho (opcional)"
-                value={tamanho}
-                onChange={(e) => setTamanho(e.target.value)}
-              />
-            </div>
+  <label style={labelAjuda}>
+    Tamanho
+    <HelpTooltip text="Tamanho do produto, quando isso for relevante para controle e venda." />
+  </label>
+  <input
+    list="tamanhos-sugestao"
+    placeholder="Tamanho (opcional)"
+    value={tamanho}
+    onChange={(e) => setTamanho(e.target.value)}
+  />
+  <datalist id="tamanhos-sugestao">
+    {tamanhosSugestao.map((item) => (
+      <option key={item} value={item} />
+    ))}
+  </datalist>
+</div>
           </div>
 
           <div
@@ -712,4 +803,15 @@ const labelAjuda = {
 const tituloComAjuda = {
   display: "inline-flex",
   alignItems: "center",
+}
+
+const inputErroStyle = {
+  border: "1px solid #ef4444",
+  boxShadow: "0 0 0 3px rgba(239, 68, 68, 0.10)",
+}
+
+const textoErroStyle = {
+  marginTop: "6px",
+  fontSize: "12px",
+  color: "#dc2626",
 }
