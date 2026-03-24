@@ -866,6 +866,34 @@ button:hover {
   max-width: 100%;
 }
 
+.logo-single {
+  width: 170px;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.logo-light-mode {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.logo-dark-mode {
+  display: none;
+  max-width: 100%;
+  height: auto;
+}
+
+body.dark .logo-light-mode {
+  display: none;
+}
+
+body.dark .logo-dark-mode {
+  display: block;
+}
+
 .logo-badge {
   width: 42px;
   height: 42px;
