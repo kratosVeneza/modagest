@@ -859,15 +859,16 @@ button:hover {
   flex-shrink: 0;
 }
 
- logo-theme-wrap {
+ .logo-theme-wrap {
   display: flex;
   align-items: center;
   min-width: 0;
   max-width: 100%;
+  flex: 1;
 }
 
 .logo-single {
-  width: 170px;
+  width: 220px;
   max-width: 100%;
   height: auto;
   object-fit: contain;
