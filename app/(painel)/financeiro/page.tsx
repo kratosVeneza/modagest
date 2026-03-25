@@ -52,6 +52,14 @@ type LinhaFinanceira = {
   formaPagamento?: string
 }
 
+type SaleResumo = {
+  id: number
+  status: string | null
+  valor_total: number
+  created_at: string
+}
+
+
 const categorias = [
   "Fornecedor",
   "Aluguel",
@@ -91,9 +99,9 @@ function montarDataISO(dataInput: string) {
 export default function Financeiro() {
   const [loadingAccess, setLoadingAccess] = useState(true)
   const [hasAccess, setHasAccess] = useState(false)
-
   const [pagamentosVendas, setPagamentosVendas] = useState<SalePayment[]>([])
   const [movimentacoes, setMovimentacoes] = useState<FinancialTransaction[]>([])
+  const [vendas, setVendas] = useState<SaleResumo[]>([])
   const [mensagem, setMensagem] = useState("")
   const [nomeLoja, setNomeLoja] = useState("ModaGest")
   const [logoUrl, setLogoUrl] = useState("")
@@ -127,72 +135,74 @@ export default function Financeiro() {
   }
 
   async function carregarFinanceiro() {
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
-
-    const { data: lojaData } = await supabase
-      .from("stores")
-      .select("nome_loja, logo_url")
-      .eq("user_id", user.id)
-      .maybeSingle()
-
-    const loja = (lojaData ?? null) as Loja | null
-    if (loja?.nome_loja) setNomeLoja(loja.nome_loja)
-    if (loja?.logo_url) setLogoUrl(loja.logo_url)
-
-    const { data: pagamentosData, error: pagamentosError } = await supabase
-      .from("sale_payments")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-
-    if (pagamentosError) {
-      setMensagem("Erro ao carregar recebimentos de vendas.")
-      return
-    }
-
-    const { data: vendasData, error: vendasError } = await supabase
-      .from("sales")
-      .select("id, status")
-      .eq("user_id", user.id)
-
-    if (vendasError) {
-      setMensagem("Erro ao carregar vendas.")
-      return
-    }
-
-    const idsVendasAtivas = new Set(
-      (vendasData ?? [])
-        .filter((v: any) => v.status !== "Cancelada")
-        .map((v: any) => v.id)
-    )
-
-    const pagamentosValidos = ((pagamentosData ?? []) as SalePayment[]).filter((p) =>
-      idsVendasAtivas.has(p.sale_id)
-    )
-
-    const { data: movsData, error: movsError } = await supabase
-      .from("financial_transactions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-
-    if (movsError) {
-      setMensagem("Erro ao carregar movimentações financeiras.")
-      return
-    }
-
-    setPagamentosVendas(pagamentosValidos)
-    setMovimentacoes((movsData ?? []) as FinancialTransaction[])
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
   }
+
+  const { data: lojaData } = await supabase
+    .from("stores")
+    .select("nome_loja, logo_url")
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  const loja = (lojaData ?? null) as Loja | null
+
+  if (loja?.nome_loja) setNomeLoja(loja.nome_loja)
+  if (loja?.logo_url) setLogoUrl(loja.logo_url)
+
+  const { data: pagamentosData, error: pagamentosError } = await supabase
+    .from("sale_payments")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+
+  if (pagamentosError) {
+    setMensagem("Erro ao carregar recebimentos de vendas.")
+    return
+  }
+
+  const { data: vendasData, error: vendasError } = await supabase
+    .from("sales")
+    .select("id, status, valor_total, created_at")
+    .eq("user_id", user.id)
+
+  if (vendasError) {
+    setMensagem("Erro ao carregar vendas.")
+    return
+  }
+
+  const vendasAtivas = ((vendasData ?? []) as SaleResumo[]).filter(
+    (v) => v.status !== "Cancelada"
+  )
+
+  const idsVendasAtivas = new Set(vendasAtivas.map((v) => v.id))
+
+  const pagamentosValidos = ((pagamentosData ?? []) as SalePayment[]).filter((p) =>
+    idsVendasAtivas.has(p.sale_id)
+  )
+
+  const { data: movsData, error: movsError } = await supabase
+    .from("financial_transactions")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+
+  if (movsError) {
+    setMensagem("Erro ao carregar movimentações financeiras.")
+    return
+  }
+
+  setPagamentosVendas(pagamentosValidos)
+  setVendas(vendasAtivas)
+  setMovimentacoes((movsData ?? []) as FinancialTransaction[])
+}
 
   function abrirNovoModal() {
     setIdEdicao(null)
@@ -353,37 +363,72 @@ export default function Financeiro() {
   }
 
   const linhasFinanceiras = useMemo<LinhaFinanceira[]>(() => {
-    const recebimentosVendas: LinhaFinanceira[] = pagamentosVendas.map((p) => ({
-      origem: "venda",
-      id: `venda-${p.id}`,
-      tipo: "entrada",
-      descricao: "Recebimento de venda",
-      categoria: "Venda",
-      valor: Number(p.valor),
-      status: "pago",
-      vencimento: p.created_at,
-      pagamento: p.created_at,
-      criadoEm: p.created_at,
-      formaPagamento: p.forma_pagamento,
-    }))
+  const recebimentosVendas: LinhaFinanceira[] = pagamentosVendas.map((p) => ({
+    origem: "venda",
+    id: `venda-pagamento-${p.id}`,
+    tipo: "entrada",
+    descricao: "Recebimento de venda",
+    categoria: "Venda",
+    valor: Number(p.valor),
+    status: "pago",
+    vencimento: p.created_at,
+    pagamento: p.created_at,
+    criadoEm: p.created_at,
+    formaPagamento: p.forma_pagamento,
+  }))
 
-    const linhasManuais: LinhaFinanceira[] = movimentacoes.map((m) => ({
-      origem: "manual",
-      id: `manual-${m.id}`,
-      tipo: m.type,
-      descricao: m.description,
-      categoria: m.category || "Outros",
-      valor: Number(m.amount),
-      status: m.status,
-      vencimento: m.due_date,
-      pagamento: m.paid_at,
-      criadoEm: m.created_at,
-    }))
+  const totalPagoPorVenda = new Map<number, number>()
 
-    return [...recebimentosVendas, ...linhasManuais].sort(
-      (a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()
+  for (const pagamento of pagamentosVendas) {
+    const atual = totalPagoPorVenda.get(pagamento.sale_id) || 0
+    totalPagoPorVenda.set(
+      pagamento.sale_id,
+      atual + Number(pagamento.valor || 0)
     )
-  }, [pagamentosVendas, movimentacoes])
+  }
+
+  const vendasPendentes = vendas.reduce<LinhaFinanceira[]>((acc, v) => {
+    const totalVenda = Number(v.valor_total || 0)
+    const totalPago = totalPagoPorVenda.get(v.id) || 0
+    const valorPendente = totalVenda - totalPago
+
+    if (valorPendente > 0) {
+      acc.push({
+        origem: "venda",
+        id: `venda-pendente-${v.id}`,
+        tipo: "entrada",
+        descricao: "Recebimento pendente de venda",
+        categoria: "Venda",
+        valor: valorPendente,
+        status: "pendente",
+        vencimento: v.created_at,
+        pagamento: "",
+        criadoEm: v.created_at,
+        formaPagamento: "",
+      })
+    }
+
+    return acc
+  }, [])
+
+  const linhasManuais: LinhaFinanceira[] = movimentacoes.map((m) => ({
+    origem: "manual",
+    id: `manual-${m.id}`,
+    tipo: m.type,
+    descricao: m.description,
+    categoria: m.category || "Outros",
+    valor: Number(m.amount),
+    status: m.status,
+    vencimento: m.due_date,
+    pagamento: m.paid_at,
+    criadoEm: m.created_at,
+  }))
+
+  return [...recebimentosVendas, ...vendasPendentes, ...linhasManuais].sort(
+    (a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()
+  )
+}, [pagamentosVendas, vendas, movimentacoes])
+
 
   const linhasFiltradas = useMemo(() => {
     const termo = busca.trim().toLowerCase()
