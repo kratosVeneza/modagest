@@ -203,9 +203,10 @@ export default function Produtos() {
         .eq("user_id", user.id)
 
       if (error) {
-        setMensagem("Erro ao atualizar produto.")
-        return
-      }
+  console.log("ERRO AO ATUALIZAR PRODUTO:", error)
+  setMensagem(error.message || "Erro ao atualizar produto.")
+  return
+}
 
       fecharModal()
       await carregarProdutos()
@@ -221,9 +222,10 @@ export default function Produtos() {
     ])
 
     if (error) {
-      setMensagem("Erro ao cadastrar produto.")
-      return
-    }
+  console.log("ERRO AO CADASTRAR PRODUTO:", error)
+  setMensagem(error.message || "Erro ao cadastrar produto.")
+  return
+}
 
     fecharModal()
     await carregarProdutos()
