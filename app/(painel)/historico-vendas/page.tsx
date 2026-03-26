@@ -31,6 +31,8 @@ type ProdutoBanco = {
   nome: string
   sku: string
   estoque: number
+  cor: string | null
+  tamanho: string | null
 }
 
 type ClienteBanco = {
@@ -67,6 +69,8 @@ type VendaExibicao = {
   estoque_devolvido: boolean
   nomeProduto: string
   skuProduto: string
+  corProduto: string
+  tamanhoProduto: string
   nomeCliente: string
   pagamentos: PagamentoBanco[]
 }
@@ -190,9 +194,9 @@ export default function HistoricoVendas() {
     }
 
     const { data: produtosData, error: erroProdutos } = await supabase
-      .from("products")
-      .select("id, nome, sku, estoque")
-      .eq("user_id", user.id)
+  .from("products")
+  .select("id, nome, sku, estoque, cor, tamanho")
+  .eq("user_id", user.id)
 
     if (erroProdutos) {
       setMensagem("Erro ao carregar produtos.")
@@ -260,7 +264,10 @@ export default function HistoricoVendas() {
         estoque_devolvido: Boolean(venda.estoque_devolvido),
         nomeProduto: produtoRelacionado?.nome || "Produto removido",
         skuProduto: produtoRelacionado?.sku || "-",
+        corProduto: produtoRelacionado?.cor || "-",
+        tamanhoProduto: produtoRelacionado?.tamanho || "-",
         nomeCliente: clienteRelacionado?.nome || "Sem cliente",
+
         pagamentos: pagamentosDaVenda,
       }
     })
@@ -464,32 +471,36 @@ export default function HistoricoVendas() {
     }
 
     const cabecalho = [
-      "Cliente",
-      "Produto",
-      "SKU",
-      "Quantidade",
-      "Valor Unitario",
-      "Valor Total",
-      "Recebido",
-      "Em Aberto",
-      "Situação Pagamento",
-      "Status Venda",
-      "Data",
-    ]
+  "Cliente",
+  "Produto",
+  "Cor",
+  "Tamanho",
+  "SKU",
+  "Quantidade",
+  "Valor Unitario",
+  "Valor Total",
+  "Recebido",
+  "Em Aberto",
+  "Situação Pagamento",
+  "Status Venda",
+  "Data",
+]
 
     const linhas = vendasFiltradas.map((venda) => [
-      venda.nomeCliente,
-      venda.nomeProduto,
-      venda.skuProduto,
-      String(venda.quantidade),
-      venda.valor_unitario.toFixed(2),
-      venda.valor_total.toFixed(2),
-      venda.valor_recebido.toFixed(2),
-      venda.valor_em_aberto.toFixed(2),
-      venda.payment_status,
-      venda.status,
-      formatarData(venda.created_at),
-    ])
+  venda.nomeCliente,
+  venda.nomeProduto,
+  venda.corProduto,
+  venda.tamanhoProduto,
+  venda.skuProduto,
+  String(venda.quantidade),
+  venda.valor_unitario.toFixed(2),
+  venda.valor_total.toFixed(2),
+  venda.valor_recebido.toFixed(2),
+  venda.valor_em_aberto.toFixed(2),
+  venda.payment_status,
+  venda.status,
+  formatarData(venda.created_at),
+])
 
     const conteudo = [cabecalho, ...linhas]
       .map((linha) =>
@@ -534,29 +545,33 @@ export default function HistoricoVendas() {
     autoTable(doc, {
       startY: startY + 20,
       head: [[
-        "Cliente",
-        "Produto",
-        "SKU",
-        "Quantidade",
-        "Valor Total",
-        "Recebido",
-        "Em Aberto",
-        "Situação",
-        "Status",
-        "Data",
-      ]],
+      "Cliente",
+      "Produto",
+      "Cor",
+      "Tam.",
+      "SKU",
+      "Quantidade",
+      "Valor Total",
+      "Recebido",
+      "Em Aberto",
+      "Situação",
+      "Status",
+      "Data",
+    ]],
       body: vendasFiltradas.map((venda) => [
-        venda.nomeCliente,
-        venda.nomeProduto,
-        venda.skuProduto,
-        String(venda.quantidade),
-        `R$ ${venda.valor_total.toFixed(2)}`,
-        `R$ ${venda.valor_recebido.toFixed(2)}`,
-        `R$ ${venda.valor_em_aberto.toFixed(2)}`,
-        venda.payment_status,
-        venda.status,
-        formatarData(venda.created_at),
-      ]),
+  venda.nomeCliente,
+  venda.nomeProduto,
+  venda.corProduto,
+  venda.tamanhoProduto,
+  venda.skuProduto,
+  String(venda.quantidade),
+  `R$ ${venda.valor_total.toFixed(2)}`,
+  `R$ ${venda.valor_recebido.toFixed(2)}`,
+  `R$ ${venda.valor_em_aberto.toFixed(2)}`,
+  venda.payment_status,
+  venda.status,
+  formatarData(venda.created_at),
+]),
       styles: {
         fontSize: 8.5,
       },
@@ -713,7 +728,18 @@ export default function HistoricoVendas() {
             {vendasFiltradas.map((venda) => (
               <tr key={venda.id}>
                 <td style={td}>{venda.nomeCliente}</td>
-                <td style={td}>{venda.nomeProduto}</td>
+                <td style={td}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <strong>{venda.nomeProduto}</strong>
+                {(venda.corProduto !== "-" || venda.tamanhoProduto !== "-") && (
+                 <span style={{ fontSize: 12, color: "#6b7280" }}>
+                   {[venda.corProduto !== "-" ? venda.corProduto : null, venda.tamanhoProduto !== "-" ? venda.tamanhoProduto : null]
+                  .filter(Boolean)
+                   .join(" • ")}
+                   </span>
+                     )}
+                    </div>
+                      </td>
                 <td style={td}>{venda.skuProduto}</td>
                 <td style={td}>{venda.quantidade}</td>
                 <td style={td}>R$ {venda.valor_total.toFixed(2)}</td>
