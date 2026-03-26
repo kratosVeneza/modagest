@@ -364,60 +364,65 @@ export default function HistoricoVendas() {
   }
 
   async function salvarPagamento() {
-    if (!vendaSelecionada) return
+  if (!vendaSelecionada) return
 
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
-
-    const valor = Number(valorPagamento || 0)
-
-    if (valor <= 0) {
-      setMensagem("Informe um valor de pagamento válido.")
-      return
-    }
-
-    if (valor > vendaSelecionada.valor_em_aberto) {
-      setMensagem("O pagamento não pode ser maior que o valor em aberto.")
-      return
-    }
-
-    if (!dataPagamento) {
-      setMensagem("Informe a data do pagamento.")
-      return
-    }
-
-    setSalvandoPagamento(true)
-
-    const { error } = await supabase.from("sale_payments").insert([
-      {
-        sale_id: vendaSelecionada.id,
-        user_id: user.id,
-        valor,
-        forma_pagamento: formaPagamento,
-        observacao: observacaoPagamento || null,
-        created_at: montarDataISO(dataPagamento),
-      },
-    ])
-
-    setSalvandoPagamento(false)
-
-    if (error) {
-      setMensagem("Erro ao registrar pagamento.")
-      return
-    }
-
-    fecharModalPagamento()
-    setMensagem("Pagamento adicionado com sucesso.")
-    await carregarVendas()
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
   }
+
+  const valor = Number(valorPagamento || 0)
+
+  if (valor <= 0) {
+    setMensagem("Informe um valor de pagamento válido.")
+    return
+  }
+
+  if (valor > vendaSelecionada.valor_em_aberto) {
+    setMensagem("O pagamento não pode ser maior que o valor em aberto.")
+    return
+  }
+
+  if (!dataPagamento) {
+    setMensagem("Informe a data do pagamento.")
+    return
+  }
+
+  setSalvandoPagamento(true)
+
+  const payload = {
+    sale_id: vendaSelecionada.id,
+    user_id: user.id,
+    valor,
+    forma_pagamento: formaPagamento,
+    observacao: observacaoPagamento || null,
+    created_at: montarDataISO(dataPagamento),
+  }
+
+  console.log("PAYLOAD PAGAMENTO:", payload)
+
+  const { error } = await supabase
+    .from("sale_payments")
+    .insert([payload])
+
+  setSalvandoPagamento(false)
+
+  if (error) {
+    console.log("ERRO AO REGISTRAR PAGAMENTO:", error)
+    setMensagem(error.message || "Erro ao registrar pagamento.")
+    return
+  }
+
+  fecharModalPagamento()
+  setMensagem("Pagamento adicionado com sucesso.")
+  await carregarVendas()
+}
 
   function formatarData(dataIso: string) {
     const data = new Date(dataIso)
@@ -823,6 +828,22 @@ export default function HistoricoVendas() {
             >
               {salvandoPagamento ? "Salvando..." : "Salvar pagamento"}
             </button>
+            {mensagem && (
+  <div
+    style={{
+      marginBottom: 14,
+      padding: "10px 12px",
+      borderRadius: 10,
+      background: "#fef2f2",
+      color: "#991b1b",
+      border: "1px solid #fecaca",
+      fontWeight: 600,
+      fontSize: 14,
+    }}
+  >
+    {mensagem}
+  </div>
+)}
           </>
         }
       >
