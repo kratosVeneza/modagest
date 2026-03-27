@@ -129,7 +129,7 @@ type TrendInfo = {
   icon: React.ReactNode
 }
 
-type Periodo = "hoje" | "7dias" | "30dias" | "mes"
+type Periodo = "hoje" | "7dias" | "30dias" | "mes" | "tudo"
 
 type Loja = {
   nome_loja?: string | null
@@ -144,7 +144,9 @@ const periodos: { value: Periodo; label: string }[] = [
   { value: "7dias", label: "7 dias" },
   { value: "30dias", label: "30 dias" },
   { value: "mes", label: "Mês atual" },
+  { value: "tudo", label: "Todo o período" },
 ]
+
 
 export default function Dashboard() {
   const [todasVendas, setTodasVendas] = useState<Venda[]>([])
@@ -181,6 +183,7 @@ export default function Dashboard() {
   const [pedidosPendentes, setPedidosPendentes] = useState(0)
   const [ultimasVendas, setUltimasVendas] = useState<VendaRecente[]>([])
   const [graficoDias, setGraficoDias] = useState<GraficoDia[]>([])
+  const [graficoVendidoDias, setGraficoVendidoDias] = useState<GraficoDia[]>([])
   const [graficoLucroDias, setGraficoLucroDias] = useState<GraficoDia[]>([])
   const [rankingProdutos, setRankingProdutos] = useState<ProdutoRanking[]>([])
   const [graficoCategorias, setGraficoCategorias] = useState<CategoriaGrafico[]>([])
@@ -385,6 +388,41 @@ if (!lojaData) {
       }
     }
 
+    if (periodo === "tudo") {
+  const datasVendas = todasVendas.map((v) => new Date(v.created_at).getTime())
+  const datasPagamentos = todosPagamentos.map((p) => new Date(p.created_at).getTime())
+  const datasMovs = movimentacoesFinanceiras.map((m) =>
+    new Date((m.paid_at || m.created_at) as string).getTime()
+  )
+
+  const todasDatas = [...datasVendas, ...datasPagamentos, ...datasMovs].filter(
+    (item) => !Number.isNaN(item)
+  )
+
+  const menorData = todasDatas.length > 0 ? Math.min(...todasDatas) : agora.getTime()
+  const inicioAtual = new Date(menorData)
+  inicioAtual.setHours(0, 0, 0, 0)
+
+  const fimAtual = agora
+
+  const inicioComparacao = new Date(inicioAtual)
+  const fimComparacao = new Date(inicioAtual)
+  fimComparacao.setMilliseconds(-1)
+
+  const quantidadeDiasGrafico = Math.max(
+    1,
+    Math.ceil((fimAtual.getTime() - inicioAtual.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  )
+
+  return {
+    inicioAtual,
+    fimAtual,
+    inicioComparacao,
+    fimComparacao,
+    quantidadeDiasGrafico,
+  }
+}
+
     const inicioAtual = new Date(agora.getFullYear(), agora.getMonth(), 1)
     const fimAtual = agora
     const inicioComparacao = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
@@ -534,7 +572,10 @@ if (!lojaData) {
       vendasPeriodo.reduce((soma, v) => soma + Number(v.quantidade), 0)
     )
 
-    const recentes = vendasPeriodo.slice(0, 5).map((venda) => {
+    const recentes = [...vendasPeriodo]
+  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  .slice(0, 5)
+  .map((venda) => {
       const produto = produtosLista.find((p) => p.id === venda.product_id)
       const cliente = clientesLista.find((c) => c.id === venda.customer_id)
       const pagamentosDaVenda = pagamentosValidos.filter((p) => p.sale_id === venda.id)
@@ -568,6 +609,22 @@ if (!lojaData) {
         total: 0,
       })
     }
+
+    const vendidoDiasBase: GraficoDia[] = diasBase.map((item) => ({
+  dia: item.dia,
+  total: 0,
+}))
+
+vendasPeriodo.forEach((venda) => {
+  const chave = new Date(venda.created_at).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  })
+  const item = vendidoDiasBase.find((d) => d.dia === chave)
+  if (item) item.total += Number(venda.valor_total)
+})
+
+setGraficoVendidoDias(vendidoDiasBase)
 
     pagamentosPeriodo.forEach((pagamento) => {
       const chave = new Date(pagamento.created_at).toLocaleDateString("pt-BR", {
@@ -830,6 +887,8 @@ const produtoMaisVendido = useMemo(() => {
 }, [rankingProdutos])
 
 const produtoMaisLucrativo = useMemo(() => {
+  const { inicioAtual, fimAtual } = obterIntervalosSelecionados()
+
   const mapa = new Map<
     number,
     { nome: string; marca: string; categoria: string; lucro: number }
@@ -837,7 +896,12 @@ const produtoMaisLucrativo = useMemo(() => {
 
   todasVendas
     .filter((v) => v.status !== "Cancelada")
+    .filter((v) => {
+      const data = new Date(v.created_at)
+      return data >= inicioAtual && data <= fimAtual
+    })
     .forEach((venda) => {
+
       const produto = produtosLista.find((p) => p.id === venda.product_id)
       if (!produto) return
 
@@ -1011,11 +1075,13 @@ const resumoExecutivo = useMemo<{ texto: string; href?: string }[]>(() => {
 ])
 
   const textoComparacao =
-    periodo === "hoje"
-      ? "vs ontem"
-      : periodo === "mes"
-      ? "vs mês anterior"
-      : "vs período anterior"
+  periodo === "hoje"
+    ? "vs ontem"
+    : periodo === "mes"
+    ? "vs mês anterior"
+    : periodo === "tudo"
+    ? "vs início da operação"
+    : "vs período anterior"
    const progressoFaturamento = Math.min(
   (faturamentoPrincipal / (metaFaturamento || 1)) * 100, 100
    )
@@ -1074,7 +1140,17 @@ const resumoExecutivo = useMemo<{ texto: string; href?: string }[]>(() => {
     const linhas: string[] = []
 
     linhas.push(`"ModaGest Dashboard"`)
-    linhas.push(`"Período";"${periodo}"`)
+    const tituloPeriodoCsv =
+  periodo === "hoje"
+    ? "Hoje"
+    : periodo === "7dias"
+    ? "7 dias"
+    : periodo === "30dias"
+    ? "30 dias"
+    : periodo === "mes"
+    ? "Mês atual"
+    : "Todo o período"
+linhas.push(`"Período";"${tituloPeriodoCsv}"`)
     linhas.push("")
     linhas.push(`"RESUMO COMERCIAL"`)
     linhas.push(`"Total vendido";"${faturamentoPrincipal.toFixed(2)}"`)
@@ -1114,13 +1190,15 @@ const resumoExecutivo = useMemo<{ texto: string; href?: string }[]>(() => {
   async function exportarDashboardPDF() {
     const doc = new jsPDF()
     const tituloPeriodo =
-      periodo === "hoje"
-        ? "Hoje"
-        : periodo === "7dias"
-        ? "7 dias"
-        : periodo === "30dias"
-        ? "30 dias"
-        : "Mês atual"
+  periodo === "hoje"
+    ? "Hoje"
+    : periodo === "7dias"
+    ? "7 dias"
+    : periodo === "30dias"
+    ? "30 dias"
+    : periodo === "mes"
+    ? "Mês atual"
+    : "Todo o período"
 
     const logoDataUrl = await imageUrlToDataUrl(logoUrl)
 
