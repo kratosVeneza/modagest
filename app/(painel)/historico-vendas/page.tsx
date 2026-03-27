@@ -128,6 +128,8 @@ export default function HistoricoVendas() {
   const [observacaoPagamento, setObservacaoPagamento] = useState("")
   const [dataPagamento, setDataPagamento] = useState(hojeInputDate())
   const [salvandoPagamento, setSalvandoPagamento] = useState(false)
+  const [editandoPagamentoId, setEditandoPagamentoId] = useState<number | null>(null)
+  const [modalEditarPagamentoAberto, setModalEditarPagamentoAberto] = useState(false)
 
   useEffect(() => {
     validarAcesso()
@@ -363,8 +365,28 @@ export default function HistoricoVendas() {
     setModalPagamentoAberto(false)
   }
 
-  async function salvarPagamento() {
-  if (!vendaSelecionada) return
+  function abrirModalEditarPagamento(venda: VendaExibicao, pagamento: PagamentoBanco) {
+  setVendaSelecionada(venda)
+  setEditandoPagamentoId(pagamento.id)
+  setValorPagamento(String(pagamento.valor))
+  setFormaPagamento(pagamento.forma_pagamento || "Pix")
+  setObservacaoPagamento(pagamento.observacao || "")
+  setDataPagamento(formatarDataInput(pagamento.created_at))
+  setModalEditarPagamentoAberto(true)
+}
+
+function fecharModalEditarPagamento() {
+  setVendaSelecionada(null)
+  setEditandoPagamentoId(null)
+  setValorPagamento("")
+  setFormaPagamento("Pix")
+  setObservacaoPagamento("")
+  setDataPagamento(hojeInputDate())
+  setModalEditarPagamentoAberto(false)
+}
+
+  async function salvarEdicaoPagamento() {
+  if (!vendaSelecionada || !editandoPagamentoId) return
 
   setMensagem("")
 
@@ -377,15 +399,10 @@ export default function HistoricoVendas() {
     return
   }
 
-  const valor = Number(valorPagamento || 0)
+  const valorNovo = Number(valorPagamento || 0)
 
-  if (valor <= 0) {
+  if (valorNovo <= 0) {
     setMensagem("Informe um valor de pagamento válido.")
-    return
-  }
-
-  if (valor > vendaSelecionada.valor_em_aberto) {
-    setMensagem("O pagamento não pode ser maior que o valor em aberto.")
     return
   }
 
@@ -394,33 +411,48 @@ export default function HistoricoVendas() {
     return
   }
 
-  setSalvandoPagamento(true)
+  const pagamentoAtual = vendaSelecionada.pagamentos.find(
+    (item) => item.id === editandoPagamentoId
+  )
 
-  const payload = {
-    sale_id: vendaSelecionada.id,
-    user_id: user.id,
-    valor,
-    forma_pagamento: formaPagamento,
-    observacao: observacaoPagamento || null,
-    created_at: montarDataISO(dataPagamento),
+  if (!pagamentoAtual) {
+    setMensagem("Pagamento não encontrado.")
+    return
   }
 
-  console.log("PAYLOAD PAGAMENTO:", payload)
+  const totalOutrosPagamentos = vendaSelecionada.pagamentos
+    .filter((item) => item.id !== editandoPagamentoId)
+    .reduce((soma, item) => soma + Number(item.valor), 0)
+
+  const totalComEdicao = totalOutrosPagamentos + valorNovo
+
+  if (totalComEdicao > vendaSelecionada.valor_total) {
+    setMensagem("A soma dos pagamentos não pode ultrapassar o valor total da venda.")
+    return
+  }
+
+  setSalvandoPagamento(true)
 
   const { error } = await supabase
     .from("sale_payments")
-    .insert([payload])
+    .update({
+      valor: valorNovo,
+      forma_pagamento: formaPagamento,
+      observacao: observacaoPagamento || null,
+      created_at: montarDataISO(dataPagamento),
+    })
+    .eq("id", editandoPagamentoId)
+    .eq("sale_id", vendaSelecionada.id)
 
   setSalvandoPagamento(false)
 
   if (error) {
-    console.log("ERRO AO REGISTRAR PAGAMENTO:", error)
-    setMensagem(error.message || "Erro ao registrar pagamento.")
+    setMensagem(error.message || "Erro ao atualizar pagamento.")
     return
   }
 
-  fecharModalPagamento()
-  setMensagem("Pagamento adicionado com sucesso.")
+  fecharModalEditarPagamento()
+  setMensagem("Pagamento atualizado com sucesso.")
   await carregarVendas()
 }
 
@@ -776,27 +808,63 @@ export default function HistoricoVendas() {
                 </td>
                 <td style={td}>{formatarData(venda.created_at)}</td>
                 <td style={td}>
-                  <div style={acoesTabela}>
-                    {venda.status !== "Cancelada" && venda.valor_em_aberto > 0 && (
-                      <button
-                        onClick={() => abrirModalPagamento(venda)}
-                        className="btn btn-primary btn-sm"
-                      >
-                        Adicionar pagamento
-                      </button>
-                    )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+  <div style={acoesTabela}>
+    {venda.status !== "Cancelada" && venda.valor_em_aberto > 0 && (
+      <button
+        onClick={() => abrirModalPagamento(venda)}
+        className="btn btn-primary btn-sm"
+      >
+        Adicionar pagamento
+      </button>
+    )}
 
-                    {venda.status !== "Cancelada" ? (
-                      <button
-                        onClick={() => cancelarVenda(venda)}
-                        className="btn btn-danger btn-sm"
-                      >
-                        Cancelar venda
-                      </button>
-                    ) : (
-                      <span style={textoCancelado}>Já cancelada</span>
-                    )}
-                  </div>
+    {venda.status !== "Cancelada" ? (
+      <button
+        onClick={() => cancelarVenda(venda)}
+        className="btn btn-danger btn-sm"
+      >
+        Cancelar venda
+      </button>
+    ) : (
+      <span style={textoCancelado}>Já cancelada</span>
+    )}
+  </div>
+
+  {venda.pagamentos.length > 0 && (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {venda.pagamentos.map((pagamento) => (
+        <div
+          key={pagamento.id}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            padding: "8px 10px",
+            border: "1px solid #e5e7eb",
+            borderRadius: 8,
+            background: "#f8fafc",
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#374151" }}>
+            <strong>R$ {Number(pagamento.valor).toFixed(2)}</strong>{" "}
+            • {pagamento.forma_pagamento} • {formatarData(pagamento.created_at)}
+          </div>
+
+          {venda.status !== "Cancelada" && (
+            <button
+              onClick={() => abrirModalEditarPagamento(venda, pagamento)}
+              className="btn btn-secondary btn-sm"
+            >
+              Editar pagamento
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
                 </td>
               </tr>
             ))}
@@ -813,117 +881,101 @@ export default function HistoricoVendas() {
       </div>
 
       <AnimatedModal
-        open={modalPagamentoAberto}
-        onClose={fecharModalPagamento}
-        title="Adicionar pagamento"
-        footer={
-          <>
-            <button onClick={fecharModalPagamento} className="btn btn-secondary">
-              Cancelar
-            </button>
-            <button
-              onClick={salvarPagamento}
-              className="btn btn-primary"
-              disabled={salvandoPagamento}
-            >
-              {salvandoPagamento ? "Salvando..." : "Salvar pagamento"}
-            </button>
-            {mensagem && (
-  <div
-    style={{
-      marginBottom: 14,
-      padding: "10px 12px",
-      borderRadius: 10,
-      background: "#fef2f2",
-      color: "#991b1b",
-      border: "1px solid #fecaca",
-      fontWeight: 600,
-      fontSize: 14,
-    }}
-  >
-    {mensagem}
-  </div>
-)}
-          </>
-        }
+  open={modalEditarPagamentoAberto}
+  onClose={fecharModalEditarPagamento}
+  title="Editar pagamento"
+  footer={
+    <>
+      <button onClick={fecharModalEditarPagamento} className="btn btn-secondary">
+        Cancelar
+      </button>
+      <button
+        onClick={salvarEdicaoPagamento}
+        className="btn btn-primary"
+        disabled={salvandoPagamento}
       >
-        <>
-          {vendaSelecionada && (
-            <div style={{ marginBottom: 16 }}>
-              <div>
-                <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
-              </div>
-              <div>
-                <strong>Total:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}
-              </div>
-              <div>
-                <strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}
-              </div>
-              <div>
-                <strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}
-              </div>
-            </div>
-          )}
+        {salvandoPagamento ? "Salvando..." : "Salvar alteração"}
+      </button>
+    </>
+  }
+>
+  <>
+    {vendaSelecionada && (
+      <div style={{ marginBottom: 16 }}>
+        <div>
+          <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
+        </div>
+        <div>
+          <strong>Total:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}
+        </div>
+        <div>
+          <strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}
+        </div>
+        <div>
+          <strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}
+        </div>
+      </div>
+    )}
 
-          <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280" }}>
-            Use este formulário para registrar pagamentos feitos depois da venda, inclusive com data retroativa.
-          </div>
+    <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280" }}>
+      Atualize os dados do pagamento. O histórico e os relatórios serão recalculados automaticamente.
+    </div>
 
-          <div className="grid-2">
-            <div>
-              <label style={labelAjuda}>
-                Valor do pagamento
-                <HelpTooltip text="Informe quanto o cliente pagou nesta nova entrada." />
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="Valor do pagamento"
-                value={valorPagamento}
-                onChange={(e) => setValorPagamento(e.target.value)}
-              />
-            </div>
+    <div className="grid-2">
+      <div>
+        <label style={labelAjuda}>
+          Valor do pagamento
+          <HelpTooltip text="Atualize o valor correto desse pagamento." />
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          placeholder="Valor do pagamento"
+          value={valorPagamento}
+          onChange={(e) => setValorPagamento(e.target.value)}
+        />
+      </div>
 
-            <div>
-              <label style={labelAjuda}>
-                Forma de pagamento
-                <HelpTooltip text="Escolha a forma usada neste pagamento, como Pix, dinheiro ou cartão." />
-              </label>
-              <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
-                {formasPagamento.map((forma) => (
-                  <option key={forma} value={forma}>
-                    {forma}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <div>
+        <label style={labelAjuda}>
+          Forma de pagamento
+          <HelpTooltip text="Atualize a forma usada nesse pagamento." />
+        </label>
+        <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
+          {formasPagamento.map((forma) => (
+            <option key={forma} value={forma}>
+              {forma}
+            </option>
+          ))}
+        </select>
+      </div>
 
-            <div>
-              <label style={labelAjuda}>
-                Data do pagamento
-                <HelpTooltip text="Use a data real em que o cliente pagou, mesmo que esteja registrando depois." />
-              </label>
-              <input
-                type="date"
-                value={dataPagamento}
-                onChange={(e) => setDataPagamento(e.target.value)}
-              />
-            </div>
+      <div>
+        <label style={labelAjuda}>
+          Data do pagamento
+          <HelpTooltip text="Atualize a data real em que o pagamento ocorreu." />
+        </label>
+        <input
+          type="date"
+          value={dataPagamento}
+          onChange={(e) => setDataPagamento(e.target.value)}
+        />
+      </div>
 
-            <div>
-              <label style={labelAjuda}>
-                Observação
-                <HelpTooltip text="Use para anotar algo como segunda parcela, complemento ou acordo com o cliente." />
-              </label>
-              <input
-                placeholder="Observação (opcional)"
-                value={observacaoPagamento}
-                onChange={(e) => setObservacaoPagamento(e.target.value)}
-              />
-            </div>
-          </div>
-        </>
-      </AnimatedModal>
+      <div>
+        <label style={labelAjuda}>
+          Observação
+          <HelpTooltip text="Atualize a observação desse pagamento, se necessário." />
+        </label>
+        <input
+          placeholder="Observação (opcional)"
+          value={observacaoPagamento}
+          onChange={(e) => setObservacaoPagamento(e.target.value)}
+        />
+      </div>
+    </div>
+  </>
+</AnimatedModal>
     </div>
   )
 }
