@@ -365,6 +365,72 @@ export default function HistoricoVendas() {
     setModalPagamentoAberto(false)
   }
 
+  async function salvarPagamento() {
+  if (!vendaSelecionada) return
+
+  setMensagem("")
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
+
+  if (vendaSelecionada.status === "Cancelada") {
+    setMensagem("Não é possível adicionar pagamento em venda cancelada.")
+    return
+  }
+
+  const valor = Number(valorPagamento || 0)
+
+  if (valor <= 0) {
+    setMensagem("Informe um valor de pagamento válido.")
+    return
+  }
+
+  if (valor > vendaSelecionada.valor_em_aberto) {
+    setMensagem("O pagamento não pode ser maior que o valor em aberto.")
+    return
+  }
+
+  if (!dataPagamento) {
+    setMensagem("Informe a data do pagamento.")
+    return
+  }
+
+  setSalvandoPagamento(true)
+
+  const payload = {
+    sale_id: vendaSelecionada.id,
+    user_id: user.id,
+    valor,
+    forma_pagamento: formaPagamento,
+    observacao: observacaoPagamento || null,
+    created_at: montarDataISO(dataPagamento),
+  }
+
+  console.log("PAYLOAD PAGAMENTO:", payload)
+
+  const { error } = await supabase
+    .from("sale_payments")
+    .insert([payload])
+
+  setSalvandoPagamento(false)
+
+  if (error) {
+    console.log("ERRO AO REGISTRAR PAGAMENTO:", error)
+    setMensagem(error.message || "Erro ao registrar pagamento.")
+    return
+  }
+
+  fecharModalPagamento()
+  setMensagem("Pagamento adicionado com sucesso.")
+  await carregarVendas()
+}
+
   function abrirModalEditarPagamento(venda: VendaExibicao, pagamento: PagamentoBanco) {
   setVendaSelecionada(venda)
   setEditandoPagamentoId(pagamento.id)
@@ -434,25 +500,64 @@ function fecharModalEditarPagamento() {
   setSalvandoPagamento(true)
 
   const { error } = await supabase
-    .from("sale_payments")
-    .update({
-      valor: valorNovo,
-      forma_pagamento: formaPagamento,
-      observacao: observacaoPagamento || null,
-      created_at: montarDataISO(dataPagamento),
-    })
-    .eq("id", editandoPagamentoId)
-    .eq("sale_id", vendaSelecionada.id)
+  .from("sale_payments")
+  .update({
+    valor: valorNovo,
+    forma_pagamento: formaPagamento,
+    observacao: observacaoPagamento || null,
+    created_at: montarDataISO(dataPagamento),
+  })
+  .eq("id", editandoPagamentoId)
+  .eq("sale_id", vendaSelecionada.id)
+  .eq("user_id", user.id)
 
   setSalvandoPagamento(false)
 
   if (error) {
-    setMensagem(error.message || "Erro ao atualizar pagamento.")
-    return
-  }
+  console.log("ERRO AO ATUALIZAR PAGAMENTO:", error)
+  setMensagem(error.message || "Erro ao atualizar pagamento.")
+  return
+}
 
   fecharModalEditarPagamento()
   setMensagem("Pagamento atualizado com sucesso.")
+  await carregarVendas()
+}
+
+async function excluirPagamento(venda: VendaExibicao, pagamentoId: number) {
+  const confirmado = window.confirm("Deseja excluir este pagamento?")
+  if (!confirmado) return
+
+  setMensagem("")
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
+
+  if (venda.status === "Cancelada") {
+    setMensagem("Não é possível excluir pagamento de uma venda cancelada.")
+    return
+  }
+
+  const { error } = await supabase
+    .from("sale_payments")
+    .delete()
+    .eq("id", pagamentoId)
+    .eq("sale_id", venda.id)
+    .eq("user_id", user.id)
+
+  if (error) {
+    console.log("ERRO AO EXCLUIR PAGAMENTO:", error)
+    setMensagem(error.message || "Erro ao excluir pagamento.")
+    return
+  }
+
+  setMensagem("Pagamento excluído com sucesso.")
   await carregarVendas()
 }
 
@@ -853,13 +958,22 @@ function fecharModalEditarPagamento() {
           </div>
 
           {venda.status !== "Cancelada" && (
-            <button
-              onClick={() => abrirModalEditarPagamento(venda, pagamento)}
-              className="btn btn-secondary btn-sm"
-            >
-              Editar pagamento
-            </button>
-          )}
+  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+    <button
+      onClick={() => abrirModalEditarPagamento(venda, pagamento)}
+      className="btn btn-secondary btn-sm"
+    >
+      Editar pagamento
+    </button>
+
+    <button
+      onClick={() => excluirPagamento(venda, pagamento.id)}
+      className="btn btn-danger btn-sm"
+    >
+      Excluir pagamento
+    </button>
+  </div>
+)}
         </div>
       ))}
     </div>
@@ -879,6 +993,103 @@ function fecharModalEditarPagamento() {
           </tbody>
         </table>
       </div>
+
+      <AnimatedModal
+  open={modalPagamentoAberto}
+  onClose={fecharModalPagamento}
+  title="Adicionar pagamento"
+  footer={
+    <>
+      <button onClick={fecharModalPagamento} className="btn btn-secondary">
+        Cancelar
+      </button>
+      <button
+        onClick={salvarPagamento}
+        className="btn btn-primary"
+        disabled={salvandoPagamento}
+      >
+        {salvandoPagamento ? "Salvando..." : "Salvar pagamento"}
+      </button>
+    </>
+  }
+>
+  <>
+    {vendaSelecionada && (
+      <div style={{ marginBottom: 16 }}>
+        <div>
+          <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
+        </div>
+        <div>
+          <strong>Total:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}
+        </div>
+        <div>
+          <strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}
+        </div>
+        <div>
+          <strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}
+        </div>
+      </div>
+    )}
+
+    <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280" }}>
+      Use este formulário para registrar pagamentos feitos depois da venda, inclusive com data retroativa.
+    </div>
+
+    <div className="grid-2">
+      <div>
+        <label style={labelAjuda}>
+          Valor do pagamento
+          <HelpTooltip text="Informe o valor recebido neste pagamento." />
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          placeholder="Valor do pagamento"
+          value={valorPagamento}
+          onChange={(e) => setValorPagamento(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label style={labelAjuda}>
+          Forma de pagamento
+          <HelpTooltip text="Selecione a forma usada pelo cliente." />
+        </label>
+        <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
+          {formasPagamento.map((forma) => (
+            <option key={forma} value={forma}>
+              {forma}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label style={labelAjuda}>
+          Data do pagamento
+          <HelpTooltip text="Informe a data real em que o pagamento ocorreu." />
+        </label>
+        <input
+          type="date"
+          value={dataPagamento}
+          onChange={(e) => setDataPagamento(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label style={labelAjuda}>
+          Observação
+          <HelpTooltip text="Adicione uma observação, se necessário." />
+        </label>
+        <input
+          placeholder="Observação (opcional)"
+          value={observacaoPagamento}
+          onChange={(e) => setObservacaoPagamento(e.target.value)}
+        />
+      </div>
+    </div>
+  </>
+</AnimatedModal>
 
       <AnimatedModal
   open={modalEditarPagamentoAberto}
