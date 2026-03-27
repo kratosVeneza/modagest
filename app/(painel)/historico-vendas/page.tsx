@@ -358,6 +358,7 @@ export default function HistoricoVendas() {
 
   function fecharModalPagamento() {
     setVendaSelecionada(null)
+    setEditandoPagamentoId(null)
     setValorPagamento("")
     setFormaPagamento("Pix")
     setObservacaoPagamento("")
@@ -953,9 +954,17 @@ async function excluirPagamento(venda: VendaExibicao, pagamentoId: number) {
           }}
         >
           <div style={{ fontSize: 12, color: "#374151" }}>
-            <strong>R$ {Number(pagamento.valor).toFixed(2)}</strong>{" "}
-            • {pagamento.forma_pagamento} • {formatarData(pagamento.created_at)}
-          </div>
+  <div>
+    <strong>R$ {Number(pagamento.valor).toFixed(2)}</strong>{" "}
+    • {pagamento.forma_pagamento} • {formatarData(pagamento.created_at)}
+  </div>
+
+  {pagamento.observacao && (
+    <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+      {pagamento.observacao}
+    </div>
+  )}
+</div>
 
           {venda.status !== "Cancelada" && (
   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
