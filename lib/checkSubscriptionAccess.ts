@@ -61,6 +61,14 @@ export async function checkSubscriptionAccess(): Promise<AccessResult> {
     ? new Date(assinaturaAtual.current_period_end)
     : null
 
+    if (subscription.plan_slug === "lifetime") {
+  return {
+    ok: true,
+    hasAccess: true,
+    subscription,
+  }
+}
+
   if (assinaturaAtual.status === "trialing") {
     if (trialEndsAt && now <= trialEndsAt) {
       return {
