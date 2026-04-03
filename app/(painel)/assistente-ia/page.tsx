@@ -99,53 +99,144 @@ function contemAlgumaVariacao(texto: string, valor: string) {
   return variacoes.some((item) => textoNormalizado.includes(item))
 }
 
-function interpretarVendaTexto(texto: string): VendaInterpretada | null {
-  const textoOriginal = texto.trim()
-  const textoLower = normalizarTexto(textoOriginal)
+type VendaInterpretadaItem = {
+  quantidade: number
+  produtoTexto: string
+  clienteTexto: string
+  valorRecebido: number | null
+  formaPagamento: string | null
+  observacao: string
+  dataVenda: string
+}
 
-  if (!textoLower.includes("vendi")) return null
+function numeroPorExtensoParaNumero(texto: string) {
+  const mapa: Record<string, number> = {
+    um: 1,
+    uma: 1,
+    dois: 2,
+    duas: 2,
+    tres: 3,
+    três: 3,
+    quatro: 4,
+    cinco: 5,
+    seis: 6,
+    sete: 7,
+    oito: 8,
+    nove: 9,
+    dez: 10,
+  }
 
-  const quantidadeMatch = textoLower.match(/vendi\s+(\d+)/i)
-  const quantidade = Number(quantidadeMatch?.[1] || 1)
+  return mapa[normalizarTexto(texto)] || null
+}
 
-  const recebidoMatch =
-    textoLower.match(/recebi\s+(\d+[.,]?\d*)/i) ||
-    textoLower.match(/recebido\s+(\d+[.,]?\d*)/i)
+function extrairQuantidade(texto: string) {
+  const numeroDireto = texto.match(/\b(\d+)\b/)
+  if (numeroDireto) return Number(numeroDireto[1])
 
-  const valorRecebido = recebidoMatch
-    ? Number(recebidoMatch[1].replace(",", "."))
-    : 0
+  const palavras = texto.split(" ")
+  for (const palavra of palavras) {
+    const convertido = numeroPorExtensoParaNumero(palavra)
+    if (convertido) return convertido
+  }
 
-  let formaPagamento = "Pix"
+  return 1
+}
+
+function identificarFormaPagamento(texto: string) {
+  const textoNormalizado = normalizarTexto(texto)
+
   const formaEncontrada = formasPagamento.find((forma) =>
-    textoLower.includes(normalizarTexto(forma))
+    textoNormalizado.includes(normalizarTexto(forma))
   )
-  if (formaEncontrada) {
-    formaPagamento = formaEncontrada
+
+  return formaEncontrada || null
+}
+
+function limparInicioDeVenda(texto: string) {
+  return texto
+    .replace(
+      /^(vendi|efetuei uma venda de|efetuei uma venda|fiz uma venda de|fiz uma venda|realizei uma venda de|realizei uma venda|registrei uma venda de|registrei uma venda)\s*/i,
+      ""
+    )
+    .trim()
+}
+
+function interpretarMultiplasVendas(texto: string): VendaInterpretadaItem[] {
+  const textoOriginal = texto.trim()
+  const textoNormalizado = normalizarTexto(textoOriginal)
+
+  const temVerboVenda =
+    textoNormalizado.includes("vendi") ||
+    textoNormalizado.includes("efetuei uma venda") ||
+    textoNormalizado.includes("fiz uma venda") ||
+    textoNormalizado.includes("realizei uma venda") ||
+    textoNormalizado.includes("registrei uma venda") ||
+    textoNormalizado.includes("registrei uma venda")
+
+  if (!temVerboVenda) return []
+
+  const formaPagamentoGlobal = identificarFormaPagamento(textoOriginal)
+
+  const recebidoGlobalMatch =
+    textoOriginal.match(/recebi\s+(\d+[.,]?\d*)/i) ||
+    textoOriginal.match(/recebido\s+(\d+[.,]?\d*)/i)
+
+  const valorRecebidoGlobal = recebidoGlobalMatch
+    ? Number(recebidoGlobalMatch[1].replace(",", "."))
+    : null
+
+  const textoSemInicio = limparInicioDeVenda(textoOriginal)
+
+  const padraoMultiplos =
+    /(?:uma|um|outra|outro)\s+(.+?)\s+para\s+([a-zà-ú0-9\s]+?)(?=(?:,\s*(?:uma|um|outra|outro)\s+)|(?:\s+e\s+(?:uma|um|outra|outro)\s+)|$)/gi
+
+  const encontrados = [...textoSemInicio.matchAll(padraoMultiplos)]
+
+  if (encontrados.length > 1) {
+    return encontrados.map((item) => ({
+      quantidade: 1,
+      produtoTexto: item[1].trim(),
+      clienteTexto: item[2].trim(),
+      valorRecebido: null,
+      formaPagamento: formaPagamentoGlobal,
+      observacao: "",
+      dataVenda: hojeInputDate(),
+    }))
   }
 
   const clienteMatch =
-    textoOriginal.match(/para\s+(.+?)(?:\s+e\s+recebi|\s+recebi|$)/i) || null
+    textoSemInicio.match(/para\s+([a-zà-ú0-9\s]+?)(?:\s+e\s+recebi|\s+recebi|$)/i) ||
+    null
 
   const clienteTexto = clienteMatch?.[1]?.trim() || ""
 
-  let produtoTexto = textoOriginal
-    .replace(/vendi\s+\d+/i, "")
-    .replace(/para\s+(.+?)(?:\s+e\s+recebi|\s+recebi|$)/i, "")
+  let produtoTexto = textoSemInicio
+    .replace(/para\s+([a-zà-ú0-9\s]+?)(?:\s+e\s+recebi|\s+recebi|$)/i, "")
     .replace(/recebi\s+\d+[.,]?\d*/i, "")
+    .replace(/recebido\s+\d+[.,]?\d*/i, "")
     .replace(/dinheiro|pix|cartão de débito|cartao de debito|cartão de crédito|cartao de credito|transferência|transferencia|outro/gi, "")
     .replace(/\s+/g, " ")
     .trim()
 
-  return {
-    quantidade,
-    produtoTexto,
-    clienteTexto,
-    valorRecebido,
-    formaPagamento,
-    observacao: "",
-    dataVenda: hojeInputDate(),
-  }
+  const quantidade = extrairQuantidade(produtoTexto)
+
+  produtoTexto = produtoTexto
+    .replace(/\b(\d+)\b/, "")
+    .replace(/\bum\b|\buma\b|\bdois\b|\bduas\b|\btres\b|\btrês\b|\bquatro\b|\bcinco\b|\bseis\b|\bsete\b|\boito\b|\bnove\b|\bdez\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  return [
+    {
+      quantidade,
+      produtoTexto,
+      clienteTexto,
+      valorRecebido: valorRecebidoGlobal,
+      formaPagamento: formaPagamentoGlobal,
+      observacao: "",
+      dataVenda: hojeInputDate(),
+    },
+  ]
 }
 
 function pontuarProduto(produto: Produto, textoProduto: string) {
@@ -172,16 +263,15 @@ function pontuarProduto(produto: Produto, textoProduto: string) {
   return pontos
 }
 
-function encontrarMelhorProduto(produtos: Produto[], textoProduto: string) {
-  const candidatos = produtos
+function encontrarProdutosOrdenados(produtos: Produto[], textoProduto: string) {
+  return produtos
     .map((produto) => ({
       produto,
       pontos: pontuarProduto(produto, textoProduto),
     }))
     .filter((item) => item.pontos > 0)
     .sort((a, b) => b.pontos - a.pontos)
-
-  return candidatos[0]?.produto || null
+    .map((item) => item.produto)
 }
 
 function encontrarCliente(clientes: Cliente[], textoCliente: string) {
@@ -207,17 +297,21 @@ export default function AssistenteIAPage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
 
-  const [quantidade, setQuantidade] = useState("1")
-  const [produtoIdSelecionado, setProdutoIdSelecionado] = useState("")
-  const [clienteIdSelecionado, setClienteIdSelecionado] = useState("")
-  const [valorRecebido, setValorRecebido] = useState("0")
-  const [formaPagamento, setFormaPagamento] = useState("Pix")
-  const [observacao, setObservacao] = useState("")
-  const [dataVenda, setDataVenda] = useState(hojeInputDate())
+  type VendaRascunho = {
+  quantidade: string
+  produtoIdSelecionado: string
+  clienteIdSelecionado: string
+  valorRecebido: string
+  formaPagamento: string
+  observacao: string
+  dataVenda: string
+  produtoTextoIA: string
+  clienteTextoIA: string
+}
 
-  const [produtoTextoIA, setProdutoTextoIA] = useState("")
-  const [clienteTextoIA, setClienteTextoIA] = useState("")
-  const [interpretado, setInterpretado] = useState(false)
+const [rascunhos, setRascunhos] = useState<VendaRascunho[]>([])
+const [interpretado, setInterpretado] = useState(false)
+const [loadingIA, setLoadingIA] = useState(false)
 
   useEffect(() => {
     carregarBase()
@@ -267,145 +361,160 @@ export default function AssistenteIAPage() {
   }
 
   function limparTudo() {
-    setTexto("")
-    setMensagem("")
-    setQuantidade("1")
-    setProdutoIdSelecionado("")
-    setClienteIdSelecionado("")
-    setValorRecebido("0")
-    setFormaPagamento("Pix")
-    setObservacao("")
-    setDataVenda(hojeInputDate())
-    setProdutoTextoIA("")
-    setClienteTextoIA("")
-    setInterpretado(false)
-  }
+  setTexto("")
+  setMensagem("")
+  setRascunhos([])
+  setInterpretado(false)
+}
 
   function interpretar() {
-    setMensagem("")
+  setMensagem("")
+  setLoadingIA(true)
 
-    if (!texto.trim()) {
-      setMensagem("Digite uma instrução para a IA interpretar.")
-      return
-    }
-
-    const resultado = interpretarVendaTexto(texto)
-
-    if (!resultado) {
-      setMensagem("A IA não identificou uma venda nesse texto.")
-      return
-    }
-
-    setQuantidade(String(resultado.quantidade))
-    setValorRecebido(String(resultado.valorRecebido))
-    setFormaPagamento(resultado.formaPagamento)
-    setObservacao(resultado.observacao)
-    setDataVenda(resultado.dataVenda)
-    setProdutoTextoIA(resultado.produtoTexto)
-    setClienteTextoIA(resultado.clienteTexto)
-
-    const produtoEncontrado = encontrarMelhorProduto(produtos, resultado.produtoTexto)
-    const clienteEncontrado = encontrarCliente(clientes, resultado.clienteTexto)
-
-    setProdutoIdSelecionado(produtoEncontrado ? String(produtoEncontrado.id) : "")
-    setClienteIdSelecionado(clienteEncontrado ? String(clienteEncontrado.id) : "")
-    setInterpretado(true)
-
-    if (!produtoEncontrado) {
-      setMensagem("A IA interpretou a venda, mas você precisa escolher o produto correto.")
-      return
-    }
-
-    setMensagem("Venda interpretada. Revise os dados antes de confirmar.")
+  if (!texto.trim()) {
+    setLoadingIA(false)
+    setMensagem("Digite uma instrução para a IA interpretar.")
+    return
   }
 
-  const produtosParecidos = produtos
-  .map((produto) => ({
-    produto,
-    pontos: pontuarProduto(produto, produtoTextoIA),
-  }))
-  .filter((item) => item.pontos > 0)
-  .sort((a, b) => b.pontos - a.pontos)
+  const itens = interpretarMultiplasVendas(texto)
 
-  const produtoSelecionado = useMemo(() => {
-    return produtos.find((p) => String(p.id) === produtoIdSelecionado) || null
-  }, [produtos, produtoIdSelecionado])
+  if (itens.length === 0) {
+    setLoadingIA(false)
+    setMensagem("A IA não identificou nenhuma venda nesse texto.")
+    return
+  }
 
-  const clienteSelecionado = useMemo(() => {
-    return clientes.find((c) => String(c.id) === clienteIdSelecionado) || null
-  }, [clientes, clienteIdSelecionado])
+  const novosRascunhos: VendaRascunho[] = itens.map((item) => {
+    const produtosOrdenados = encontrarProdutosOrdenados(produtos, item.produtoTexto)
+    const produtoPrincipal = produtosOrdenados[0] || null
+    const clienteEncontrado = encontrarCliente(clientes, item.clienteTexto)
 
-  const quantidadeNumero = Number(quantidade || 0)
-  const valorRecebidoNumero = Number(valorRecebido || 0)
-  const valorUnitario = produtoSelecionado ? Number(produtoSelecionado.preco || 0) : 0
-  const valorTotal = quantidadeNumero > 0 ? valorUnitario * quantidadeNumero : 0
-  const valorEmAberto = Math.max(valorTotal - valorRecebidoNumero, 0)
+    const precoPadrao = produtoPrincipal ? Number(produtoPrincipal.preco || 0) : 0
+    const quantidadeNumero = Number(item.quantidade || 1)
+    const valorTotalPadrao = precoPadrao * quantidadeNumero
+
+    return {
+      quantidade: String(item.quantidade || 1),
+      produtoIdSelecionado: produtoPrincipal ? String(produtoPrincipal.id) : "",
+      clienteIdSelecionado: clienteEncontrado ? String(clienteEncontrado.id) : "",
+      valorRecebido:
+        item.valorRecebido !== null && item.valorRecebido !== undefined
+          ? String(item.valorRecebido)
+          : "0",
+      formaPagamento: item.formaPagamento || "Pix",
+      observacao: item.observacao || "",
+      dataVenda: item.dataVenda || hojeInputDate(),
+      produtoTextoIA: item.produtoTexto,
+      clienteTextoIA: item.clienteTexto,
+    }
+  })
+
+  setRascunhos(novosRascunhos)
+  setInterpretado(true)
+  setLoadingIA(false)
+
+  if (novosRascunhos.some((item) => !item.produtoIdSelecionado)) {
+    setMensagem("A IA interpretou o texto, mas você precisa revisar alguns produtos antes de salvar.")
+    return
+  }
+
+  setMensagem("Texto interpretado com sucesso. Revise as vendas antes de confirmar.")
+}
+  function atualizarRascunho(index: number, campo: keyof VendaRascunho, valor: string) {
+  setRascunhos((atual) =>
+    atual.map((item, i) =>
+      i === index
+        ? {
+            ...item,
+            [campo]: valor,
+          }
+        : item
+    )
+  )
+}
 
   async function confirmarVenda() {
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
+
+  if (rascunhos.length === 0) {
+    setMensagem("Nenhuma venda foi interpretada.")
+    return
+  }
+
+  setSalvando(true)
+
+  for (const rascunho of rascunhos) {
+    const produtoSelecionado =
+      produtos.find((p) => String(p.id) === rascunho.produtoIdSelecionado) || null
+
+    const clienteSelecionado =
+      clientes.find((c) => String(c.id) === rascunho.clienteIdSelecionado) || null
+
+    const quantidadeNumero = Number(rascunho.quantidade || 0)
+    const valorRecebidoNumero = Number(rascunho.valorRecebido || 0)
+    const valorUnitario = produtoSelecionado ? Number(produtoSelecionado.preco || 0) : 0
+    const valorTotal = quantidadeNumero * valorUnitario
 
     if (!produtoSelecionado) {
-      setMensagem("Selecione um produto para concluir a venda.")
+      setSalvando(false)
+      setMensagem(`Selecione um produto válido para: ${rascunho.produtoTextoIA}`)
       return
     }
 
     if (quantidadeNumero <= 0) {
-      setMensagem("Informe uma quantidade válida.")
+      setSalvando(false)
+      setMensagem(`Informe uma quantidade válida para: ${rascunho.produtoTextoIA}`)
       return
     }
 
     if (quantidadeNumero > Number(produtoSelecionado.estoque)) {
-      setMensagem("A quantidade informada é maior que o estoque disponível.")
+      setSalvando(false)
+      setMensagem(`Estoque insuficiente para: ${produtoSelecionado.nome}`)
       return
     }
 
     if (valorRecebidoNumero < 0) {
-      setMensagem("O valor recebido não pode ser negativo.")
+      setSalvando(false)
+      setMensagem(`O valor recebido não pode ser negativo em: ${produtoSelecionado.nome}`)
       return
     }
 
     if (valorRecebidoNumero > valorTotal) {
-      setMensagem("O valor recebido não pode ser maior que o valor total da venda.")
+      setSalvando(false)
+      setMensagem(`O valor recebido não pode ser maior que o total em: ${produtoSelecionado.nome}`)
       return
     }
-
-    if (!dataVenda) {
-      setMensagem("Informe a data da venda.")
-      return
-    }
-
-    setSalvando(true)
-
-    const createdAtIso = montarDataISO(dataVenda)
 
     let clienteIdFinal = clienteSelecionado?.id || null
 
-// 👉 cria cliente automaticamente se não existir
-if (!clienteIdFinal && clienteTextoIA) {
-  const { data: novoCliente, error: erroCliente } = await supabase
-    .from("customers")
-    .insert([
-      {
-        user_id: user.id,
-        nome: clienteTextoIA,
-      },
-    ])
-    .select()
-    .single()
+    if (!clienteIdFinal && rascunho.clienteTextoIA) {
+      const { data: novoCliente, error: erroCliente } = await supabase
+        .from("customers")
+        .insert([
+          {
+            user_id: user.id,
+            nome: rascunho.clienteTextoIA,
+          },
+        ])
+        .select()
+        .single()
 
-  if (!erroCliente && novoCliente) {
-    clienteIdFinal = novoCliente.id
-  }
-}
+      if (!erroCliente && novoCliente) {
+        clienteIdFinal = novoCliente.id
+      }
+    }
+
+    const createdAtIso = montarDataISO(rascunho.dataVenda)
 
     const vendaPayload = {
       product_id: produtoSelecionado.id,
@@ -427,7 +536,7 @@ if (!clienteIdFinal && clienteTextoIA) {
 
     if (erroVenda || !vendaInserida) {
       setSalvando(false)
-      setMensagem(erroVenda?.message || "Erro ao salvar a venda.")
+      setMensagem(erroVenda?.message || "Erro ao salvar uma das vendas.")
       return
     }
 
@@ -441,7 +550,7 @@ if (!clienteIdFinal && clienteTextoIA) {
 
     if (erroEstoque) {
       setSalvando(false)
-      setMensagem(erroEstoque.message || "A venda foi criada, mas houve erro ao baixar o estoque.")
+      setMensagem(erroEstoque.message || "Erro ao baixar estoque.")
       return
     }
 
@@ -450,8 +559,8 @@ if (!clienteIdFinal && clienteTextoIA) {
         sale_id: vendaInserida.id,
         user_id: user.id,
         valor: valorRecebidoNumero,
-        forma_pagamento: formaPagamento,
-        observacao: observacao || null,
+        forma_pagamento: rascunho.formaPagamento,
+        observacao: rascunho.observacao || null,
         created_at: createdAtIso,
       }
 
@@ -461,16 +570,17 @@ if (!clienteIdFinal && clienteTextoIA) {
 
       if (erroPagamento) {
         setSalvando(false)
-        setMensagem(erroPagamento.message || "A venda foi salva, mas houve erro ao registrar o pagamento.")
+        setMensagem(erroPagamento.message || "Erro ao registrar pagamento.")
         return
       }
     }
-
-    setSalvando(false)
-    setMensagem("Venda lançada com sucesso pelo Assistente IA.")
-    limparTudo()
-    await carregarBase()
   }
+
+  setSalvando(false)
+  setMensagem("Vendas lançadas com sucesso pelo Assistente IA.")
+  limparTudo()
+  await carregarBase()
+}
 
   return (
     <div>
@@ -514,12 +624,12 @@ if (!clienteIdFinal && clienteTextoIA) {
 
         <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
-            onClick={interpretar}
-            className="btn btn-primary"
-            disabled={carregandoBase}
-          >
-            Interpretar venda com IA
-          </button>
+           onClick={interpretar}
+           className="btn btn-primary"
+           disabled={loadingIA || carregandoBase}
+>
+  {loadingIA ? "Analisando..." : "Interpretar venda com IA"}
+</button>
 
           <button onClick={limparTudo} className="btn btn-secondary">
             Limpar
@@ -528,156 +638,202 @@ if (!clienteIdFinal && clienteTextoIA) {
       </div>
 
       {interpretado && (
-        <div className="section-card" style={{ marginTop: 20 }}>
-          <h3 style={{ marginTop: 0 }}>Revisão antes de salvar</h3>
+  <div className="section-card" style={{ marginTop: 20 }}>
+    <h3 style={{ marginTop: 0 }}>Revisão antes de salvar</h3>
 
-          <div className="grid-2">
-            <div>
-              <label style={labelStyle}>Texto do produto identificado</label>
-              <input value={produtoTextoIA} readOnly />
-            </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {rascunhos.map((rascunho, index) => {
+        const produtoSelecionado =
+          produtos.find((p) => String(p.id) === rascunho.produtoIdSelecionado) || null
 
-            <div>
-              <label style={labelStyle}>Texto do cliente identificado</label>
-              <input value={clienteTextoIA} readOnly />
-            </div>
+        const quantidadeNumero = Number(rascunho.quantidade || 0)
+        const valorRecebidoNumero = Number(rascunho.valorRecebido || 0)
+        const valorUnitario = produtoSelecionado ? Number(produtoSelecionado.preco || 0) : 0
+        const valorTotal = quantidadeNumero * valorUnitario
+        const valorEmAberto = Math.max(valorTotal - valorRecebidoNumero, 0)
 
-            <div>
-              <label style={labelStyle}>Produto encontrado</label>
-              <select
-                value={produtoIdSelecionado}
-                onChange={(e) => setProdutoIdSelecionado(e.target.value)}
-              >
-                <option value="">Selecione o produto</option>
-                {produtos.map((produto) => (
-                  <option key={produto.id} value={produto.id}>
-                    {produto.nome}
-                    {produto.cor ? ` • ${produto.cor}` : ""}
-                    {produto.tamanho ? ` • ${produto.tamanho}` : ""}
-                    {` • Estoque: ${produto.estoque}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={labelStyle}>Cliente encontrado</label>
-              <select
-                value={clienteIdSelecionado}
-                onChange={(e) => setClienteIdSelecionado(e.target.value)}
-              >
-                <option value="">Sem cliente</option>
-                {clientes.map((cliente) => (
-                  <option key={cliente.id} value={cliente.id}>
-                    {cliente.nome}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={labelStyle}>Quantidade</label>
-              <input
-                type="number"
-                min="1"
-                value={quantidade}
-                onChange={(e) => setQuantidade(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>Data da venda</label>
-              <input
-                type="date"
-                value={dataVenda}
-                onChange={(e) => setDataVenda(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>Valor recebido agora</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={valorRecebido}
-                onChange={(e) => setValorRecebido(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>Forma de pagamento</label>
-              <select
-                value={formaPagamento}
-                onChange={(e) => setFormaPagamento(e.target.value)}
-              >
-                {formasPagamento.map((forma) => (
-                  <option key={forma} value={forma}>
-                    {forma}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ gridColumn: "1 / -1" }}>
-              <label style={labelStyle}>Observação</label>
-              <input
-                value={observacao}
-                onChange={(e) => setObservacao(e.target.value)}
-                placeholder="Observação opcional"
-              />
-            </div>
-          </div>
-
+        return (
           <div
+            key={index}
             style={{
-              marginTop: 18,
-              padding: 14,
-              borderRadius: 12,
-              background: "#f8fafc",
               border: "1px solid #e5e7eb",
+              borderRadius: 14,
+              padding: 16,
+              background: "#f8fafc",
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 10 }}>Resumo calculado</div>
+            <div style={{ fontWeight: 700, marginBottom: 12 }}>
+              Venda {index + 1}
+            </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
-              <div style={resumoItem}>
-                <span style={resumoLabel}>Valor unitário</span>
-                <strong>R$ {valorUnitario.toFixed(2)}</strong>
+            <div className="grid-2">
+              <div>
+                <label style={labelStyle}>Texto do produto identificado</label>
+                <input value={rascunho.produtoTextoIA} readOnly />
               </div>
 
-              <div style={resumoItem}>
-                <span style={resumoLabel}>Valor total</span>
-                <strong>R$ {valorTotal.toFixed(2)}</strong>
+              <div>
+                <label style={labelStyle}>Texto do cliente identificado</label>
+                <input value={rascunho.clienteTextoIA} readOnly />
               </div>
 
-              <div style={resumoItem}>
-                <span style={resumoLabel}>Recebido agora</span>
-                <strong>R$ {valorRecebidoNumero.toFixed(2)}</strong>
+              <div>
+                <label style={labelStyle}>Produto encontrado</label>
+                <select
+                  value={rascunho.produtoIdSelecionado}
+                  onChange={(e) =>
+                    atualizarRascunho(index, "produtoIdSelecionado", e.target.value)
+                  }
+                >
+                  <option value="">Selecione o produto</option>
+                  {produtos.map((produto) => (
+                    <option key={produto.id} value={produto.id}>
+                      {produto.nome}
+                      {produto.cor ? ` • ${produto.cor}` : ""}
+                      {produto.tamanho ? ` • ${produto.tamanho}` : ""}
+                      {` • R$ ${Number(produto.preco).toFixed(2)}`}
+                      {` • Estoque: ${produto.estoque}`}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div style={resumoItem}>
-                <span style={resumoLabel}>Em aberto</span>
-                <strong>R$ {valorEmAberto.toFixed(2)}</strong>
+              <div>
+                <label style={labelStyle}>Cliente encontrado</label>
+                <select
+                  value={rascunho.clienteIdSelecionado}
+                  onChange={(e) =>
+                    atualizarRascunho(index, "clienteIdSelecionado", e.target.value)
+                  }
+                >
+                  <option value="">Sem cliente</option>
+                  {clientes.map((cliente) => (
+                    <option key={cliente.id} value={cliente.id}>
+                      {cliente.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Quantidade</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={rascunho.quantidade}
+                  onChange={(e) => atualizarRascunho(index, "quantidade", e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Data da venda</label>
+                <input
+                  type="date"
+                  value={rascunho.dataVenda}
+                  onChange={(e) => atualizarRascunho(index, "dataVenda", e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Valor recebido agora</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={rascunho.valorRecebido}
+                  onChange={(e) =>
+                    atualizarRascunho(index, "valorRecebido", e.target.value)
+                  }
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Forma de pagamento</label>
+                <select
+                  value={rascunho.formaPagamento}
+                  onChange={(e) =>
+                    atualizarRascunho(index, "formaPagamento", e.target.value)
+                  }
+                >
+                  {formasPagamento.map((forma) => (
+                    <option key={forma} value={forma}>
+                      {forma}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={labelStyle}>Observação</label>
+                <input
+                  value={rascunho.observacao}
+                  onChange={(e) =>
+                    atualizarRascunho(index, "observacao", e.target.value)
+                  }
+                  placeholder="Observação opcional"
+                />
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 16,
+                padding: 14,
+                borderRadius: 12,
+                background: "#ffffff",
+                border: "1px solid #e5e7eb",
+              }}
+            >
+              <div style={{ fontWeight: 700, marginBottom: 10 }}>Resumo calculado</div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                  gap: 10,
+                }}
+              >
+                <div style={resumoItem}>
+                  <span style={resumoLabel}>Valor unitário</span>
+                  <strong>R$ {valorUnitario.toFixed(2)}</strong>
+                </div>
+
+                <div style={resumoItem}>
+                  <span style={resumoLabel}>Valor total</span>
+                  <strong>R$ {valorTotal.toFixed(2)}</strong>
+                </div>
+
+                <div style={resumoItem}>
+                  <span style={resumoLabel}>Recebido agora</span>
+                  <strong>R$ {valorRecebidoNumero.toFixed(2)}</strong>
+                </div>
+
+                <div style={resumoItem}>
+                  <span style={resumoLabel}>Em aberto</span>
+                  <strong>R$ {valorEmAberto.toFixed(2)}</strong>
+                </div>
               </div>
             </div>
           </div>
+        )
+      })}
+    </div>
 
-          <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
-              onClick={confirmarVenda}
-              className="btn btn-success"
-              disabled={salvando}
-            >
-              {salvando ? "Salvando..." : "Confirmar e salvar venda"}
-            </button>
+    <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <button
+        onClick={confirmarVenda}
+        className="btn btn-success"
+        disabled={salvando}
+      >
+        {salvando ? "Salvando..." : "Confirmar e salvar vendas"}
+      </button>
 
-            <button onClick={limparTudo} className="btn btn-secondary">
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
+      <button onClick={limparTudo} className="btn btn-secondary">
+        Cancelar
+      </button>
+    </div>
+  </div>
+)}
     </div>
   )
 }
