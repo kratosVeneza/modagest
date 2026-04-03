@@ -30,6 +30,15 @@ type VendaInterpretada = {
   dataVenda: string
 }
 
+type CompraInterpretadaItem = {
+  quantidade: number
+  produtoTexto: string
+  custoUnitario: number | null
+  fornecedorTexto: string
+  observacao: string
+  dataCompra: string
+}
+
 const formasPagamento = [
   "Dinheiro",
   "Pix",
@@ -60,6 +69,30 @@ function normalizarTexto(valor: string) {
     .replace(/[^\w\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
+}
+
+function normalizarCor(valor: string) {
+  const v = normalizarTexto(valor)
+
+  if (v === "preto" || v === "preta" || v === "pretos" || v === "pretas") return "preto"
+  if (v === "branco" || v === "branca" || v === "brancos" || v === "brancas") return "branco"
+  if (v === "rosa" || v === "rosinha") return "rosa"
+  if (v === "azul marinho" || v === "marinho") return "marinho"
+  if (v === "cinza" || v === "chumbo" || v === "grafite") return "cinza"
+
+  return v
+}
+
+function normalizarTamanho(valor: string) {
+  const v = normalizarTexto(valor)
+
+  if (v === "pp") return "pp"
+  if (v === "p" || v === "pequeno") return "p"
+  if (v === "m" || v === "medio" || v === "médio") return "m"
+  if (v === "g" || v === "grande") return "g"
+  if (v === "gg" || v === "extra grande" || v === "xg" || v === "xgg") return "gg"
+
+  return v
 }
 
 function gerarVariacoesPalavra(valor: string) {
@@ -239,12 +272,90 @@ function interpretarMultiplasVendas(texto: string): VendaInterpretadaItem[] {
   ]
 }
 
+function interpretarMultiplasCompras(texto: string): CompraInterpretadaItem[] {
+  const textoOriginal = texto.trim()
+  const textoNormalizado = normalizarTexto(textoOriginal)
+
+  const temCompra =
+    textoNormalizado.includes("comprei") ||
+    textoNormalizado.includes("efetuei uma compra") ||
+    textoNormalizado.includes("fiz uma compra") ||
+    textoNormalizado.includes("realizei uma compra")
+
+  if (!temCompra) return []
+
+  const custoMatch =
+    textoOriginal.match(/por\s+(\d+[.,]?\d*)\s*(reais|real)?\s*cada/i) ||
+    textoOriginal.match(/custou\s+(\d+[.,]?\d*)/i)
+
+  const custoUnitario = custoMatch
+    ? Number(custoMatch[1].replace(",", "."))
+    : null
+
+  const quantidade = extrairQuantidade(textoOriginal)
+
+  let produtoTexto = textoOriginal
+    .replace(
+      /^(comprei|efetuei uma compra de|efetuei uma compra|fiz uma compra de|fiz uma compra|realizei uma compra de|realizei uma compra)\s*/i,
+      ""
+    )
+    .replace(/por\s+\d+[.,]?\d*\s*(reais|real)?\s*cada/gi, "")
+    .replace(/custou\s+\d+[.,]?\d*/gi, "")
+    .replace(/\b(\d+)\b/, "")
+    .replace(/\bum\b|\buma\b|\bdois\b|\bduas\b|\btres\b|\btrês\b|\bquatro\b|\bcinco\b|\bseis\b|\bsete\b|\boito\b|\bnove\b|\bdez\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  return [
+    {
+      quantidade,
+      produtoTexto,
+      custoUnitario,
+      fornecedorTexto: "",
+      observacao: "",
+      dataCompra: hojeInputDate(),
+    },
+  ]
+} 
+
+function interpretarRecebimentos(texto: string) {
+  const textoNormalizado = normalizarTexto(texto)
+
+  const temRecebimento =
+    textoNormalizado.includes("recebi") ||
+    textoNormalizado.includes("entrou") ||
+    textoNormalizado.includes("recebimento")
+
+  if (!temRecebimento) return []
+
+  const valorMatch = texto.match(/(\d+[.,]?\d*)/)
+  const valor = valorMatch ? Number(valorMatch[1].replace(",", ".")) : null
+
+  const forma = identificarFormaPagamento(texto)
+
+  const clienteMatch =
+    texto.match(/de\s+([a-zà-ú0-9\s]+?)(?:\s+no|\s+via|$)/i) || null
+
+  const clienteTexto = clienteMatch?.[1]?.trim() || ""
+
+  if (!valor) return []
+
+  return [
+    {
+      valor,
+      formaPagamento: forma || "Pix",
+      clienteTexto,
+      data: hojeInputDate(),
+    },
+  ]
+} 
+
 function pontuarProduto(produto: Produto, textoProduto: string) {
   const texto = normalizarTexto(textoProduto)
 
   const nome = normalizarTexto(produto.nome)
-  const cor = normalizarTexto(produto.cor || "")
-  const tamanho = normalizarTexto(produto.tamanho || "")
+  const cor = normalizarCor(produto.cor || "")
+  const tamanho = normalizarTamanho(produto.tamanho || "")
 
   let pontos = 0
 
@@ -252,13 +363,37 @@ function pontuarProduto(produto: Produto, textoProduto: string) {
 
   const palavrasNome = nome.split(" ").filter(Boolean)
   for (const palavra of palavrasNome) {
-    if (palavra.length >= 3 && contemAlgumaVariacao(texto, palavra)) {
+    if (palavra.length >= 3 && texto.includes(palavra)) {
       pontos += 2
     }
   }
 
-  if (cor && contemAlgumaVariacao(texto, cor)) pontos += 6
-  if (tamanho && contemAlgumaVariacao(texto, tamanho)) pontos += 4
+  if (cor) {
+    if (texto.includes(cor)) pontos += 6
+
+    if (cor === "marinho" && (texto.includes("azul marinho") || texto.includes("marinho"))) {
+      pontos += 6
+    }
+
+    if (cor === "preto" && (texto.includes("preto") || texto.includes("preta"))) {
+      pontos += 6
+    }
+
+    if (cor === "branco" && (texto.includes("branco") || texto.includes("branca"))) {
+      pontos += 6
+    }
+  }
+
+  if (tamanho) {
+    if (texto.includes(` ${tamanho} `) || texto.endsWith(` ${tamanho}`) || texto.startsWith(`${tamanho} `) || texto === tamanho) {
+      pontos += 5
+    }
+
+    if (tamanho === "p" && (texto.includes(" pequeno") || texto.includes(" p "))) pontos += 5
+    if (tamanho === "m" && (texto.includes(" medio") || texto.includes(" médio") || texto.includes(" m "))) pontos += 5
+    if (tamanho === "g" && (texto.includes(" grande") || texto.includes(" g "))) pontos += 5
+    if (tamanho === "gg" && (texto.includes(" gg") || texto.includes("extra grande"))) pontos += 5
+  }
 
   return pontos
 }
@@ -274,18 +409,43 @@ function encontrarProdutosOrdenados(produtos: Produto[], textoProduto: string) {
     .map((item) => item.produto)
 }
 
+function normalizarNomePessoa(valor: string) {
+  return normalizarTexto(valor)
+    .replace(/\b(sr|sra|senhor|senhora|dona|seu)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function similarityBasica(a: string, b: string) {
+  const aa = normalizarNomePessoa(a)
+  const bb = normalizarNomePessoa(b)
+
+  if (!aa || !bb) return 0
+  if (aa === bb) return 1
+  if (aa.includes(bb) || bb.includes(aa)) return 0.9
+
+  const palavrasA = aa.split(" ").filter(Boolean)
+  const palavrasB = bb.split(" ").filter(Boolean)
+
+  const emComum = palavrasA.filter((p) => palavrasB.includes(p)).length
+  const base = Math.max(palavrasA.length, palavrasB.length)
+
+  return base > 0 ? emComum / base : 0
+}
+
 function encontrarCliente(clientes: Cliente[], textoCliente: string) {
-  const alvo = normalizarTexto(textoCliente)
+  const alvo = normalizarNomePessoa(textoCliente)
   if (!alvo) return null
 
-  return (
-    clientes.find((cliente) => normalizarTexto(cliente.nome) === alvo) ||
-    clientes.find((cliente) =>
-      normalizarTexto(cliente.nome).includes(alvo) ||
-      alvo.includes(normalizarTexto(cliente.nome))
-    ) ||
-    null
-  )
+  const clientesOrdenados = clientes
+    .map((cliente) => ({
+      cliente,
+      score: similarityBasica(cliente.nome, alvo),
+    }))
+    .filter((item) => item.score >= 0.6)
+    .sort((a, b) => b.score - a.score)
+
+  return clientesOrdenados[0]?.cliente || null
 }
 
 export default function AssistenteIAPage() {
@@ -378,12 +538,26 @@ const [loadingIA, setLoadingIA] = useState(false)
   }
 
   const itens = interpretarMultiplasVendas(texto)
+  const compras = interpretarMultiplasCompras(texto)
+  const recebimentos = interpretarRecebimentos(texto)
 
-  if (itens.length === 0) {
-    setLoadingIA(false)
-    setMensagem("A IA não identificou nenhuma venda nesse texto.")
-    return
-  }
+  if (itens.length === 0 && compras.length === 0 && recebimentos.length === 0) {
+  setLoadingIA(false)
+  setMensagem("A IA não identificou nenhuma venda ou compra nesse texto.")
+  return
+}
+
+if (compras.length > 0 && itens.length === 0) {
+  setLoadingIA(false)
+  setMensagem("A IA já identificou uma compra. No próximo passo vamos ligar isso à página de pedidos/compras.")
+  return
+}
+
+if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
+  setLoadingIA(false)
+  setMensagem("A IA já identificou um recebimento. No próximo passo vamos ligar isso ao histórico/financeiro.")
+  return
+} 
 
   const novosRascunhos: VendaRascunho[] = itens.map((item) => {
     const produtosOrdenados = encontrarProdutosOrdenados(produtos, item.produtoTexto)
@@ -497,22 +671,28 @@ const [loadingIA, setLoadingIA] = useState(false)
 
     let clienteIdFinal = clienteSelecionado?.id || null
 
-    if (!clienteIdFinal && rascunho.clienteTextoIA) {
-      const { data: novoCliente, error: erroCliente } = await supabase
-        .from("customers")
-        .insert([
-          {
-            user_id: user.id,
-            nome: rascunho.clienteTextoIA,
-          },
-        ])
-        .select()
-        .single()
+if (!clienteIdFinal && rascunho.clienteTextoIA) {
+  const clienteParecido = encontrarCliente(clientes, rascunho.clienteTextoIA)
 
-      if (!erroCliente && novoCliente) {
-        clienteIdFinal = novoCliente.id
-      }
+  if (clienteParecido) {
+    clienteIdFinal = clienteParecido.id
+  } else {
+    const { data: novoCliente, error: erroCliente } = await supabase
+      .from("customers")
+      .insert([
+        {
+          user_id: user.id,
+          nome: rascunho.clienteTextoIA.trim(),
+        },
+      ])
+      .select()
+      .single()
+
+    if (!erroCliente && novoCliente) {
+      clienteIdFinal = novoCliente.id
     }
+  }
+}
 
     const createdAtIso = montarDataISO(rascunho.dataVenda)
 
