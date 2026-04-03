@@ -188,7 +188,7 @@ function identificarFormaPagamento(texto: string) {
 function limparInicioDeVenda(texto: string) {
   return texto
     .replace(
-      /^(vendi|efetuei uma venda de|efetuei uma venda|fiz uma venda de|fiz uma venda|realizei uma venda de|realizei uma venda|registrei uma venda de|registrei uma venda)\s*/i,
+      /^(hoje\s+)?(vendi|efetuei uma venda de|efetuei uma venda|efetuei venda de|efetuei venda|fiz uma venda de|fiz uma venda|fiz venda de|fiz venda|realizei uma venda de|realizei uma venda|realizei venda de|realizei venda|registrei uma venda de|registrei uma venda|registrei venda de|registrei venda)\s*/i,
       ""
     )
     .trim()
@@ -199,12 +199,15 @@ function interpretarMultiplasVendas(texto: string): VendaInterpretadaItem[] {
   const textoNormalizado = normalizarTexto(textoOriginal)
 
   const temVerboVenda =
-    textoNormalizado.includes("vendi") ||
-    textoNormalizado.includes("efetuei uma venda") ||
-    textoNormalizado.includes("fiz uma venda") ||
-    textoNormalizado.includes("realizei uma venda") ||
-    textoNormalizado.includes("registrei uma venda") ||
-    textoNormalizado.includes("registrei uma venda")
+  textoNormalizado.includes("vendi") ||
+  textoNormalizado.includes("efetuei uma venda") ||
+  textoNormalizado.includes("efetuei venda") ||
+  textoNormalizado.includes("fiz uma venda") ||
+  textoNormalizado.includes("fiz venda") ||
+  textoNormalizado.includes("realizei uma venda") ||
+  textoNormalizado.includes("realizei venda") ||
+  textoNormalizado.includes("registrei uma venda") ||
+  textoNormalizado.includes("registrei venda")
 
   if (!temVerboVenda) return []
 
@@ -221,7 +224,7 @@ function interpretarMultiplasVendas(texto: string): VendaInterpretadaItem[] {
   const textoSemInicio = limparInicioDeVenda(textoOriginal)
 
   const padraoMultiplos =
-    /(?:uma|um|outra|outro)\s+(.+?)\s+para\s+([a-zà-ú0-9\s]+?)(?=(?:,\s*(?:uma|um|outra|outro)\s+)|(?:\s+e\s+(?:uma|um|outra|outro)\s+)|$)/gi
+  /(?:uma|um|outra|outro|mais\s+uma|mais\s+um)\s+(.+?)\s+para\s+([a-zà-ú0-9\s]+?)(?=(?:,\s*(?:uma|um|outra|outro|mais\s+uma|mais\s+um)\s+)|(?:\s+e\s+(?:uma|um|outra|outro|mais\s+uma|mais\s+um)\s+)|$)/gi
 
   const encontrados = [...textoSemInicio.matchAll(padraoMultiplos)]
 
@@ -543,7 +546,7 @@ const [loadingIA, setLoadingIA] = useState(false)
 
   if (itens.length === 0 && compras.length === 0 && recebimentos.length === 0) {
   setLoadingIA(false)
-  setMensagem("A IA não identificou nenhuma venda ou compra nesse texto.")
+  setMensagem("A IA não identificou nenhuma venda, compra ou recebimento nesse texto.")
   return
 }
 
@@ -559,7 +562,7 @@ if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
   return
 } 
 
-  const novosRascunhos: VendaRascunho[] = itens.map((item) => {
+    const novosRascunhos: VendaRascunho[] = itens.map((item) => {
     const produtosOrdenados = encontrarProdutosOrdenados(produtos, item.produtoTexto)
     const produtoPrincipal = produtosOrdenados[0] || null
     const clienteEncontrado = encontrarCliente(clientes, item.clienteTexto)
@@ -573,9 +576,9 @@ if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
       produtoIdSelecionado: produtoPrincipal ? String(produtoPrincipal.id) : "",
       clienteIdSelecionado: clienteEncontrado ? String(clienteEncontrado.id) : "",
       valorRecebido:
-        item.valorRecebido !== null && item.valorRecebido !== undefined
-          ? String(item.valorRecebido)
-          : "0",
+  item.valorRecebido !== null && item.valorRecebido !== undefined
+    ? String(item.valorRecebido)
+    : String(valorTotalPadrao),
       formaPagamento: item.formaPagamento || "Pix",
       observacao: item.observacao || "",
       dataVenda: item.dataVenda || hojeInputDate(),
