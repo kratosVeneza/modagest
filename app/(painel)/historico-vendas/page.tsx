@@ -562,6 +562,56 @@ async function excluirPagamento(venda: VendaExibicao, pagamentoId: number) {
   await carregarVendas()
 }
 
+async function excluirVendaCancelada(venda: VendaExibicao) {
+  const confirmado = window.confirm(
+    "Deseja excluir definitivamente esta venda cancelada do histórico?"
+  )
+  if (!confirmado) return
+
+  setMensagem("")
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
+
+  if (venda.status !== "Cancelada") {
+    setMensagem("Somente vendas canceladas podem ser excluídas do histórico.")
+    return
+  }
+
+  const { error: erroPagamentos } = await supabase
+    .from("sale_payments")
+    .delete()
+    .eq("sale_id", venda.id)
+    .eq("user_id", user.id)
+
+  if (erroPagamentos) {
+    console.log("ERRO AO EXCLUIR PAGAMENTOS DA VENDA:", erroPagamentos)
+    setMensagem(erroPagamentos.message || "Erro ao excluir pagamentos da venda.")
+    return
+  }
+
+  const { error: erroVenda } = await supabase
+    .from("sales")
+    .delete()
+    .eq("id", venda.id)
+    .eq("user_id", user.id)
+
+  if (erroVenda) {
+    console.log("ERRO AO EXCLUIR VENDA CANCELADA:", erroVenda)
+    setMensagem(erroVenda.message || "Erro ao excluir venda cancelada.")
+    return
+  }
+
+  setMensagem("Venda cancelada excluída do histórico com sucesso.")
+  await carregarVendas()
+}
+
   function formatarData(dataIso: string) {
     const data = new Date(dataIso)
     return data.toLocaleString("pt-BR")
