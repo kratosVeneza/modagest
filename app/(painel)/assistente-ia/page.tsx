@@ -525,7 +525,6 @@ const [loadingIA, setLoadingIA] = useState(false)
 
   function limparTudo() {
   setTexto("")
-  setMensagem("")
   setRascunhos([])
   setInterpretado(false)
 }
@@ -781,20 +780,20 @@ if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
   }
 
   if (vendasSalvas.length > 0 && mensagensErro.length > 0) {
-    setMensagem(
-      `Vendas salvas: ${vendasSalvas.join(", ")}. Pendências: ${mensagensErro.join(" | ")}`
-    )
-    limparTudo()
-    await carregarBase()
-    return
-  }
+  limparTudo()
+  await carregarBase()
+  setMensagem(
+    `Vendas salvas: ${vendasSalvas.join(", ")}. Pendências: ${mensagensErro.join(" | ")}`
+  )
+  return
+}
 
-  if (vendasSalvas.length > 0) {
-    setMensagem("Vendas lançadas com sucesso pelo Assistente IA.")
-    limparTudo()
-    await carregarBase()
-    return
-  }
+if (vendasSalvas.length > 0) {
+  limparTudo()
+  await carregarBase()
+  setMensagem("Vendas lançadas com sucesso pelo Assistente IA.")
+  return
+}
 
   setMensagem("Nenhuma ação foi concluída.")
 }
