@@ -976,15 +976,20 @@ async function excluirVendaCancelada(venda: VendaExibicao) {
     )}
 
     {venda.status !== "Cancelada" ? (
-      <button
-        onClick={() => cancelarVenda(venda)}
-        className="btn btn-danger btn-sm"
-      >
-        Cancelar venda
-      </button>
-    ) : (
-      <span style={textoCancelado}>Já cancelada</span>
-    )}
+  <button
+    onClick={() => cancelarVenda(venda)}
+    className="btn btn-danger btn-sm"
+  >
+    Cancelar venda
+  </button>
+) : (
+  <button
+    onClick={() => excluirVendaCancelada(venda)}
+    className="btn btn-danger btn-sm"
+  >
+    Excluir venda
+  </button>
+)}
   </div>
 
   {venda.pagamentos.length > 0 && (
@@ -1316,11 +1321,6 @@ const contadorResultados = {
 const totalResumo = {
   fontSize: "14px",
   color: "#111827",
-}
-
-const textoCancelado = {
-  color: "#6b7280",
-  fontSize: "13px",
 }
 
 const acoesTabela = {
