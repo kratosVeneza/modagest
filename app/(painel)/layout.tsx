@@ -1,6 +1,5 @@
 "use client"
 
-import "../globals.css"
 import Link from "next/link"
 import Image from "next/image"
 import { supabase } from "@/lib/supabase"
@@ -27,6 +26,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   BarChart3,
+  Bot,
 } from "lucide-react"
 
 const menuGroups = [
@@ -38,14 +38,15 @@ const menuGroups = [
     ],
   },
   {
-    title: "Operação",
-    items: [
-      { href: "/produtos", label: "Produtos", icon: Package },
-      { href: "/estoque", label: "Estoque", icon: Boxes },
-      { href: "/pedidos", label: "Pedidos", icon: ShoppingCart },
-      { href: "/vendas", label: "Vendas", icon: Wallet },
-    ],
-  },
+  title: "Operação",
+  items: [
+    { href: "/produtos", label: "Produtos", icon: Package },
+    { href: "/estoque", label: "Estoque", icon: Boxes },
+    { href: "/pedidos", label: "Pedidos", icon: ShoppingCart },
+    { href: "/vendas", label: "Vendas", icon: Wallet },
+    { href: "/assistente-ia", label: "Assistente IA", icon: Bot },
+  ],
+},
   {
     title: "Gestão",
     items: [
@@ -203,14 +204,15 @@ export default function PainelLayout({
             <div className="logo-box">
               {!menuFechado ? (
                 <div className="logo-theme-wrap">
-                  <Image
-                    src="/images/logo-light.png"
-                    alt="ModaGest"
-                    width={170}
-                    height={46}
-                    priority
+                 <Image
+                   src="/images/logo-light.png"
+                   alt="ModaGest"
+                   width={220}
+                   height={60}
+                   className="logo-single"
+                   priority
                  />
-               </div>
+                </div>
 
               ) : (
                 <div className="logo-badge">M</div>

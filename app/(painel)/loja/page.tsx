@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { useRouter } from "next/navigation"
 
 export default function LojaPage() {
+  const router = useRouter()
   const [nomeLoja, setNomeLoja] = useState("")
   const [responsavel, setResponsavel] = useState("")
   const [telefone, setTelefone] = useState("")
@@ -113,6 +115,15 @@ export default function LojaPage() {
       <h2>Minha Loja</h2>
       <p>Cadastre os dados principais da sua loja.</p>
 
+      <div style={{ marginTop: "16px", marginBottom: "16px" }}>
+  <button
+    onClick={() => router.push("/assistente-ia")}
+    style={botaoSecundario}
+  >
+    🤖 Usar IA para preencher loja
+  </button>
+</div>
+
       <div style={box}>
         <div style={grid}>
           <input
@@ -179,6 +190,15 @@ const input = {
 const botao = {
   padding: "10px 16px",
   background: "#2563eb",
+  color: "white",
+  border: "none",
+  borderRadius: "8px",
+  cursor: "pointer",
+}
+
+const botaoSecundario = {
+  padding: "10px 16px",
+  background: "#6b7280",
   color: "white",
   border: "none",
   borderRadius: "8px",
