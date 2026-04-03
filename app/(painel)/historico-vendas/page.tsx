@@ -130,6 +130,10 @@ export default function HistoricoVendas() {
   const [salvandoPagamento, setSalvandoPagamento] = useState(false)
   const [editandoPagamentoId, setEditandoPagamentoId] = useState<number | null>(null)
   const [modalEditarPagamentoAberto, setModalEditarPagamentoAberto] = useState(false)
+  const [modalExcluirVendaAberto, setModalExcluirVendaAberto] = useState(false)
+  const [vendaParaExcluir, setVendaParaExcluir] = useState<VendaExibicao | null>(null)
+  const [excluindoVenda, setExcluindoVenda] = useState(false)
+  const [filtroStatus, setFiltroStatus] = useState<"todas" | "ativas" | "canceladas">("todas")
 
   useEffect(() => {
     validarAcesso()
@@ -347,6 +351,79 @@ export default function HistoricoVendas() {
     await carregarVendas()
   }
 
+  async function restaurarVenda(venda: VendaExibicao) {
+  setMensagem("")
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
+
+  if (venda.status?.toLowerCase() !== "cancelada") {
+    setMensagem("Somente vendas canceladas podem ser restauradas.")
+    return
+  }
+
+  const { data: produtoData, error: erroProduto } = await supabase
+    .from("products")
+    .select("id, estoque")
+    .eq("id", venda.product_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (erroProduto || !produtoData) {
+    setMensagem("Não foi possível localizar o produto dessa venda.")
+    return
+  }
+
+  if (Number(produtoData.estoque) < Number(venda.quantidade)) {
+    setMensagem("Não há estoque suficiente para restaurar essa venda.")
+    return
+  }
+
+  const novoEstoque = Number(produtoData.estoque) - Number(venda.quantidade)
+
+  const { error: erroAtualizarEstoque } = await supabase
+    .from("products")
+    .update({ estoque: novoEstoque })
+    .eq("id", venda.product_id)
+    .eq("user_id", user.id)
+
+  if (erroAtualizarEstoque) {
+    setMensagem("Erro ao baixar novamente o estoque para restaurar a venda.")
+    return
+  }
+
+  await registrarMovimentoEstoque({
+    productId: venda.product_id,
+    userId: user.id,
+    tipo: "ajuste",
+    quantidade: -Math.abs(venda.quantidade),
+    motivo: "Restauração de venda cancelada",
+  })
+
+  const { error: erroVenda } = await supabase
+    .from("sales")
+    .update({
+      status: "Ativa",
+      estoque_devolvido: false,
+    })
+    .eq("id", venda.id)
+    .eq("user_id", user.id)
+
+  if (erroVenda) {
+    setMensagem("Erro ao restaurar a venda.")
+    return
+  }
+
+  setMensagem("Venda restaurada com sucesso.")
+  await carregarVendas()
+}
+
   function abrirModalPagamento(venda: VendaExibicao) {
     setVendaSelecionada(venda)
     setValorPagamento("")
@@ -365,6 +442,16 @@ export default function HistoricoVendas() {
     setDataPagamento(hojeInputDate())
     setModalPagamentoAberto(false)
   }
+
+  function abrirModalExcluirVenda(venda: VendaExibicao) {
+  setVendaParaExcluir(venda)
+  setModalExcluirVendaAberto(true)
+}
+
+function fecharModalExcluirVenda() {
+  setVendaParaExcluir(null)
+  setModalExcluirVendaAberto(false)
+}
 
   async function salvarPagamento() {
   if (!vendaSelecionada) return
@@ -563,11 +650,6 @@ async function excluirPagamento(venda: VendaExibicao, pagamentoId: number) {
 }
 
 async function excluirVendaCancelada(venda: VendaExibicao) {
-  const confirmado = window.confirm(
-    "Deseja excluir definitivamente esta venda cancelada do histórico?"
-  )
-  if (!confirmado) return
-
   setMensagem("")
 
   const {
@@ -579,10 +661,12 @@ async function excluirVendaCancelada(venda: VendaExibicao) {
     return
   }
 
-  if (venda.status !== "Cancelada") {
+  if (venda.status?.toLowerCase() !== "cancelada") {
     setMensagem("Somente vendas canceladas podem ser excluídas do histórico.")
     return
   }
+
+  setExcluindoVenda(true)
 
   const { error: erroPagamentos } = await supabase
     .from("sale_payments")
@@ -592,6 +676,7 @@ async function excluirVendaCancelada(venda: VendaExibicao) {
 
   if (erroPagamentos) {
     console.log("ERRO AO EXCLUIR PAGAMENTOS DA VENDA:", erroPagamentos)
+    setExcluindoVenda(false)
     setMensagem(erroPagamentos.message || "Erro ao excluir pagamentos da venda.")
     return
   }
@@ -602,12 +687,15 @@ async function excluirVendaCancelada(venda: VendaExibicao) {
     .eq("id", venda.id)
     .eq("user_id", user.id)
 
+  setExcluindoVenda(false)
+
   if (erroVenda) {
     console.log("ERRO AO EXCLUIR VENDA CANCELADA:", erroVenda)
     setMensagem(erroVenda.message || "Erro ao excluir venda cancelada.")
     return
   }
 
+  fecharModalExcluirVenda()
   setMensagem("Venda cancelada excluída do histórico com sucesso.")
   await carregarVendas()
 }
@@ -634,8 +722,15 @@ async function excluirVendaCancelada(venda: VendaExibicao) {
 
       const passouDataFim =
         !dataFim || dataVenda <= new Date(`${dataFim}T23:59:59`)
+      
+        const statusNormalizado = venda.status?.toLowerCase() || ""
 
-      return passouBusca && passouDataInicio && passouDataFim
+const passouFiltroStatus =
+  filtroStatus === "todas" ||
+  (filtroStatus === "ativas" && statusNormalizado !== "cancelada") ||
+  (filtroStatus === "canceladas" && statusNormalizado === "cancelada")
+
+      return passouBusca && passouDataInicio && passouDataFim && passouFiltroStatus
     })
   }, [vendas, busca, dataInicio, dataFim])
 
@@ -825,6 +920,18 @@ async function excluirVendaCancelada(venda: VendaExibicao) {
           onChange={(e) => setDataFim(e.target.value)}
         />
 
+        <select
+  style={inputData}
+  value={filtroStatus}
+  onChange={(e) =>
+    setFiltroStatus(e.target.value as "todas" | "ativas" | "canceladas")
+  }
+>
+  <option value="todas">Todas</option>
+  <option value="ativas">Ativas</option>
+  <option value="canceladas">Canceladas</option>
+</select>
+
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button onClick={exportarCSV} className="btn btn-secondary">
             Exportar CSV
@@ -983,12 +1090,22 @@ async function excluirVendaCancelada(venda: VendaExibicao) {
     Cancelar venda
   </button>
 ) : (
+  <>
   <button
-    onClick={() => excluirVendaCancelada(venda)}
+    onClick={() => restaurarVenda(venda)}
+    className="btn btn-success btn-sm"
+  >
+    Restaurar venda
+  </button>
+
+  <button
+    onClick={() => abrirModalExcluirVenda(venda)}
     className="btn btn-danger btn-sm"
   >
     Excluir venda
   </button>
+</>
+
 )}
   </div>
 
@@ -1248,6 +1365,50 @@ async function excluirVendaCancelada(venda: VendaExibicao) {
           onChange={(e) => setObservacaoPagamento(e.target.value)}
         />
       </div>
+    </div>
+  </>
+</AnimatedModal>
+
+<AnimatedModal
+  open={modalExcluirVendaAberto}
+  onClose={fecharModalExcluirVenda}
+  title="Excluir venda cancelada"
+  footer={
+    <>
+      <button onClick={fecharModalExcluirVenda} className="btn btn-secondary">
+        Fechar
+      </button>
+      <button
+        onClick={() => vendaParaExcluir && excluirVendaCancelada(vendaParaExcluir)}
+        className="btn btn-danger"
+        disabled={excluindoVenda}
+      >
+        {excluindoVenda ? "Excluindo..." : "Excluir definitivamente"}
+      </button>
+    </>
+  }
+>
+  <>
+    {vendaParaExcluir && (
+      <div style={{ marginBottom: 16 }}>
+        <div>
+          <strong>Produto:</strong> {vendaParaExcluir.nomeProduto}
+        </div>
+        <div>
+          <strong>Cliente:</strong> {vendaParaExcluir.nomeCliente}
+        </div>
+        <div>
+          <strong>Valor total:</strong> R$ {vendaParaExcluir.valor_total.toFixed(2)}
+        </div>
+        <div>
+          <strong>Data:</strong> {formatarData(vendaParaExcluir.created_at)}
+        </div>
+      </div>
+    )}
+
+    <div style={{ fontSize: 14, color: "#6b7280" }}>
+      Esta ação remove a venda cancelada do histórico e também exclui os pagamentos
+      vinculados a ela. Use apenas quando quiser limpar definitivamente o registro.
     </div>
   </>
 </AnimatedModal>
