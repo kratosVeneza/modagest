@@ -1,37 +1,34 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 
-type ResultadoIA =
-  | {
-      tipo: "venda"
-      produtoTexto: string
-      clienteTexto: string
-      quantidade: number
-      valorRecebido: number
-      formaPagamento: string
-      observacao: string
-      data: string
-    }
-  | {
-      tipo: "cliente"
-      nome: string
-      telefone: string
-      email: string
-      cidade: string
-    }
-  | {
-      tipo: "loja"
-      nomeLoja: string
-      responsavel: string
-      telefone: string
-      cidade: string
-    }
-  | {
-      tipo: "desconhecido"
-      texto: string
-    }
+type Produto = {
+  id: number
+  nome: string
+  sku: string
+  estoque: number
+  preco: number
+  cor: string | null
+  tamanho: string | null
+  user_id: string
+}
+
+type Cliente = {
+  id: number
+  nome: string
+  user_id: string
+}
+
+type VendaInterpretada = {
+  quantidade: number
+  produtoTexto: string
+  clienteTexto: string
+  valorRecebido: number
+  formaPagamento: string
+  observacao: string
+  dataVenda: string
+}
 
 const formasPagamento = [
   "Dinheiro",
@@ -50,220 +47,367 @@ function hojeInputDate() {
   return `${ano}-${mes}-${dia}`
 }
 
-function interpretarTextoLivre(texto: string): ResultadoIA {
-  const t = texto.trim()
+function montarDataISO(dataInput: string) {
+  if (!dataInput) return new Date().toISOString()
+  return new Date(`${dataInput}T12:00:00-03:00`).toISOString()
+}
 
-  const lower = t.toLowerCase()
+function normalizarTexto(valor: string) {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+}
 
-  if (lower.includes("minha loja se chama")) {
-    const nomeLoja = t.split(/minha loja se chama/i)[1]?.trim() || ""
-    return {
-      tipo: "loja",
-      nomeLoja,
-      responsavel: "",
-      telefone: "",
-      cidade: "",
-    }
+function interpretarVendaTexto(texto: string): VendaInterpretada | null {
+  const textoOriginal = texto.trim()
+  const textoLower = normalizarTexto(textoOriginal)
+
+  if (!textoLower.includes("vendi")) return null
+
+  const quantidadeMatch = textoLower.match(/vendi\s+(\d+)/i)
+  const quantidade = Number(quantidadeMatch?.[1] || 1)
+
+  const recebidoMatch =
+    textoLower.match(/recebi\s+(\d+[.,]?\d*)/i) ||
+    textoLower.match(/recebido\s+(\d+[.,]?\d*)/i)
+
+  const valorRecebido = recebidoMatch
+    ? Number(recebidoMatch[1].replace(",", "."))
+    : 0
+
+  let formaPagamento = "Pix"
+  const formaEncontrada = formasPagamento.find((forma) =>
+    textoLower.includes(normalizarTexto(forma))
+  )
+  if (formaEncontrada) {
+    formaPagamento = formaEncontrada
   }
 
-  if (lower.includes("cadastre cliente")) {
-    const nome = t.split(/cadastre cliente/i)[1]?.trim() || ""
-    return {
-      tipo: "cliente",
-      nome,
-      telefone: "",
-      email: "",
-      cidade: "",
-    }
-  }
+  const clienteMatch =
+    textoOriginal.match(/para\s+(.+?)(?:\s+e\s+recebi|\s+recebi|$)/i) || null
 
-  if (lower.includes("vendi")) {
-    const quantidadeMatch = lower.match(/vendi\s+(\d+)/i)
-    const quantidade = Number(quantidadeMatch?.[1] || 1)
+  const clienteTexto = clienteMatch?.[1]?.trim() || ""
 
-    let formaPagamento = "Pix"
-    const formaEncontrada = formasPagamento.find((forma) =>
-      lower.includes(forma.toLowerCase())
-    )
-    if (formaEncontrada) formaPagamento = formaEncontrada
-
-    const recebidoMatch =
-      lower.match(/recebi\s+(\d+[.,]?\d*)/i) ||
-      lower.match(/recebido\s+(\d+[.,]?\d*)/i)
-
-    const valorRecebido = recebidoMatch
-      ? Number(recebidoMatch[1].replace(",", "."))
-      : 0
-
-    const clienteMatch =
-      t.match(/para\s+([a-zà-ú0-9\s]+?)(?:,| e recebi| recebi|$)/i) || null
-
-    const clienteTexto = clienteMatch?.[1]?.trim() || ""
-
-    let produtoTexto = t
-      .replace(/vendi\s+\d+/i, "")
-      .replace(/para\s+[a-zà-ú0-9\s]+?($|,| e recebi| recebi)/i, "")
-      .replace(/recebi\s+\d+[.,]?\d*/i, "")
-      .replace(/dinheiro|pix|cartão de débito|cartão de crédito|transferência|outro/gi, "")
-      .trim()
-
-    produtoTexto = produtoTexto.replace(/\s+/g, " ").trim()
-
-    return {
-      tipo: "venda",
-      produtoTexto,
-      clienteTexto,
-      quantidade,
-      valorRecebido,
-      formaPagamento,
-      observacao: "",
-      data: hojeInputDate(),
-    }
-  }
+  let produtoTexto = textoOriginal
+    .replace(/vendi\s+\d+/i, "")
+    .replace(/para\s+(.+?)(?:\s+e\s+recebi|\s+recebi|$)/i, "")
+    .replace(/recebi\s+\d+[.,]?\d*/i, "")
+    .replace(/dinheiro|pix|cartão de débito|cartao de debito|cartão de crédito|cartao de credito|transferência|transferencia|outro/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
 
   return {
-    tipo: "desconhecido",
-    texto: t,
+    quantidade,
+    produtoTexto,
+    clienteTexto,
+    valorRecebido,
+    formaPagamento,
+    observacao: "",
+    dataVenda: hojeInputDate(),
   }
+}
+
+function pontuarProduto(produto: Produto, textoProduto: string) {
+  const texto = normalizarTexto(textoProduto)
+
+  const nome = normalizarTexto(produto.nome)
+  const cor = normalizarTexto(produto.cor || "")
+  const tamanho = normalizarTexto(produto.tamanho || "")
+
+  let pontos = 0
+
+  if (nome && texto.includes(nome)) pontos += 10
+
+  const palavrasNome = nome.split(" ").filter(Boolean)
+  for (const palavra of palavrasNome) {
+    if (palavra.length >= 3 && texto.includes(palavra)) pontos += 2
+  }
+
+  if (cor && texto.includes(cor)) pontos += 4
+  if (tamanho && texto.includes(tamanho)) pontos += 4
+
+  return pontos
+}
+
+function encontrarMelhorProduto(produtos: Produto[], textoProduto: string) {
+  const candidatos = produtos
+    .map((produto) => ({
+      produto,
+      pontos: pontuarProduto(produto, textoProduto),
+    }))
+    .filter((item) => item.pontos > 0)
+    .sort((a, b) => b.pontos - a.pontos)
+
+  return candidatos[0]?.produto || null
+}
+
+function encontrarCliente(clientes: Cliente[], textoCliente: string) {
+  const alvo = normalizarTexto(textoCliente)
+  if (!alvo) return null
+
+  return (
+    clientes.find((cliente) => normalizarTexto(cliente.nome) === alvo) ||
+    clientes.find((cliente) =>
+      normalizarTexto(cliente.nome).includes(alvo) ||
+      alvo.includes(normalizarTexto(cliente.nome))
+    ) ||
+    null
+  )
 }
 
 export default function AssistenteIAPage() {
   const [texto, setTexto] = useState("")
-  const [resultado, setResultado] = useState<ResultadoIA | null>(null)
   const [mensagem, setMensagem] = useState("")
+  const [carregandoBase, setCarregandoBase] = useState(true)
   const [salvando, setSalvando] = useState(false)
 
-  const titulo = useMemo(() => {
-    if (!resultado) return "Assistente IA"
-    if (resultado.tipo === "venda") return "Sugestão de venda"
-    if (resultado.tipo === "cliente") return "Sugestão de cliente"
-    if (resultado.tipo === "loja") return "Sugestão de loja"
-    return "Texto não reconhecido"
-  }, [resultado])
+  const [produtos, setProdutos] = useState<Produto[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
 
-  function interpretar() {
+  const [quantidade, setQuantidade] = useState("1")
+  const [produtoIdSelecionado, setProdutoIdSelecionado] = useState("")
+  const [clienteIdSelecionado, setClienteIdSelecionado] = useState("")
+  const [valorRecebido, setValorRecebido] = useState("0")
+  const [formaPagamento, setFormaPagamento] = useState("Pix")
+  const [observacao, setObservacao] = useState("")
+  const [dataVenda, setDataVenda] = useState(hojeInputDate())
+
+  const [produtoTextoIA, setProdutoTextoIA] = useState("")
+  const [clienteTextoIA, setClienteTextoIA] = useState("")
+  const [interpretado, setInterpretado] = useState(false)
+
+  useEffect(() => {
+    carregarBase()
+  }, [])
+
+  async function carregarBase() {
     setMensagem("")
-    if (!texto.trim()) {
-      setMensagem("Digite uma instrução para a IA interpretar.")
-      return
-    }
-
-    const resposta = interpretarTextoLivre(texto)
-    setResultado(resposta)
-  }
-
-  async function confirmarAcao() {
-    if (!resultado) return
-
-    setMensagem("")
-    setSalvando(true)
+    setCarregandoBase(true)
 
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) {
-      setSalvando(false)
+      setMensagem("Você precisa estar logado.")
+      setCarregandoBase(false)
+      return
+    }
+
+    const { data: produtosData, error: erroProdutos } = await supabase
+      .from("products")
+      .select("id, nome, sku, estoque, preco, cor, tamanho, user_id")
+      .eq("user_id", user.id)
+      .order("nome", { ascending: true })
+
+    const { data: clientesData, error: erroClientes } = await supabase
+      .from("customers")
+      .select("id, nome, user_id")
+      .eq("user_id", user.id)
+      .order("nome", { ascending: true })
+
+    if (erroProdutos) {
+      setMensagem("Erro ao carregar produtos para o Assistente IA.")
+      setCarregandoBase(false)
+      return
+    }
+
+    if (erroClientes) {
+      setMensagem("Erro ao carregar clientes para o Assistente IA.")
+      setCarregandoBase(false)
+      return
+    }
+
+    setProdutos((produtosData ?? []) as Produto[])
+    setClientes((clientesData ?? []) as Cliente[])
+    setCarregandoBase(false)
+  }
+
+  function limparTudo() {
+    setTexto("")
+    setMensagem("")
+    setQuantidade("1")
+    setProdutoIdSelecionado("")
+    setClienteIdSelecionado("")
+    setValorRecebido("0")
+    setFormaPagamento("Pix")
+    setObservacao("")
+    setDataVenda(hojeInputDate())
+    setProdutoTextoIA("")
+    setClienteTextoIA("")
+    setInterpretado(false)
+  }
+
+  function interpretar() {
+    setMensagem("")
+
+    if (!texto.trim()) {
+      setMensagem("Digite uma instrução para a IA interpretar.")
+      return
+    }
+
+    const resultado = interpretarVendaTexto(texto)
+
+    if (!resultado) {
+      setMensagem("A IA não identificou uma venda nesse texto.")
+      return
+    }
+
+    setQuantidade(String(resultado.quantidade))
+    setValorRecebido(String(resultado.valorRecebido))
+    setFormaPagamento(resultado.formaPagamento)
+    setObservacao(resultado.observacao)
+    setDataVenda(resultado.dataVenda)
+    setProdutoTextoIA(resultado.produtoTexto)
+    setClienteTextoIA(resultado.clienteTexto)
+
+    const produtoEncontrado = encontrarMelhorProduto(produtos, resultado.produtoTexto)
+    const clienteEncontrado = encontrarCliente(clientes, resultado.clienteTexto)
+
+    setProdutoIdSelecionado(produtoEncontrado ? String(produtoEncontrado.id) : "")
+    setClienteIdSelecionado(clienteEncontrado ? String(clienteEncontrado.id) : "")
+    setInterpretado(true)
+
+    if (!produtoEncontrado) {
+      setMensagem("A IA interpretou a venda, mas você precisa escolher o produto correto.")
+      return
+    }
+
+    setMensagem("Venda interpretada. Revise os dados antes de confirmar.")
+  }
+
+  const produtoSelecionado = useMemo(() => {
+    return produtos.find((p) => String(p.id) === produtoIdSelecionado) || null
+  }, [produtos, produtoIdSelecionado])
+
+  const clienteSelecionado = useMemo(() => {
+    return clientes.find((c) => String(c.id) === clienteIdSelecionado) || null
+  }, [clientes, clienteIdSelecionado])
+
+  const quantidadeNumero = Number(quantidade || 0)
+  const valorRecebidoNumero = Number(valorRecebido || 0)
+  const valorUnitario = produtoSelecionado ? Number(produtoSelecionado.preco || 0) : 0
+  const valorTotal = quantidadeNumero > 0 ? valorUnitario * quantidadeNumero : 0
+  const valorEmAberto = Math.max(valorTotal - valorRecebidoNumero, 0)
+
+  async function confirmarVenda() {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
       setMensagem("Você precisa estar logado.")
       return
     }
 
-    if (resultado.tipo === "cliente") {
-      const { error } = await supabase.from("customers").insert([
-        {
-          user_id: user.id,
-          nome: resultado.nome,
-          telefone: resultado.telefone,
-          email: resultado.email,
-          cidade: resultado.cidade,
-        },
-      ])
-
-      setSalvando(false)
-
-      if (error) {
-        setMensagem(error.message || "Erro ao cadastrar cliente.")
-        return
-      }
-
-      setMensagem("Cliente cadastrado com sucesso.")
-      setTexto("")
-      setResultado(null)
+    if (!produtoSelecionado) {
+      setMensagem("Selecione um produto para concluir a venda.")
       return
     }
 
-    if (resultado.tipo === "loja") {
-      const { data: lojaExistente } = await supabase
-        .from("stores")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle()
+    if (quantidadeNumero <= 0) {
+      setMensagem("Informe uma quantidade válida.")
+      return
+    }
 
-      if (lojaExistente?.id) {
-        const { error } = await supabase
-          .from("stores")
-          .update({
-            nome_loja: resultado.nomeLoja,
-            responsavel: resultado.responsavel,
-            telefone: resultado.telefone,
-            cidade: resultado.cidade,
-          })
-          .eq("id", lojaExistente.id)
-          .eq("user_id", user.id)
+    if (quantidadeNumero > Number(produtoSelecionado.estoque)) {
+      setMensagem("A quantidade informada é maior que o estoque disponível.")
+      return
+    }
 
+    if (valorRecebidoNumero < 0) {
+      setMensagem("O valor recebido não pode ser negativo.")
+      return
+    }
+
+    if (valorRecebidoNumero > valorTotal) {
+      setMensagem("O valor recebido não pode ser maior que o valor total da venda.")
+      return
+    }
+
+    if (!dataVenda) {
+      setMensagem("Informe a data da venda.")
+      return
+    }
+
+    setSalvando(true)
+
+    const createdAtIso = montarDataISO(dataVenda)
+
+    const vendaPayload = {
+      product_id: produtoSelecionado.id,
+      customer_id: clienteSelecionado ? clienteSelecionado.id : null,
+      quantidade: quantidadeNumero,
+      valor_unitario: valorUnitario,
+      valor_total: valorTotal,
+      created_at: createdAtIso,
+      user_id: user.id,
+      status: "Ativa",
+      estoque_devolvido: false,
+    }
+
+    const { data: vendaInserida, error: erroVenda } = await supabase
+      .from("sales")
+      .insert([vendaPayload])
+      .select()
+      .single()
+
+    if (erroVenda || !vendaInserida) {
+      setSalvando(false)
+      setMensagem(erroVenda?.message || "Erro ao salvar a venda.")
+      return
+    }
+
+    const novoEstoque = Number(produtoSelecionado.estoque) - quantidadeNumero
+
+    const { error: erroEstoque } = await supabase
+      .from("products")
+      .update({ estoque: novoEstoque })
+      .eq("id", produtoSelecionado.id)
+      .eq("user_id", user.id)
+
+    if (erroEstoque) {
+      setSalvando(false)
+      setMensagem(erroEstoque.message || "A venda foi criada, mas houve erro ao baixar o estoque.")
+      return
+    }
+
+    if (valorRecebidoNumero > 0) {
+      const pagamentoPayload = {
+        sale_id: vendaInserida.id,
+        user_id: user.id,
+        valor: valorRecebidoNumero,
+        forma_pagamento: formaPagamento,
+        observacao: observacao || null,
+        created_at: createdAtIso,
+      }
+
+      const { error: erroPagamento } = await supabase
+        .from("sale_payments")
+        .insert([pagamentoPayload])
+
+      if (erroPagamento) {
         setSalvando(false)
-
-        if (error) {
-          setMensagem(error.message || "Erro ao atualizar loja.")
-          return
-        }
-
-        setMensagem("Loja atualizada com sucesso.")
-        setTexto("")
-        setResultado(null)
+        setMensagem(erroPagamento.message || "A venda foi salva, mas houve erro ao registrar o pagamento.")
         return
       }
-
-      const { error } = await supabase.from("stores").insert([
-        {
-          user_id: user.id,
-          nome_loja: resultado.nomeLoja,
-          responsavel: resultado.responsavel,
-          telefone: resultado.telefone,
-          cidade: resultado.cidade,
-        },
-      ])
-
-      setSalvando(false)
-
-      if (error) {
-        setMensagem(error.message || "Erro ao cadastrar loja.")
-        return
-      }
-
-      setMensagem("Loja cadastrada com sucesso.")
-      setTexto("")
-      setResultado(null)
-      return
-    }
-
-    if (resultado.tipo === "venda") {
-      setSalvando(false)
-      setMensagem(
-        "Primeira versão pronta. A interpretação já funciona. Agora vamos conectar a sugestão com os produtos reais da sua base."
-      )
-      return
     }
 
     setSalvando(false)
-    setMensagem("A IA não conseguiu entender esse texto.")
+    setMensagem("Venda lançada com sucesso pelo Assistente IA.")
+    limparTudo()
+    await carregarBase()
   }
 
   return (
     <div>
       <h2 className="page-title">Assistente IA</h2>
       <p className="page-subtitle">
-        Digite o que deseja fazer. A IA interpreta e sugere o lançamento antes de salvar.
+        Digite uma venda em texto. A IA interpreta, encontra produto e cliente, e você confirma antes de salvar.
       </p>
 
       {mensagem && (
@@ -287,68 +431,206 @@ export default function AssistenteIAPage() {
         <div style={{ marginBottom: 12, color: "#6b7280", fontSize: 14 }}>
           Exemplos:
           <br />
-          • vendi 2 meias pretas para Arlene e recebi 30 no pix
+          • vendi 2 meias preta para Arlene e recebi 30 no pix
           <br />
-          • cadastre cliente Maria de Nazaré
-          <br />
-          • minha loja se chama Moda Run
+          • vendi 1 conjunto camila azul m para Maria e recebi 100 no dinheiro
         </div>
 
         <textarea
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          placeholder="Digite aqui o que deseja que a IA faça..."
+          placeholder="Digite a venda em linguagem natural..."
           style={{ minHeight: 120 }}
         />
 
         <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={interpretar} className="btn btn-primary">
-            Interpretar com IA
+          <button
+            onClick={interpretar}
+            className="btn btn-primary"
+            disabled={carregandoBase}
+          >
+            Interpretar venda com IA
           </button>
 
-          <button
-            onClick={() => {
-              setTexto("")
-              setResultado(null)
-              setMensagem("")
-            }}
-            className="btn btn-secondary"
-          >
+          <button onClick={limparTudo} className="btn btn-secondary">
             Limpar
           </button>
         </div>
       </div>
 
-      {resultado && (
+      {interpretado && (
         <div className="section-card" style={{ marginTop: 20 }}>
-          <h3 style={{ marginTop: 0 }}>{titulo}</h3>
+          <h3 style={{ marginTop: 0 }}>Revisão antes de salvar</h3>
 
-          <pre
+          <div className="grid-2">
+            <div>
+              <label style={labelStyle}>Texto do produto identificado</label>
+              <input value={produtoTextoIA} readOnly />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Texto do cliente identificado</label>
+              <input value={clienteTextoIA} readOnly />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Produto encontrado</label>
+              <select
+                value={produtoIdSelecionado}
+                onChange={(e) => setProdutoIdSelecionado(e.target.value)}
+              >
+                <option value="">Selecione o produto</option>
+                {produtos.map((produto) => (
+                  <option key={produto.id} value={produto.id}>
+                    {produto.nome}
+                    {produto.cor ? ` • ${produto.cor}` : ""}
+                    {produto.tamanho ? ` • ${produto.tamanho}` : ""}
+                    {` • Estoque: ${produto.estoque}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Cliente encontrado</label>
+              <select
+                value={clienteIdSelecionado}
+                onChange={(e) => setClienteIdSelecionado(e.target.value)}
+              >
+                <option value="">Sem cliente</option>
+                {clientes.map((cliente) => (
+                  <option key={cliente.id} value={cliente.id}>
+                    {cliente.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Quantidade</label>
+              <input
+                type="number"
+                min="1"
+                value={quantidade}
+                onChange={(e) => setQuantidade(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Data da venda</label>
+              <input
+                type="date"
+                value={dataVenda}
+                onChange={(e) => setDataVenda(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Valor recebido agora</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={valorRecebido}
+                onChange={(e) => setValorRecebido(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Forma de pagamento</label>
+              <select
+                value={formaPagamento}
+                onChange={(e) => setFormaPagamento(e.target.value)}
+              >
+                {formasPagamento.map((forma) => (
+                  <option key={forma} value={forma}>
+                    {forma}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelStyle}>Observação</label>
+              <input
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                placeholder="Observação opcional"
+              />
+            </div>
+          </div>
+
+          <div
             style={{
-              background: "#0f172a",
-              color: "#e5e7eb",
-              padding: 16,
+              marginTop: 18,
+              padding: 14,
               borderRadius: 12,
-              overflowX: "auto",
-              fontSize: 13,
+              background: "#f8fafc",
+              border: "1px solid #e5e7eb",
             }}
           >
-            {JSON.stringify(resultado, null, 2)}
-          </pre>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Resumo calculado</div>
 
-          {resultado.tipo !== "desconhecido" && (
-            <div style={{ marginTop: 16 }}>
-              <button
-                onClick={confirmarAcao}
-                className="btn btn-success"
-                disabled={salvando}
-              >
-                {salvando ? "Salvando..." : "Confirmar ação"}
-              </button>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+              <div style={resumoItem}>
+                <span style={resumoLabel}>Valor unitário</span>
+                <strong>R$ {valorUnitario.toFixed(2)}</strong>
+              </div>
+
+              <div style={resumoItem}>
+                <span style={resumoLabel}>Valor total</span>
+                <strong>R$ {valorTotal.toFixed(2)}</strong>
+              </div>
+
+              <div style={resumoItem}>
+                <span style={resumoLabel}>Recebido agora</span>
+                <strong>R$ {valorRecebidoNumero.toFixed(2)}</strong>
+              </div>
+
+              <div style={resumoItem}>
+                <span style={resumoLabel}>Em aberto</span>
+                <strong>R$ {valorEmAberto.toFixed(2)}</strong>
+              </div>
             </div>
-          )}
+          </div>
+
+          <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={confirmarVenda}
+              className="btn btn-success"
+              disabled={salvando}
+            >
+              {salvando ? "Salvando..." : "Confirmar e salvar venda"}
+            </button>
+
+            <button onClick={limparTudo} className="btn btn-secondary">
+              Cancelar
+            </button>
+          </div>
         </div>
       )}
     </div>
   )
+}
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: 14,
+  fontWeight: 600,
+  marginBottom: 6,
+}
+
+const resumoItem: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  padding: "10px 12px",
+  borderRadius: 10,
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+}
+
+const resumoLabel: React.CSSProperties = {
+  fontSize: 12,
+  color: "#64748b",
 }
