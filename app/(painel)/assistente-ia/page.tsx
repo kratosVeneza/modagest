@@ -338,9 +338,29 @@ export default function AssistenteIAPage() {
 
     const createdAtIso = montarDataISO(dataVenda)
 
+    let clienteIdFinal = clienteSelecionado?.id || null
+
+// 👉 cria cliente automaticamente se não existir
+if (!clienteIdFinal && clienteTextoIA) {
+  const { data: novoCliente, error: erroCliente } = await supabase
+    .from("customers")
+    .insert([
+      {
+        user_id: user.id,
+        nome: clienteTextoIA,
+      },
+    ])
+    .select()
+    .single()
+
+  if (!erroCliente && novoCliente) {
+    clienteIdFinal = novoCliente.id
+  }
+}
+
     const vendaPayload = {
       product_id: produtoSelecionado.id,
-      customer_id: clienteSelecionado ? clienteSelecionado.id : null,
+      customer_id: clienteIdFinal,
       quantidade: quantidadeNumero,
       valor_unitario: valorUnitario,
       valor_total: valorTotal,
