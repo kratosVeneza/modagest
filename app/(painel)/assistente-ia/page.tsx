@@ -57,7 +57,46 @@ function normalizarTexto(valor: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
     .trim()
+}
+
+function gerarVariacoesPalavra(valor: string) {
+  const base = normalizarTexto(valor)
+  if (!base) return []
+
+  const variacoes = new Set<string>()
+  variacoes.add(base)
+
+  // singular/plural simples
+  if (base.endsWith("s")) {
+    variacoes.add(base.slice(0, -1))
+  } else {
+    variacoes.add(`${base}s`)
+  }
+
+  // masculino/feminino simples
+  if (base.endsWith("o")) {
+    variacoes.add(base.slice(0, -1) + "a")
+    variacoes.add(base.slice(0, -1) + "os")
+    variacoes.add(base.slice(0, -1) + "as")
+  }
+
+  if (base.endsWith("a")) {
+    variacoes.add(base.slice(0, -1) + "o")
+    variacoes.add(base.slice(0, -1) + "os")
+    variacoes.add(base.slice(0, -1) + "as")
+  }
+
+  return [...variacoes]
+}
+
+function contemAlgumaVariacao(texto: string, valor: string) {
+  const textoNormalizado = normalizarTexto(texto)
+  const variacoes = gerarVariacoesPalavra(valor)
+
+  return variacoes.some((item) => textoNormalizado.includes(item))
 }
 
 function interpretarVendaTexto(texto: string): VendaInterpretada | null {
@@ -122,11 +161,13 @@ function pontuarProduto(produto: Produto, textoProduto: string) {
 
   const palavrasNome = nome.split(" ").filter(Boolean)
   for (const palavra of palavrasNome) {
-    if (palavra.length >= 3 && texto.includes(palavra)) pontos += 2
+    if (palavra.length >= 3 && contemAlgumaVariacao(texto, palavra)) {
+      pontos += 2
+    }
   }
 
-  if (cor && texto.includes(cor)) pontos += 4
-  if (tamanho && texto.includes(tamanho)) pontos += 4
+  if (cor && contemAlgumaVariacao(texto, cor)) pontos += 6
+  if (tamanho && contemAlgumaVariacao(texto, tamanho)) pontos += 4
 
   return pontos
 }
@@ -277,6 +318,14 @@ export default function AssistenteIAPage() {
 
     setMensagem("Venda interpretada. Revise os dados antes de confirmar.")
   }
+
+  const produtosParecidos = produtos
+  .map((produto) => ({
+    produto,
+    pontos: pontuarProduto(produto, produtoTextoIA),
+  }))
+  .filter((item) => item.pontos > 0)
+  .sort((a, b) => b.pontos - a.pontos)
 
   const produtoSelecionado = useMemo(() => {
     return produtos.find((p) => String(p.id) === produtoIdSelecionado) || null
