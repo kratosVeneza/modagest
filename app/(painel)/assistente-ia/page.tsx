@@ -609,7 +609,7 @@ if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
         : item
     )
   )
-}
+ }
 
   async function confirmarVenda() {
   setMensagem("")
@@ -630,6 +630,9 @@ if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
 
   setSalvando(true)
 
+  const mensagensErro: string[] = []
+  const vendasSalvas: string[] = []
+
   for (const rascunho of rascunhos) {
     const produtoSelecionado =
       produtos.find((p) => String(p.id) === rascunho.produtoIdSelecionado) || null
@@ -643,59 +646,60 @@ if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
     const valorTotal = quantidadeNumero * valorUnitario
 
     if (!produtoSelecionado) {
-      setSalvando(false)
-      setMensagem(`Selecione um produto válido para: ${rascunho.produtoTextoIA}`)
-      return
+      mensagensErro.push(`Produto não identificado: ${rascunho.produtoTextoIA}`)
+      continue
     }
 
     if (quantidadeNumero <= 0) {
-      setSalvando(false)
-      setMensagem(`Informe uma quantidade válida para: ${rascunho.produtoTextoIA}`)
-      return
+      mensagensErro.push(`Quantidade inválida para: ${produtoSelecionado.nome}`)
+      continue
     }
 
     if (quantidadeNumero > Number(produtoSelecionado.estoque)) {
-      setSalvando(false)
-      setMensagem(`Estoque insuficiente para: ${produtoSelecionado.nome}`)
-      return
+      mensagensErro.push(
+  `O produto ${produtoSelecionado.nome}${
+    produtoSelecionado.cor ? ` • ${produtoSelecionado.cor}` : ""
+  }${produtoSelecionado.tamanho ? ` • ${produtoSelecionado.tamanho}` : ""} não tem estoque suficiente`
+)
+      continue
     }
 
     if (valorRecebidoNumero < 0) {
-      setSalvando(false)
-      setMensagem(`O valor recebido não pode ser negativo em: ${produtoSelecionado.nome}`)
-      return
+      mensagensErro.push(`Valor recebido inválido para: ${produtoSelecionado.nome}`)
+      continue
     }
 
     if (valorRecebidoNumero > valorTotal) {
-      setSalvando(false)
-      setMensagem(`O valor recebido não pode ser maior que o total em: ${produtoSelecionado.nome}`)
-      return
+      mensagensErro.push(
+        `O valor recebido é maior que o total em: ${produtoSelecionado.nome}`
+      )
+      continue
     }
 
     let clienteIdFinal = clienteSelecionado?.id || null
 
-if (!clienteIdFinal && rascunho.clienteTextoIA) {
-  const clienteParecido = encontrarCliente(clientes, rascunho.clienteTextoIA)
+    if (!clienteIdFinal && rascunho.clienteTextoIA) {
+      const clienteParecido = encontrarCliente(clientes, rascunho.clienteTextoIA)
 
-  if (clienteParecido) {
-    clienteIdFinal = clienteParecido.id
-  } else {
-    const { data: novoCliente, error: erroCliente } = await supabase
-      .from("customers")
-      .insert([
-        {
-          user_id: user.id,
-          nome: rascunho.clienteTextoIA.trim(),
-        },
-      ])
-      .select()
-      .single()
+      if (clienteParecido) {
+        clienteIdFinal = clienteParecido.id
+      } else {
+        const { data: novoCliente, error: erroCliente } = await supabase
+          .from("customers")
+          .insert([
+            {
+              user_id: user.id,
+              nome: rascunho.clienteTextoIA.trim(),
+            },
+          ])
+          .select()
+          .single()
 
-    if (!erroCliente && novoCliente) {
-      clienteIdFinal = novoCliente.id
+        if (!erroCliente && novoCliente) {
+          clienteIdFinal = novoCliente.id
+        }
+      }
     }
-  }
-}
 
     const createdAtIso = montarDataISO(rascunho.dataVenda)
 
@@ -718,9 +722,10 @@ if (!clienteIdFinal && rascunho.clienteTextoIA) {
       .single()
 
     if (erroVenda || !vendaInserida) {
-      setSalvando(false)
-      setMensagem(erroVenda?.message || "Erro ao salvar uma das vendas.")
-      return
+      mensagensErro.push(
+        erroVenda?.message || `Erro ao salvar venda de: ${produtoSelecionado.nome}`
+      )
+      continue
     }
 
     const novoEstoque = Number(produtoSelecionado.estoque) - quantidadeNumero
@@ -732,9 +737,10 @@ if (!clienteIdFinal && rascunho.clienteTextoIA) {
       .eq("user_id", user.id)
 
     if (erroEstoque) {
-      setSalvando(false)
-      setMensagem(erroEstoque.message || "Erro ao baixar estoque.")
-      return
+      mensagensErro.push(
+        erroEstoque.message || `Erro ao baixar estoque de: ${produtoSelecionado.nome}`
+      )
+      continue
     }
 
     if (valorRecebidoNumero > 0) {
@@ -752,17 +758,45 @@ if (!clienteIdFinal && rascunho.clienteTextoIA) {
         .insert([pagamentoPayload])
 
       if (erroPagamento) {
-        setSalvando(false)
-        setMensagem(erroPagamento.message || "Erro ao registrar pagamento.")
-        return
+        mensagensErro.push(
+          erroPagamento.message ||
+            `Erro ao registrar pagamento de: ${produtoSelecionado.nome}`
+        )
+        continue
       }
     }
+
+    vendasSalvas.push(
+      `${produtoSelecionado.nome}${
+        produtoSelecionado.cor ? ` • ${produtoSelecionado.cor}` : ""
+      }${produtoSelecionado.tamanho ? ` • ${produtoSelecionado.tamanho}` : ""}`
+    )
   }
 
   setSalvando(false)
-  setMensagem("Vendas lançadas com sucesso pelo Assistente IA.")
-  limparTudo()
-  await carregarBase()
+
+  if (vendasSalvas.length === 0 && mensagensErro.length > 0) {
+    setMensagem(`Nenhuma venda foi salva. ${mensagensErro.join(" | ")}`)
+    return
+  }
+
+  if (vendasSalvas.length > 0 && mensagensErro.length > 0) {
+    setMensagem(
+      `Vendas salvas: ${vendasSalvas.join(", ")}. Pendências: ${mensagensErro.join(" | ")}`
+    )
+    limparTudo()
+    await carregarBase()
+    return
+  }
+
+  if (vendasSalvas.length > 0) {
+    setMensagem("Vendas lançadas com sucesso pelo Assistente IA.")
+    limparTudo()
+    await carregarBase()
+    return
+  }
+
+  setMensagem("Nenhuma ação foi concluída.")
 }
 
   return (
