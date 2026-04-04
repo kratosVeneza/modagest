@@ -10,7 +10,7 @@ type Produto = {
   sku: string
   estoque: number
   preco: number
-  preco_custo?: number
+  preco_custo?: number | null
   cor: string | null
   tamanho: string | null
   user_id: string
@@ -498,7 +498,7 @@ export default function AssistenteIAPage() {
 
     const { data: produtosData, error: erroProdutos } = await supabase
       .from("products")
-      .select("id, nome, sku, estoque, preco, cor, tamanho, user_id")
+      .select("id, nome, sku, estoque, preco, preco_custo, cor, tamanho, user_id")
       .eq("user_id", user.id)
       .order("nome", { ascending: true })
 
@@ -550,25 +550,50 @@ export default function AssistenteIAPage() {
 // PERGUNTAS GERENCIAIS
 if (
   textoNormalizado.includes("faturei") ||
+  textoNormalizado.includes("faturamento") ||
   textoNormalizado.includes("pendente") ||
   textoNormalizado.includes("estoque") ||
   textoNormalizado.includes("mais vendido") ||
-  textoNormalizado.includes("resuma") ||
+  textoNormalizado.includes("resuma meu dia") ||
+  textoNormalizado.includes("resumo do dia") ||
   textoNormalizado.includes("7 dias") ||
+  textoNormalizado.includes("ultimos 7 dias") ||
+  textoNormalizado.includes("últimos 7 dias") ||
   textoNormalizado.includes("repor") ||
+  textoNormalizado.includes("reposicao") ||
+  textoNormalizado.includes("reposição") ||
+  textoNormalizado.includes("estoque baixo") ||
   textoNormalizado.includes("zerado") ||
+  textoNormalizado.includes("sem estoque") ||
   textoNormalizado.includes("cliente") ||
   textoNormalizado.includes("lucro") ||
+  textoNormalizado.includes("mais lucrativo") ||
+  textoNormalizado.includes("menos lucrativo") ||
+  textoNormalizado.includes("parado") ||
+  textoNormalizado.includes("risco de acabar") ||
+  textoNormalizado.includes("acabando") ||
+  textoNormalizado.includes("quase acabando") ||
+  textoNormalizado.includes("vende pouco") ||
+  textoNormalizado.includes("vendem pouco") ||
+  textoNormalizado.includes("pouco giro") ||
+  textoNormalizado.includes("preco ideal") ||
+  textoNormalizado.includes("preço ideal") ||
+  textoNormalizado.includes("sugira preco") ||
+  textoNormalizado.includes("sugira preço") ||
   textoNormalizado.includes("pix") ||
   textoNormalizado.includes("dinheiro") ||
   textoNormalizado.includes("cartao") ||
+  textoNormalizado.includes("cartão") ||
   textoNormalizado.includes("despesa") ||
-  textoNormalizado.includes("saldo")
+  textoNormalizado.includes("saiu") ||
+  textoNormalizado.includes("saldo") ||
+  textoNormalizado.includes("caixa")
 ) {
   await responderPergunta(textoNormalizado)
   setLoadingIA(false)
   return
-} 
+}
+
   if (itens.length === 0 && compras.length === 0 && recebimentos.length === 0) {
   setLoadingIA(false)
   setMensagem("A IA não identificou nenhuma venda, compra ou recebimento nesse texto.")
@@ -856,6 +881,55 @@ if (vendasSalvas.length > 0) {
   setMensagem("Nenhuma ação foi concluída.")
 }
 
+async function buscarResumoVendasPorProduto(userId: string) {
+  const { data: vendas } = await supabase
+    .from("sales")
+    .select("product_id, valor_total, quantidade, created_at, status")
+    .eq("user_id", userId)
+    .eq("status", "Ativa")
+
+  const mapa: Record<
+    number,
+    {
+      quantidade: number
+      faturamento: number
+      ultimaVenda: string | null
+      lucro: number
+    }
+  > = {}
+
+  for (const v of vendas || []) {
+    const productId = Number(v.product_id)
+    const produto = produtos.find((p) => p.id === productId)
+    if (!produto) continue
+
+    const quantidade = Number(v.quantidade || 0)
+    const faturamento = Number(v.valor_total || 0)
+    const custoUnitario = Number(produto.preco_custo ?? 0)
+    const vendaUnitario = quantidade > 0 ? faturamento / quantidade : 0
+    const lucro = (vendaUnitario - custoUnitario) * quantidade
+
+    if (!mapa[productId]) {
+      mapa[productId] = {
+        quantidade: 0,
+        faturamento: 0,
+        ultimaVenda: null,
+        lucro: 0,
+      }
+    }
+
+    mapa[productId].quantidade += quantidade
+    mapa[productId].faturamento += faturamento
+    mapa[productId].lucro += lucro
+
+    if (!mapa[productId].ultimaVenda || new Date(v.created_at) > new Date(mapa[productId].ultimaVenda!)) {
+      mapa[productId].ultimaVenda = v.created_at
+    }
+  }
+
+  return mapa
+}
+
 async function responderPergunta(texto: string) {
   const {
     data: { user },
@@ -994,12 +1068,7 @@ async function responderPergunta(texto: string) {
     texto.includes("quanto tenho em estoque") ||
     texto.includes("estoque")
   ) {
-    const { data } = await supabase
-      .from("products")
-      .select("nome, estoque, preco")
-      .eq("user_id", user.id)
-
-    const total = (data || []).reduce(
+    const total = produtos.reduce(
       (acc, p) => acc + Number(p.estoque) * Number(p.preco),
       0
     )
@@ -1010,19 +1079,9 @@ async function responderPergunta(texto: string) {
 
   // 🔹 PRODUTO MAIS VENDIDO
   if (texto.includes("mais vendido")) {
-    const { data } = await supabase
-      .from("sales")
-      .select("product_id, quantidade")
-      .eq("user_id", user.id)
-      .eq("status", "Ativa")
+    const mapa = await buscarResumoVendasPorProduto(user.id)
 
-    const mapa: Record<number, number> = {}
-
-    for (const v of data || []) {
-      mapa[v.product_id] = (mapa[v.product_id] || 0) + Number(v.quantidade)
-    }
-
-    const top = Object.entries(mapa).sort((a, b) => Number(b[1]) - Number(a[1]))[0]
+    const top = Object.entries(mapa).sort((a, b) => Number(b[1].quantidade) - Number(a[1].quantidade))[0]
 
     if (!top) {
       setMensagem("Nenhuma venda encontrada.")
@@ -1031,7 +1090,89 @@ async function responderPergunta(texto: string) {
 
     const produto = produtos.find((p) => p.id === Number(top[0]))
 
-    setMensagem(`🔥 Produto mais vendido: ${produto?.nome || "Produto"} (${top[1]} unidades)`)
+    setMensagem(`🔥 Produto mais vendido: ${produto?.nome || "Produto"} (${top[1].quantidade} unidades)`)
+    return
+  }
+
+  // 🔹 CLIENTE QUE MAIS COMPRA
+  if (texto.includes("cliente") && texto.includes("mais")) {
+    const { data: vendas } = await supabase
+      .from("sales")
+      .select("customer_id")
+      .eq("user_id", user.id)
+      .eq("status", "Ativa")
+
+    const mapa: Record<number, number> = {}
+
+    for (const v of vendas || []) {
+      if (!v.customer_id) continue
+      mapa[v.customer_id] = (mapa[v.customer_id] || 0) + 1
+    }
+
+    const top = Object.entries(mapa).sort((a, b) => Number(b[1]) - Number(a[1]))[0]
+
+    if (!top) {
+      setMensagem("Nenhum cliente encontrado.")
+      return
+    }
+
+    const cliente = clientes.find((c) => c.id === Number(top[0]))
+
+    setMensagem(`👤 Cliente que mais compra: ${cliente?.nome || "Cliente"} (${top[1]} compras)`)
+    return
+  }
+
+  // 🔹 LUCRO GERAL
+  if (texto === "lucro" || texto.includes("qual meu lucro")) {
+    const mapa = await buscarResumoVendasPorProduto(user.id)
+    const lucro = Object.values(mapa).reduce((acc, item) => acc + Number(item.lucro), 0)
+
+    setMensagem(`💰 Lucro estimado: R$ ${lucro.toFixed(2)}`)
+    return
+  }
+
+  // 🔹 LUCRO POR PRODUTO / MAIS LUCRATIVO / MENOS LUCRATIVO
+  if (
+    texto.includes("lucro por produto") ||
+    texto.includes("mais lucro") ||
+    texto.includes("menos lucro") ||
+    texto.includes("mais lucrativo") ||
+    texto.includes("menos lucrativo")
+  ) {
+    const mapa = await buscarResumoVendasPorProduto(user.id)
+
+    const lista = Object.entries(mapa)
+      .map(([id, resumo]) => ({
+        produto: produtos.find((p) => p.id === Number(id)),
+        lucro: Number(resumo.lucro),
+      }))
+      .filter((i) => i.produto)
+
+    if (lista.length === 0) {
+      setMensagem("Não foi possível calcular o lucro por produto.")
+      return
+    }
+
+    lista.sort((a, b) => b.lucro - a.lucro)
+
+    if (texto.includes("mais lucro") || texto.includes("mais lucrativo")) {
+      const top = lista[0]
+      setMensagem(`🔥 Produto mais lucrativo: ${top.produto?.nome} (R$ ${top.lucro.toFixed(2)})`)
+      return
+    }
+
+    if (texto.includes("menos lucro") || texto.includes("menos lucrativo")) {
+      const pior = lista[lista.length - 1]
+      setMensagem(`📉 Produto menos lucrativo: ${pior.produto?.nome} (R$ ${pior.lucro.toFixed(2)})`)
+      return
+    }
+
+    const resumo = lista
+      .slice(0, 5)
+      .map((i) => `• ${i.produto?.nome}: R$ ${i.lucro.toFixed(2)}`)
+      .join("\n")
+
+    setMensagem(`📊 Lucro por produto:\n${resumo}`)
     return
   }
 
@@ -1042,12 +1183,7 @@ async function responderPergunta(texto: string) {
     texto.includes("reposição") ||
     texto.includes("estoque baixo")
   ) {
-    const { data } = await supabase
-      .from("products")
-      .select("nome, estoque")
-      .eq("user_id", user.id)
-
-    const criticos = (data || []).filter((p) => Number(p.estoque) <= 2)
+    const criticos = produtos.filter((p) => Number(p.estoque) <= 2)
 
     if (criticos.length === 0) {
       setMensagem("✅ Nenhum produto está em nível crítico de estoque.")
@@ -1056,21 +1192,16 @@ async function responderPergunta(texto: string) {
 
     const lista = criticos
       .slice(0, 5)
-      .map((p) => `${p.nome} (${p.estoque})`)
+      .map((p) => `${p.nome}${p.cor ? ` • ${p.cor}` : ""}${p.tamanho ? ` • ${p.tamanho}` : ""} (${p.estoque})`)
       .join(", ")
 
     setMensagem(`🚨 Produtos para repor: ${lista}`)
     return
   }
 
-  // 🔹 ALERTA DE PRODUTOS ZERADOS
+  // 🔹 PRODUTOS SEM ESTOQUE
   if (texto.includes("zerado") || texto.includes("sem estoque")) {
-    const { data } = await supabase
-      .from("products")
-      .select("nome, estoque")
-      .eq("user_id", user.id)
-
-    const zerados = (data || []).filter((p) => Number(p.estoque) <= 0)
+    const zerados = produtos.filter((p) => Number(p.estoque) <= 0)
 
     if (zerados.length === 0) {
       setMensagem("✅ Nenhum produto está zerado no estoque.")
@@ -1079,206 +1210,177 @@ async function responderPergunta(texto: string) {
 
     const lista = zerados
       .slice(0, 5)
-      .map((p) => p.nome)
+      .map((p) => `${p.nome}${p.cor ? ` • ${p.cor}` : ""}${p.tamanho ? ` • ${p.tamanho}` : ""}`)
       .join(", ")
 
     setMensagem(`📦 Produtos sem estoque: ${lista}`)
     return
   }
 
-  if (texto.includes("cliente") && texto.includes("mais")) {
-  const { data: vendas } = await supabase
-    .from("sales")
-    .select("customer_id")
-    .eq("user_id", user.id)
+  // 🔹 PRODUTOS PARADOS
+  if (texto.includes("parado")) {
+    const mapa = await buscarResumoVendasPorProduto(user.id)
 
-  const mapa: Record<number, number> = {}
+    const parados = produtos.filter((p) => !mapa[p.id] && Number(p.estoque) > 0)
 
-  for (const v of vendas || []) {
-    if (!v.customer_id) continue
-    mapa[v.customer_id] = (mapa[v.customer_id] || 0) + 1
-  }
+    if (parados.length === 0) {
+      setMensagem("✅ Nenhum produto parado.")
+      return
+    }
 
-  const top = Object.entries(mapa).sort((a, b) => b[1] - a[1])[0]
+    const lista = parados
+      .slice(0, 5)
+      .map((p) => `${p.nome}${p.cor ? ` • ${p.cor}` : ""}${p.tamanho ? ` • ${p.tamanho}` : ""}`)
+      .join(", ")
 
-  if (!top) {
-    setMensagem("Nenhum cliente encontrado.")
+    setMensagem(`📦 Produtos parados: ${lista}`)
     return
   }
 
-  const cliente = clientes.find(c => c.id === Number(top[0]))
+  // 🔹 PRODUTOS COM RISCO DE ACABAR
+  if (
+    texto.includes("risco de acabar") ||
+    texto.includes("acabando") ||
+    texto.includes("quase acabando")
+  ) {
+    const mapa = await buscarResumoVendasPorProduto(user.id)
 
-  setMensagem(`👤 Cliente que mais compra: ${cliente?.nome || "Cliente"} (${top[1]} compras)`)
-  return
-}
+    const risco = produtos.filter((p) => {
+      const resumo = mapa[p.id]
+      if (!resumo) return false
+      return Number(p.estoque) > 0 && Number(p.estoque) <= 2 && Number(resumo.quantidade) >= 1
+    })
 
-if (texto.includes("parado")) {
-  const { data: produtosData } = await supabase
-    .from("products")
-    .select("id, nome, estoque")
-    .eq("user_id", user.id)
+    if (risco.length === 0) {
+      setMensagem("✅ Nenhum produto está em risco imediato de acabar.")
+      return
+    }
 
-  const { data: vendas } = await supabase
-    .from("sales")
-    .select("product_id")
-    .eq("user_id", user.id)
+    const lista = risco
+      .slice(0, 5)
+      .map((p) => `${p.nome}${p.cor ? ` • ${p.cor}` : ""}${p.tamanho ? ` • ${p.tamanho}` : ""} (${p.estoque})`)
+      .join(", ")
 
-  const vendidos = new Set((vendas || []).map(v => v.product_id))
-
-  const parados = (produtosData || []).filter(p => !vendidos.has(p.id))
-
-  if (parados.length === 0) {
-    setMensagem("✅ Nenhum produto parado.")
+    setMensagem(`⚠️ Produtos com risco de acabar: ${lista}`)
     return
   }
 
-  const lista = parados.slice(0, 5).map(p => p.nome).join(", ")
+  // 🔹 PRODUTOS QUE VENDEM POUCO
+  if (
+    texto.includes("vende pouco") ||
+    texto.includes("vendem pouco") ||
+    texto.includes("pouco giro")
+  ) {
+    const mapa = await buscarResumoVendasPorProduto(user.id)
 
-  setMensagem(`📦 Produtos parados: ${lista}`)
-  return
-}
+    const lista = Object.entries(mapa)
+      .map(([id, resumo]) => ({
+        produto: produtos.find((p) => p.id === Number(id)),
+        quantidade: Number(resumo.quantidade),
+      }))
+      .filter((item) => item.produto)
+      .sort((a, b) => a.quantidade - b.quantidade)
+      .slice(0, 5)
 
-if (texto.includes("lucro")) {
-  const { data: vendas } = await supabase
-    .from("sales")
-    .select("product_id, valor_total, quantidade")
-    .eq("user_id", user.id)
+    if (lista.length === 0) {
+      setMensagem("Não encontrei produtos com giro suficiente para essa análise.")
+      return
+    }
 
-  let lucro = 0
+    const resumo = lista
+      .map((i) => `${i.produto?.nome}${i.produto?.cor ? ` • ${i.produto.cor}` : ""}: ${i.quantidade} un`)
+      .join(", ")
 
-  for (const v of vendas || []) {
-    const produto = produtos.find(p => p.id === v.product_id)
-
-    if (!produto) continue
-
-    const custo = Number(produto.preco_custo || 0)
-    const vendaUnitaria = Number(v.valor_total) / Number(v.quantidade)
-
-    lucro += (vendaUnitaria - custo) * Number(v.quantidade)
-  }
-
-  setMensagem(`💰 Lucro estimado: R$ ${lucro.toFixed(2)}`)
-  return
-}
-
-if (texto.includes("pix") || texto.includes("dinheiro") || texto.includes("cartao")) {
-  const forma = texto.includes("pix")
-    ? "pix"
-    : texto.includes("dinheiro")
-    ? "dinheiro"
-    : "cartao"
-
-  const { data } = await supabase
-    .from("sale_payments")
-    .select("valor, forma_pagamento")
-    .eq("user_id", user.id)
-
-  const total = (data || [])
-    .filter(p => p.forma_pagamento?.toLowerCase().includes(forma))
-    .reduce((acc, p) => acc + Number(p.valor), 0)
-
-  setMensagem(`💳 Total recebido via ${forma}: R$ ${total.toFixed(2)}`)
-  return
-}
-
-if (texto.includes("saiu") || texto.includes("despesa")) {
-  const { data } = await supabase
-    .from("finance")
-    .select("valor")
-    .eq("tipo", "saida")
-    .eq("user_id", user.id)
-
-  const total = (data || []).reduce((acc, d) => acc + Number(d.valor), 0)
-
-  setMensagem(`📉 Total de saídas: R$ ${total.toFixed(2)}`)
-  return
-}
-
-if (texto.includes("saldo") || texto.includes("caixa")) {
-  const { data: entradas } = await supabase
-    .from("sale_payments")
-    .select("valor")
-    .eq("user_id", user.id)
-
-  const { data: saidas } = await supabase
-    .from("finance")
-    .select("valor")
-    .eq("tipo", "saida")
-    .eq("user_id", user.id)
-
-  const totalEntradas = (entradas || []).reduce((acc, e) => acc + Number(e.valor), 0)
-  const totalSaidas = (saidas || []).reduce((acc, s) => acc + Number(s.valor), 0)
-
-  const saldo = totalEntradas - totalSaidas
-
-  setMensagem(`💰 Seu saldo atual é R$ ${saldo.toFixed(2)}`)
-  return
-}
-
-// 🔹 LUCRO POR PRODUTO
-if (texto.includes("lucro por produto") || texto.includes("mais lucro") || texto.includes("menos lucro")) {
-  const { data: vendas } = await supabase
-    .from("sales")
-    .select("product_id, valor_total, quantidade")
-    .eq("user_id", user.id)
-    .eq("status", "Ativa")
-
-  if (!vendas || vendas.length === 0) {
-    setMensagem("Nenhuma venda encontrada.")
+    setMensagem(`📉 Produtos com pouco giro: ${resumo}`)
     return
   }
 
-  const mapa: Record<number, number> = {}
+  // 🔹 SUGESTÃO SIMPLES DE PREÇO
+  if (
+    texto.includes("preco ideal") ||
+    texto.includes("preço ideal") ||
+    texto.includes("sugira preco") ||
+    texto.includes("sugira preço")
+  ) {
+    const semCusto = produtos.filter((p) => Number(p.preco_custo ?? 0) <= 0)
 
-  for (const v of vendas) {
-    const produto = produtos.find(p => p.id === v.product_id)
-    if (!produto) continue
+    if (semCusto.length > 0) {
+      setMensagem("Para sugerir preço ideal, cadastre o preço de custo dos produtos.")
+      return
+    }
 
-    const custo = Number(produto.preco_custo ?? 0)
-    const vendaUnitaria = Number(v.valor_total) / Number(v.quantidade)
+    const sugestoes = produtos
+      .slice(0, 5)
+      .map((p) => {
+        const custo = Number(p.preco_custo ?? 0)
+        const sugerido = custo * 2
+        return `${p.nome}${p.cor ? ` • ${p.cor}` : ""}: R$ ${sugerido.toFixed(2)}`
+      })
+      .join(", ")
 
-    const lucro = (vendaUnitaria - custo) * Number(v.quantidade)
-
-    mapa[v.product_id] = (mapa[v.product_id] || 0) + lucro
-  }
-
-  const lista = Object.entries(mapa)
-    .map(([id, lucro]) => ({
-      produto: produtos.find(p => p.id === Number(id)),
-      lucro
-    }))
-    .filter(i => i.produto)
-
-  if (lista.length === 0) {
-    setMensagem("Não foi possível calcular o lucro.")
+    setMensagem(`💡 Sugestão simples de preço (2x custo): ${sugestoes}`)
     return
   }
 
-  lista.sort((a, b) => b.lucro - a.lucro)
+  // 🔹 ENTRADA POR FORMA DE PAGAMENTO
+  if (texto.includes("pix") || texto.includes("dinheiro") || texto.includes("cartao") || texto.includes("cartão")) {
+    const forma = texto.includes("pix")
+      ? "pix"
+      : texto.includes("dinheiro")
+      ? "dinheiro"
+      : "cart"
 
-  // 🔥 MAIS LUCRATIVO
-  if (texto.includes("mais lucro")) {
-    const top = lista[0]
-    setMensagem(`🔥 Produto mais lucrativo: ${top.produto?.nome} (R$ ${top.lucro.toFixed(2)})`)
+    const { data } = await supabase
+      .from("sale_payments")
+      .select("valor, forma_pagamento")
+      .eq("user_id", user.id)
+
+    const total = (data || [])
+      .filter((p) => (p.forma_pagamento || "").toLowerCase().includes(forma))
+      .reduce((acc, p) => acc + Number(p.valor), 0)
+
+    const nomeForma =
+      forma === "pix" ? "Pix" : forma === "dinheiro" ? "Dinheiro" : "Cartão"
+
+    setMensagem(`💳 Total recebido via ${nomeForma}: R$ ${total.toFixed(2)}`)
     return
   }
 
-  // 🔻 MENOS LUCRATIVO
-  if (texto.includes("menos lucro")) {
-    const pior = lista[lista.length - 1]
-    setMensagem(`📉 Produto menos lucrativo: ${pior.produto?.nome} (R$ ${pior.lucro.toFixed(2)})`)
+  // 🔹 SAÍDAS / DESPESAS
+  if (texto.includes("saiu") || texto.includes("despesa")) {
+    const { data } = await supabase
+      .from("financial_transactions")
+      .select("valor")
+      .eq("user_id", user.id)
+      .eq("tipo", "saida")
+
+    const total = (data || []).reduce((acc, d) => acc + Number(d.valor), 0)
+
+    setMensagem(`📉 Total de saídas: R$ ${total.toFixed(2)}`)
     return
   }
 
-  // 📊 LISTA COMPLETA
-  const resumo = lista
-    .slice(0, 5)
-    .map(i => `• ${i.produto?.nome}: R$ ${i.lucro.toFixed(2)}`)
-    .join("\n")
+  // 🔹 SALDO ATUAL
+  if (texto.includes("saldo") || texto.includes("caixa")) {
+    const { data: entradas } = await supabase
+      .from("sale_payments")
+      .select("valor")
+      .eq("user_id", user.id)
 
-  setMensagem(`📊 Lucro por produto:\n${resumo}`)
-  return
-}
+    const { data: saidas } = await supabase
+      .from("financial_transactions")
+      .select("valor")
+      .eq("user_id", user.id)
+      .eq("tipo", "saida")
+
+    const totalEntradas = (entradas || []).reduce((acc, e) => acc + Number(e.valor), 0)
+    const totalSaidas = (saidas || []).reduce((acc, s) => acc + Number(s.valor), 0)
+
+    const saldo = totalEntradas - totalSaidas
+
+    setMensagem(`💰 Seu saldo atual é R$ ${saldo.toFixed(2)}`)
+    return
+  }
 
   setMensagem("Não entendi sua pergunta ainda.")
 }
@@ -1361,8 +1463,6 @@ async function processarPedidosIA(compras: CompraInterpretadaItem[]) {
   <br />
   • vendi 2 meias preta para Arlene e recebi 30 no pix
   <br />
-  • efetuei uma venda de uma meia preta para Arlene
-  <br />
   • comprei 10 meias pretas por 8 reais cada
   <br />
   • quanto eu faturei?
@@ -1373,7 +1473,19 @@ async function processarPedidosIA(compras: CompraInterpretadaItem[]) {
   <br />
   • qual produto mais vendido?
   <br />
+  • qual produto mais lucrativo?
+  <br />
+  • qual cliente mais compra?
+  <br />
   • o que preciso repor?
+  <br />
+  • quais produtos estão parados?
+  <br />
+  • quais produtos estão quase acabando?
+  <br />
+  • quanto entrou no pix?
+  <br />
+  • qual meu saldo atual?
 </div>
 
         <textarea
