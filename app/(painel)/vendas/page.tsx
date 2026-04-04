@@ -255,13 +255,21 @@ export default function Vendas() {
       }
     }
 
-    await registrarMovimentoEstoque({
-      productId: produto.id,
-      userId: user.id,
-      tipo: "saida",
-      quantidade: qtd,
-      motivo: "Venda",
-    })
+    try {
+  await registrarMovimentoEstoque({
+    productId: produto.id,
+    userId: user.id,
+    tipo: "saida",
+    quantidade: quantidadeNumero,
+    motivo: "Venda",
+  })
+} catch (error: any) {
+  setSalvando(false)
+  setMensagem(
+    error?.message || "Venda salva, mas houve erro ao registrar a movimentação de estoque."
+  )
+  return
+}
 
     const { error: erroEstoque } = await supabase
       .from("products")
