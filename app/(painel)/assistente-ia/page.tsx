@@ -1215,6 +1215,71 @@ if (texto.includes("saldo") || texto.includes("caixa")) {
   return
 }
 
+// 🔹 LUCRO POR PRODUTO
+if (texto.includes("lucro por produto") || texto.includes("mais lucro") || texto.includes("menos lucro")) {
+  const { data: vendas } = await supabase
+    .from("sales")
+    .select("product_id, valor_total, quantidade")
+    .eq("user_id", user.id)
+    .eq("status", "Ativa")
+
+  if (!vendas || vendas.length === 0) {
+    setMensagem("Nenhuma venda encontrada.")
+    return
+  }
+
+  const mapa: Record<number, number> = {}
+
+  for (const v of vendas) {
+    const produto = produtos.find(p => p.id === v.product_id)
+    if (!produto) continue
+
+    const custo = Number(produto.preco_custo ?? 0)
+    const vendaUnitaria = Number(v.valor_total) / Number(v.quantidade)
+
+    const lucro = (vendaUnitaria - custo) * Number(v.quantidade)
+
+    mapa[v.product_id] = (mapa[v.product_id] || 0) + lucro
+  }
+
+  const lista = Object.entries(mapa)
+    .map(([id, lucro]) => ({
+      produto: produtos.find(p => p.id === Number(id)),
+      lucro
+    }))
+    .filter(i => i.produto)
+
+  if (lista.length === 0) {
+    setMensagem("Não foi possível calcular o lucro.")
+    return
+  }
+
+  lista.sort((a, b) => b.lucro - a.lucro)
+
+  // 🔥 MAIS LUCRATIVO
+  if (texto.includes("mais lucro")) {
+    const top = lista[0]
+    setMensagem(`🔥 Produto mais lucrativo: ${top.produto?.nome} (R$ ${top.lucro.toFixed(2)})`)
+    return
+  }
+
+  // 🔻 MENOS LUCRATIVO
+  if (texto.includes("menos lucro")) {
+    const pior = lista[lista.length - 1]
+    setMensagem(`📉 Produto menos lucrativo: ${pior.produto?.nome} (R$ ${pior.lucro.toFixed(2)})`)
+    return
+  }
+
+  // 📊 LISTA COMPLETA
+  const resumo = lista
+    .slice(0, 5)
+    .map(i => `• ${i.produto?.nome}: R$ ${i.lucro.toFixed(2)}`)
+    .join("\n")
+
+  setMensagem(`📊 Lucro por produto:\n${resumo}`)
+  return
+}
+
   setMensagem("Não entendi sua pergunta ainda.")
 }
 
