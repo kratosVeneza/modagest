@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 
 type Produto = {
   id: number
@@ -757,6 +758,22 @@ export default function AssistenteIAPage() {
       )
       continue
     }
+
+    try {
+  await registrarMovimentoEstoque({
+    productId: produtoSelecionado.id,
+    userId: user.id,
+    tipo: "saida",
+    quantidade: quantidadeNumero,
+    motivo: "Venda",
+  })
+} catch (error: any) {
+  setSalvando(false)
+  setMensagem(
+    error?.message || "Venda salva, mas houve erro ao registrar a movimentação de estoque."
+  )
+  return
+}
 
     if (valorRecebidoNumero > 0) {
       const pagamentoPayload = {

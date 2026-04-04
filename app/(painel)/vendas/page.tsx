@@ -283,14 +283,6 @@ export default function Vendas() {
       return
     }
 
-    await registrarMovimentoEstoque({
-  productId: produto.id,
-  userId: user.id,
-  tipo: "saida",
-  quantidade: quantidadeNumero,
-  motivo: "Venda",
-})
-
     setProdutoId("")
     setClienteId("")
     setQuantidade("")
