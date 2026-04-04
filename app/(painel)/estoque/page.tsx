@@ -18,28 +18,11 @@ type Produto = {
 
 type MovimentoBruto = {
   id: number
+  product_id: number
   tipo: string
   quantidade: number
   motivo: string | null
   created_at: string
-  products:
-    | {
-        nome: string
-        sku: string
-        marca: string | null
-        categoria: string | null
-        tipo: string | null
-        unidade: string | null
-      }
-    | {
-        nome: string
-        sku: string
-        marca: string | null
-        categoria: string | null
-        tipo: string | null
-        unidade: string | null
-      }[]
-    | null
 }
 
 type Movimento = {
@@ -94,48 +77,48 @@ export default function Estoque() {
   }
 
   async function carregarMovimentos() {
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
 
-    const { data, error } = await supabase
-      .from("stock_movements")
-      .select(`
-        id,
-        tipo,
-        quantidade,
-        motivo,
-        created_at,
-        products (
-          nome,
-          sku,
-          marca,
-          categoria,
-          tipo,
-          unidade
-        )
-      `)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
+  const { data: movimentosData, error: errorMovimentos } = await supabase
+    .from("stock_movements")
+    .select("id, product_id, tipo, quantidade, motivo, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
 
-    if (error) {
-      setMensagem("Erro ao carregar movimentações de estoque.")
-      return
-    }
+  if (errorMovimentos) {
+    console.log("ERRO AO CARREGAR MOVIMENTOS:", errorMovimentos)
+    setMensagem("Erro ao carregar movimentações de estoque.")
+    return
+  }
 
-    const listaFormatada: Movimento[] = ((data ?? []) as MovimentoBruto[]).map((item) => {
-      let produto = item.products
+  const { data: produtosData, error: errorProdutos } = await supabase
+    .from("products")
+    .select("id, nome, sku, marca, categoria, tipo, unidade, estoque")
+    .eq("user_id", user.id)
 
-      if (Array.isArray(produto)) {
-        produto = produto[0] ?? null
-      }
+  if (errorProdutos) {
+    console.log("ERRO AO CARREGAR PRODUTOS DOS MOVIMENTOS:", errorProdutos)
+    setMensagem("Erro ao carregar os produtos relacionados ao estoque.")
+    return
+  }
+
+  const mapaProdutos = new Map<number, Produto>()
+  ;((produtosData ?? []) as Produto[]).forEach((produto) => {
+    mapaProdutos.set(produto.id, produto)
+  })
+
+  const listaFormatada: Movimento[] = ((movimentosData ?? []) as MovimentoBruto[]).map(
+    (item) => {
+      const produto = mapaProdutos.get(item.product_id)
 
       return {
         id: item.id,
@@ -150,10 +133,11 @@ export default function Estoque() {
         tipoProduto: produto?.tipo || "-",
         unidade: produto?.unidade || "un",
       }
-    })
+    }
+  )
 
-    setMovimentos(listaFormatada)
-  }
+  setMovimentos(listaFormatada)
+}
 
   function abrirModalAjuste() {
     setProductId("")
@@ -228,12 +212,12 @@ export default function Estoque() {
     }
 
     await registrarMovimentoEstoque({
-      productId: produto.id,
-      userId: user.id,
-      tipo: "ajuste",
-      quantidade: qtd,
-      motivo: `${tipoAjuste === "entrada" ? "Ajuste de entrada" : "Ajuste de saída"} - ${motivo.trim()}`,
-    })
+  productId: produto.id,
+  userId: user.id,
+  tipo: tipoAjuste === "entrada" ? "entrada" : "saida",
+  quantidade: qtd,
+  motivo: `${tipoAjuste === "entrada" ? "Ajuste de entrada" : "Ajuste de saída"} - ${motivo.trim()}`,
+})
 
     setSalvando(false)
     fecharModalAjuste()
