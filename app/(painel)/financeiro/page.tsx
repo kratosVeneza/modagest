@@ -57,8 +57,9 @@ type SaleResumo = {
   status: string | null
   valor_total: number
   created_at: string
+  products?: { nome: string } | null
+  customers?: { nome: string } | null
 }
-
 
 const categorias = [
   "Fornecedor",
@@ -169,24 +170,35 @@ export default function Financeiro() {
   }
 
   const { data: vendasData, error: vendasError } = await supabase
-    .from("sales")
-    .select("id, status, valor_total, created_at")
-    .eq("user_id", user.id)
+  .from("sales")
+  .select(`
+    id,
+    status,
+    valor_total,
+    created_at,
+    products (nome),
+    customers (nome)
+  `)
+  .eq("user_id", user.id)
 
   if (vendasError) {
     setMensagem("Erro ao carregar vendas.")
     return
   }
 
-  const vendasAtivas = ((vendasData ?? []) as SaleResumo[]).filter(
-    (v) => v.status !== "Cancelada"
-  )
+  const vendasLista = (vendasData ?? []) as unknown as SaleResumo[]
+
+  const vendasAtivas = vendasLista.filter(
+  (v) => v.status !== "Cancelada"
+)
 
   const idsVendasAtivas = new Set(vendasAtivas.map((v) => v.id))
 
-  const pagamentosValidos = ((pagamentosData ?? []) as SalePayment[]).filter((p) =>
-    idsVendasAtivas.has(p.sale_id)
-  )
+  const pagamentosLista = (pagamentosData ?? []) as unknown as SalePayment[]
+
+  const pagamentosValidos = pagamentosLista.filter((p) =>
+  idsVendasAtivas.has(p.sale_id)
+)
 
   const { data: movsData, error: movsError } = await supabase
     .from("financial_transactions")
@@ -363,11 +375,17 @@ export default function Financeiro() {
   }
 
   const linhasFinanceiras = useMemo<LinhaFinanceira[]>(() => {
-  const recebimentosVendas: LinhaFinanceira[] = pagamentosVendas.map((p) => ({
+  const recebimentosVendas: LinhaFinanceira[] = pagamentosVendas.map((p) => {
+  const vendaRelacionada = vendas.find((v) => v.id === p.sale_id)
+
+  const nomeProduto = vendaRelacionada?.products?.nome || "Produto"
+  const nomeCliente = vendaRelacionada?.customers?.nome || ""
+
+  return {
     origem: "venda",
     id: `venda-pagamento-${p.id}`,
     tipo: "entrada",
-    descricao: "Recebimento de venda",
+    descricao: `Venda - ${nomeProduto}${nomeCliente ? ` (${nomeCliente})` : ""}`,
     categoria: "Venda",
     valor: Number(p.valor),
     status: "pago",
@@ -375,7 +393,8 @@ export default function Financeiro() {
     pagamento: p.created_at,
     criadoEm: p.created_at,
     formaPagamento: p.forma_pagamento,
-  }))
+  }
+})
 
   const totalPagoPorVenda = new Map<number, number>()
 
@@ -388,28 +407,31 @@ export default function Financeiro() {
   }
 
   const vendasPendentes = vendas.reduce<LinhaFinanceira[]>((acc, v) => {
-    const totalVenda = Number(v.valor_total || 0)
-    const totalPago = totalPagoPorVenda.get(v.id) || 0
-    const valorPendente = totalVenda - totalPago
+  const totalVenda = Number(v.valor_total || 0)
+  const totalPago = totalPagoPorVenda.get(v.id) || 0
+  const valorPendente = totalVenda - totalPago
 
-    if (valorPendente > 0) {
-      acc.push({
-        origem: "venda",
-        id: `venda-pendente-${v.id}`,
-        tipo: "entrada",
-        descricao: "Recebimento pendente de venda",
-        categoria: "Venda",
-        valor: valorPendente,
-        status: "pendente",
-        vencimento: v.created_at,
-        pagamento: "",
-        criadoEm: v.created_at,
-        formaPagamento: "",
-      })
-    }
+  const nomeProduto = v.products?.nome || "Produto"
+  const nomeCliente = v.customers?.nome || ""
 
-    return acc
-  }, [])
+  if (valorPendente > 0) {
+    acc.push({
+      origem: "venda",
+      id: `venda-pendente-${v.id}`,
+      tipo: "entrada",
+      descricao: `Pendente - ${nomeProduto}${nomeCliente ? ` (${nomeCliente})` : ""}`,
+      categoria: "Venda",
+      valor: valorPendente,
+      status: "pendente",
+      vencimento: v.created_at,
+      pagamento: "",
+      criadoEm: v.created_at,
+      formaPagamento: "",
+    })
+  }
+
+  return acc
+}, [])
 
   const linhasManuais: LinhaFinanceira[] = movimentacoes.map((m) => ({
     origem: "manual",
@@ -429,16 +451,27 @@ export default function Financeiro() {
   )
 }, [pagamentosVendas, vendas, movimentacoes])
 
-
   const linhasFiltradas = useMemo(() => {
     const termo = busca.trim().toLowerCase()
 
     return linhasFinanceiras.filter((item) => {
-      const passouBusca =
-        !termo ||
-        item.descricao.toLowerCase().includes(termo) ||
-        item.categoria.toLowerCase().includes(termo) ||
-        (item.formaPagamento || "").toLowerCase().includes(termo)
+      const produtoExtraido =
+  item.origem === "venda"
+    ? item.descricao.replace(/^Venda - /, "").replace(/^Pendente - /, "").split(" (")[0].toLowerCase()
+    : ""
+
+const clienteExtraido =
+  item.origem === "venda" && item.descricao.includes("(")
+    ? item.descricao.split("(")[1]?.replace(")", "").toLowerCase()
+    : ""
+
+const passouBusca =
+  !termo ||
+  item.descricao.toLowerCase().includes(termo) ||
+  item.categoria.toLowerCase().includes(termo) ||
+  (item.formaPagamento || "").toLowerCase().includes(termo) ||
+  produtoExtraido.includes(termo) ||
+  (clienteExtraido || "").includes(termo)
 
       const passouStatus =
         filtroStatus === "Todos" || item.status === filtroStatus
@@ -719,18 +752,20 @@ export default function Financeiro() {
         <table style={tabela}>
           <thead>
             <tr>
-              <th style={th}>Origem</th>
-              <th style={th}>Tipo</th>
-              <th style={th}>Descrição</th>
-              <th style={th}>Categoria</th>
-              <th style={th}>Valor</th>
-              <th style={th}>Status</th>
-              <th style={th}>Forma</th>
-              <th style={th}>Vencimento</th>
-              <th style={th}>Pagamento</th>
-              <th style={th}>Criado em</th>
-              <th style={th}>Ações</th>
-            </tr>
+  <th style={th}>Origem</th>
+  <th style={th}>Tipo</th>
+  <th style={th}>Produto</th>
+  <th style={th}>Cliente</th>
+  <th style={th}>Descrição</th>
+  <th style={th}>Categoria</th>
+  <th style={th}>Valor</th>
+  <th style={th}>Status</th>
+  <th style={th}>Forma</th>
+  <th style={th}>Vencimento</th>
+  <th style={th}>Pagamento</th>
+  <th style={th}>Criado em</th>
+  <th style={th}>Ações</th>
+</tr>
           </thead>
 
           <tbody>
@@ -742,11 +777,44 @@ export default function Financeiro() {
 
               return (
                 <tr key={item.id}>
-                  <td style={td}>{item.origem === "venda" ? "Venda" : "Manual"}</td>
-                  <td style={td}>{item.tipo}</td>
-                  <td style={td}>{item.descricao}</td>
-                  <td style={td}>{item.categoria}</td>
-                  <td style={td}>R$ {item.valor.toFixed(2)}</td>
+  <td style={td}>
+  <span
+    className={
+      item.origem === "venda"
+        ? "status-pill status-blue"
+        : "status-pill status-gray"
+    }
+  >
+    {item.origem === "venda" ? "Automática" : "Manual"}
+  </span>
+</td>
+  <td style={td}>
+  <span
+    className={
+      item.tipo === "entrada"
+        ? "status-pill status-green"
+        : "status-pill status-red"
+    }
+  >
+    {item.tipo === "entrada" ? "Entrada" : "Saída"}
+  </span>
+</td>
+
+  <td style={td}>
+    {item.origem === "venda"
+      ? item.descricao.replace(/^Venda - /, "").replace(/^Pendente - /, "").split(" (")[0]
+      : "-"}
+  </td>
+
+  <td style={td}>
+    {item.origem === "venda" && item.descricao.includes("(")
+      ? item.descricao.split("(")[1]?.replace(")", "")
+      : "-"}
+  </td>
+
+  <td style={td}>{item.descricao}</td>
+  <td style={td}>{item.categoria}</td>
+  <td style={td}>R$ {item.valor.toFixed(2)}</td>
                   <td style={td}>
                     <span
                       className={
@@ -796,9 +864,9 @@ export default function Financeiro() {
 
             {linhasFiltradas.length === 0 && (
               <tr>
-                <td style={tdVazio} colSpan={11}>
-                  Nenhuma movimentação encontrada.
-                </td>
+                <td style={tdVazio} colSpan={13}>
+  Nenhuma movimentação encontrada.
+</td>
               </tr>
             )}
           </tbody>
@@ -989,3 +1057,4 @@ const labelAjuda = {
   fontWeight: 600,
   marginBottom: "6px",
 }
+
