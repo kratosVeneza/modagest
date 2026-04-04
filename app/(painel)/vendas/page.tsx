@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { useRouter } from "next/navigation"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 import HelpTooltip from "../../components/HelpTooltip"
 import HelpBanner from "../../components/InfoBanner"
@@ -65,6 +66,7 @@ function montarNomeProduto(produto: Produto) {
 }
 
 export default function Vendas() {
+  const router = useRouter()
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [produtoId, setProdutoId] = useState("")
@@ -273,6 +275,14 @@ export default function Vendas() {
       return
     }
 
+    await registrarMovimentoEstoque({
+  productId: produto.id,
+  userId: user.id,
+  tipo: "saida",
+  quantidade: quantidadeNumero,
+  motivo: "Venda",
+})
+
     setProdutoId("")
     setClienteId("")
     setQuantidade("")
@@ -297,6 +307,15 @@ export default function Vendas() {
       <p className="page-subtitle">
         Registre vendas, pagamentos iniciais e baixe o estoque automaticamente.
       </p>
+
+      <div style={{ marginTop: 16, marginBottom: 16 }}>
+  <button
+    onClick={() => router.push("/assistente-ia")}
+    className="btn btn-secondary"
+  >
+    🤖 Usar IA para lançar operação
+  </button>
+</div>
 
       <HelpBanner
         title="Como usar a página de Vendas"
