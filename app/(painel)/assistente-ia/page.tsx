@@ -10,6 +10,7 @@ type Produto = {
   sku: string
   estoque: number
   preco: number
+  preco_custo?: number
   cor: string | null
   tamanho: string | null
   user_id: string
@@ -549,28 +550,25 @@ export default function AssistenteIAPage() {
 // PERGUNTAS GERENCIAIS
 if (
   textoNormalizado.includes("faturei") ||
-  textoNormalizado.includes("faturamento") ||
   textoNormalizado.includes("pendente") ||
   textoNormalizado.includes("estoque") ||
   textoNormalizado.includes("mais vendido") ||
-  textoNormalizado.includes("resuma meu dia") ||
-  textoNormalizado.includes("resumo do dia") ||
+  textoNormalizado.includes("resuma") ||
   textoNormalizado.includes("7 dias") ||
-  textoNormalizado.includes("ultimos 7 dias") ||
-  textoNormalizado.includes("últimos 7 dias") ||
   textoNormalizado.includes("repor") ||
-  textoNormalizado.includes("reposicao") ||
-  textoNormalizado.includes("reposição") ||
-  textoNormalizado.includes("estoque baixo") ||
   textoNormalizado.includes("zerado") ||
-  textoNormalizado.includes("sem estoque")
+  textoNormalizado.includes("cliente") ||
+  textoNormalizado.includes("lucro") ||
+  textoNormalizado.includes("pix") ||
+  textoNormalizado.includes("dinheiro") ||
+  textoNormalizado.includes("cartao") ||
+  textoNormalizado.includes("despesa") ||
+  textoNormalizado.includes("saldo")
 ) {
-  await 
-  responderPergunta(textoNormalizado)
+  await responderPergunta(textoNormalizado)
   setLoadingIA(false)
   return
-}
-
+} 
   if (itens.length === 0 && compras.length === 0 && recebimentos.length === 0) {
   setLoadingIA(false)
   setMensagem("A IA não identificou nenhuma venda, compra ou recebimento nesse texto.")
@@ -1088,6 +1086,135 @@ async function responderPergunta(texto: string) {
     return
   }
 
+  if (texto.includes("cliente") && texto.includes("mais")) {
+  const { data: vendas } = await supabase
+    .from("sales")
+    .select("customer_id")
+    .eq("user_id", user.id)
+
+  const mapa: Record<number, number> = {}
+
+  for (const v of vendas || []) {
+    if (!v.customer_id) continue
+    mapa[v.customer_id] = (mapa[v.customer_id] || 0) + 1
+  }
+
+  const top = Object.entries(mapa).sort((a, b) => b[1] - a[1])[0]
+
+  if (!top) {
+    setMensagem("Nenhum cliente encontrado.")
+    return
+  }
+
+  const cliente = clientes.find(c => c.id === Number(top[0]))
+
+  setMensagem(`👤 Cliente que mais compra: ${cliente?.nome || "Cliente"} (${top[1]} compras)`)
+  return
+}
+
+if (texto.includes("parado")) {
+  const { data: produtosData } = await supabase
+    .from("products")
+    .select("id, nome, estoque")
+    .eq("user_id", user.id)
+
+  const { data: vendas } = await supabase
+    .from("sales")
+    .select("product_id")
+    .eq("user_id", user.id)
+
+  const vendidos = new Set((vendas || []).map(v => v.product_id))
+
+  const parados = (produtosData || []).filter(p => !vendidos.has(p.id))
+
+  if (parados.length === 0) {
+    setMensagem("✅ Nenhum produto parado.")
+    return
+  }
+
+  const lista = parados.slice(0, 5).map(p => p.nome).join(", ")
+
+  setMensagem(`📦 Produtos parados: ${lista}`)
+  return
+}
+
+if (texto.includes("lucro")) {
+  const { data: vendas } = await supabase
+    .from("sales")
+    .select("product_id, valor_total, quantidade")
+    .eq("user_id", user.id)
+
+  let lucro = 0
+
+  for (const v of vendas || []) {
+    const produto = produtos.find(p => p.id === v.product_id)
+
+    if (!produto) continue
+
+    const custo = Number(produto.preco_custo || 0)
+    const vendaUnitaria = Number(v.valor_total) / Number(v.quantidade)
+
+    lucro += (vendaUnitaria - custo) * Number(v.quantidade)
+  }
+
+  setMensagem(`💰 Lucro estimado: R$ ${lucro.toFixed(2)}`)
+  return
+}
+
+if (texto.includes("pix") || texto.includes("dinheiro") || texto.includes("cartao")) {
+  const forma = texto.includes("pix")
+    ? "pix"
+    : texto.includes("dinheiro")
+    ? "dinheiro"
+    : "cartao"
+
+  const { data } = await supabase
+    .from("sale_payments")
+    .select("valor, forma_pagamento")
+    .eq("user_id", user.id)
+
+  const total = (data || [])
+    .filter(p => p.forma_pagamento?.toLowerCase().includes(forma))
+    .reduce((acc, p) => acc + Number(p.valor), 0)
+
+  setMensagem(`💳 Total recebido via ${forma}: R$ ${total.toFixed(2)}`)
+  return
+}
+
+if (texto.includes("saiu") || texto.includes("despesa")) {
+  const { data } = await supabase
+    .from("finance")
+    .select("valor")
+    .eq("tipo", "saida")
+    .eq("user_id", user.id)
+
+  const total = (data || []).reduce((acc, d) => acc + Number(d.valor), 0)
+
+  setMensagem(`📉 Total de saídas: R$ ${total.toFixed(2)}`)
+  return
+}
+
+if (texto.includes("saldo") || texto.includes("caixa")) {
+  const { data: entradas } = await supabase
+    .from("sale_payments")
+    .select("valor")
+    .eq("user_id", user.id)
+
+  const { data: saidas } = await supabase
+    .from("finance")
+    .select("valor")
+    .eq("tipo", "saida")
+    .eq("user_id", user.id)
+
+  const totalEntradas = (entradas || []).reduce((acc, e) => acc + Number(e.valor), 0)
+  const totalSaidas = (saidas || []).reduce((acc, s) => acc + Number(s.valor), 0)
+
+  const saldo = totalEntradas - totalSaidas
+
+  setMensagem(`💰 Seu saldo atual é R$ ${saldo.toFixed(2)}`)
+  return
+}
+
   setMensagem("Não entendi sua pergunta ainda.")
 }
 
@@ -1197,8 +1324,8 @@ async function processarPedidosIA(compras: CompraInterpretadaItem[]) {
            className="btn btn-primary"
            disabled={loadingIA || carregandoBase}
 >
-  {loadingIA ? "Analisando..." : "Interpretar venda com IA"}
-</button>
+           {loadingIA ? "Analisando..." : "Interpretar venda com IA"}
+           </button>
 
           <button onClick={limparTudo} className="btn btn-secondary">
             Limpar
