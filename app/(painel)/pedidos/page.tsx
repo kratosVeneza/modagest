@@ -23,10 +23,10 @@ type Produto = {
   marca: string | null
   categoria: string | null
   tipo: string | null
+  cor: string | null
   unidade: string | null
   estoque: number
   user_id: string
-  cor: string | null
 }
 
 export default function Pedidos() {
@@ -83,7 +83,7 @@ export default function Pedidos() {
 
     const { data, error } = await supabase
       .from("products")
-      .select("id, nome, sku, marca, categoria, tipo, unidade, estoque, user_id")
+      .select("id, nome, sku, marca, categoria, tipo, cor, unidade, estoque, user_id")
       .eq("user_id", user.id)
       .order("nome", { ascending: true })
 
@@ -111,10 +111,11 @@ export default function Pedidos() {
     setMensagem("")
     setModalAberto(false)
   }
+  
+const produtoSelecionadoAtual = useMemo(() => {
+  return produtos.find((p) => p.id === Number(productId)) || null
+}, [produtos, productId])
 
-  function produtoSelecionadoAtual() {
-    return produtos.find((p) => p.id === Number(productId)) || null
-  }
 
   const pedidoEmEdicao = useMemo(() => {
     return pedidos.find((p) => p.id === idEmEdicao) || null
@@ -219,7 +220,10 @@ export default function Pedidos() {
       return
     }
 
-    let produtoSelecionado = produtoSelecionadoAtual()
+    let produtoSelecionado = produtos.find(
+  (p) => String(p.id) === productId
+) || null
+
 
     if (!produtoSelecionado) {
       setMensagem("Produto não encontrado.")
@@ -535,6 +539,35 @@ export default function Pedidos() {
     })
   }, [pedidos, busca, filtroStatus, produtos])
 
+  const produtosOrdenadosParaSelect = useMemo(() => {
+  return [...produtos].sort((a, b) => {
+    const nomeA = (a.nome || "").toLowerCase()
+    const nomeB = (b.nome || "").toLowerCase()
+
+    if (nomeA !== nomeB) return nomeA.localeCompare(nomeB)
+
+    const marcaA = (a.marca || "").toLowerCase()
+    const marcaB = (b.marca || "").toLowerCase()
+
+    if (marcaA !== marcaB) return marcaA.localeCompare(marcaB)
+
+    const tipoA = (a.tipo || "").toLowerCase()
+    const tipoB = (b.tipo || "").toLowerCase()
+
+    if (tipoA !== tipoB) return tipoA.localeCompare(tipoB)
+
+    const corA = (a.cor || "").toLowerCase()
+    const corB = (b.cor || "").toLowerCase()
+
+    if (corA !== corB) return corA.localeCompare(corB)
+
+    const skuA = (a.sku || "").toLowerCase()
+    const skuB = (b.sku || "").toLowerCase()
+
+    return skuA.localeCompare(skuB)
+  })
+}, [produtos])
+
   return (
     <div>
       <h2 className="page-title">Pedidos</h2>
@@ -714,26 +747,18 @@ export default function Pedidos() {
 >
   <option value="">Selecione um produto</option>
 
-  {produtos.map((produto) => {
-    const detalhes = [
-      produto.marca,
-      produto.categoria,
-      produto.tipo,
-      produto.unidade,
-    ]
-      .filter(Boolean)
-      .join(" • ")
-
-    return (
-      <option key={produto.id} value={produto.id}>
-        {produto.nome}
-        {produto.sku ? ` • ${produto.sku}` : ""}
-        {detalhes ? ` • ${detalhes}` : ""}
-      </option>
-    )
-  })}
+  {produtosOrdenadosParaSelect.map((produto) => (
+    <option key={produto.id} value={produto.id}>
+      {produto.nome}
+      {produto.cor ? ` • ${produto.cor}` : ""}
+      {produto.tipo ? ` • ${produto.tipo}` : ""}
+      {produto.marca ? ` • ${produto.marca}` : ""}
+      {produto.unidade ? ` • ${produto.unidade}` : ""}
+      {produto.sku ? ` • ${produto.sku}` : ""}
+      {` • Estoque: ${produto.estoque}`}
+    </option>
+  ))}
 </select>
-
             <input
               placeholder="Fornecedor"
               value={fornecedor}
@@ -758,17 +783,35 @@ export default function Pedidos() {
           </div>
 
           {productId && (
-            <div style={{ marginTop: 16, fontSize: 14, color: "#6b7280" }}>
-              Produto selecionado:{" "}
-              <strong style={{ color: "inherit" }}>
-                {produtoSelecionadoAtual()?.nome}
-              </strong>
-              {" • "}
-              {[produtoSelecionadoAtual()?.marca, produtoSelecionadoAtual()?.categoria, produtoSelecionadoAtual()?.tipo]
-                .filter(Boolean)
-                .join(" • ")}
-            </div>
-          )}
+  <div
+    style={{
+      marginTop: 16,
+      fontSize: 14,
+      color: "#6b7280",
+      padding: "10px 12px",
+      borderRadius: 10,
+      background: "#f8fafc",
+      border: "1px solid #e5e7eb",
+    }}
+  >
+    Produto selecionado:{" "}
+    <strong style={{ color: "#111827" }}>
+      {produtoSelecionadoAtual?.nome}
+    </strong>
+    {" • "}
+    {[
+      produtoSelecionadoAtual?.cor,
+      produtoSelecionadoAtual?.tipo,
+      produtoSelecionadoAtual?.marca,
+      produtoSelecionadoAtual?.categoria,
+      produtoSelecionadoAtual?.unidade,
+      produtoSelecionadoAtual?.sku,
+      `Estoque: ${produtoSelecionadoAtual?.estoque ?? 0}`,
+    ]
+      .filter(Boolean)
+      .join(" • ")}
+  </div>
+)}
 
           {status === "Recebido" && (
             <div
