@@ -470,11 +470,11 @@ export default function AssistenteIAPage() {
   dataVenda: string
   produtoTextoIA: string
   clienteTextoIA: string
-}
+ }
 
-const [rascunhos, setRascunhos] = useState<VendaRascunho[]>([])
-const [interpretado, setInterpretado] = useState(false)
-const [loadingIA, setLoadingIA] = useState(false)
+ const [rascunhos, setRascunhos] = useState<VendaRascunho[]>([])
+ const [interpretado, setInterpretado] = useState(false)
+ const [loadingIA, setLoadingIA] = useState(false)
 
   useEffect(() => {
     carregarBase()
@@ -527,7 +527,7 @@ const [loadingIA, setLoadingIA] = useState(false)
   setTexto("")
   setRascunhos([])
   setInterpretado(false)
-}
+ }
 
   function interpretar() {
   setMensagem("")
@@ -547,19 +547,19 @@ const [loadingIA, setLoadingIA] = useState(false)
   setLoadingIA(false)
   setMensagem("A IA não identificou nenhuma venda, compra ou recebimento nesse texto.")
   return
-}
+ }
 
-if (compras.length > 0 && itens.length === 0) {
+ if (compras.length > 0 && itens.length === 0) {
   setLoadingIA(false)
   setMensagem("A IA já identificou uma compra. No próximo passo vamos ligar isso à página de pedidos/compras.")
   return
-}
+ }
 
-if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
+  if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
   setLoadingIA(false)
   setMensagem("A IA já identificou um recebimento. No próximo passo vamos ligar isso ao histórico/financeiro.")
   return
-} 
+  } 
 
     const novosRascunhos: VendaRascunho[] = itens.map((item) => {
     const produtosOrdenados = encontrarProdutosOrdenados(produtos, item.produtoTexto)
@@ -609,6 +609,22 @@ if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
     )
   )
  }
+
+ const existeAlgumRascunhoValido = useMemo(() => {
+  return rascunhos.some((rascunho) => {
+    const produtoSelecionado =
+      produtos.find((p) => String(p.id) === rascunho.produtoIdSelecionado) || null
+
+    const quantidadeNumero = Number(rascunho.quantidade || 0)
+    const estoqueDisponivel = Number(produtoSelecionado?.estoque || 0)
+
+    if (!produtoSelecionado) return false
+    if (quantidadeNumero <= 0) return false
+    if (quantidadeNumero > estoqueDisponivel) return false
+
+    return true
+  })
+}, [rascunhos, produtos])
 
   async function confirmarVenda() {
   setMensagem("")
@@ -868,19 +884,65 @@ if (vendasSalvas.length > 0) {
         const valorTotal = quantidadeNumero * valorUnitario
         const valorEmAberto = Math.max(valorTotal - valorRecebidoNumero, 0)
 
+        const estoqueDisponivel = Number(produtoSelecionado?.estoque || 0)
+        const produtoNaoIdentificado = !produtoSelecionado
+        const estoqueInsuficiente =
+        !!produtoSelecionado && quantidadeNumero > estoqueDisponivel
+
         return (
           <div
-            key={index}
-            style={{
-              border: "1px solid #e5e7eb",
-              borderRadius: 14,
-              padding: 16,
-              background: "#f8fafc",
-            }}
+          key={index}
+          style={{
+            border:
+            produtoNaoIdentificado || estoqueInsuficiente
+            ? "1px solid #ef4444"
+        : "1px solid #e5e7eb",
+           borderRadius: 14,
+          padding: 16,
+          background:
+          produtoNaoIdentificado || estoqueInsuficiente ? "#fef2f2" : "#f8fafc",
+          }}
           >
+
             <div style={{ fontWeight: 700, marginBottom: 12 }}>
               Venda {index + 1}
             </div>
+
+            {produtoNaoIdentificado && (
+  <div
+    style={{
+      marginBottom: 12,
+      padding: "10px 12px",
+      borderRadius: 10,
+      background: "#fee2e2",
+      color: "#991b1b",
+      fontSize: 13,
+      fontWeight: 700,
+      border: "1px solid #fecaca",
+    }}
+  >
+    Produto não identificado. Selecione o item correto antes de salvar.
+  </div>
+)}
+
+{estoqueInsuficiente && (
+  <div
+    style={{
+      marginBottom: 12,
+      padding: "10px 12px",
+      borderRadius: 10,
+      background: "#fee2e2",
+      color: "#991b1b",
+      fontSize: 13,
+      fontWeight: 700,
+      border: "1px solid #fecaca",
+    }}
+  >
+    Estoque insuficiente para este item. Disponível: {estoqueDisponivel} •
+    Solicitado: {quantidadeNumero}
+  </div>
+)}
+
 
             <div className="grid-2">
               <div>
@@ -1028,6 +1090,11 @@ if (vendasSalvas.length > 0) {
                   <span style={resumoLabel}>Em aberto</span>
                   <strong>R$ {valorEmAberto.toFixed(2)}</strong>
                 </div>
+
+                <div style={resumoItem}>
+                  <span style={resumoLabel}>Estoque disponível</span>
+                  <strong>{produtoSelecionado ? estoqueDisponivel : "-"}</strong>
+                </div>
               </div>
             </div>
           </div>
@@ -1037,12 +1104,12 @@ if (vendasSalvas.length > 0) {
 
     <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
       <button
-        onClick={confirmarVenda}
-        className="btn btn-success"
-        disabled={salvando}
-      >
-        {salvando ? "Salvando..." : "Confirmar e salvar vendas"}
-      </button>
+  onClick={confirmarVenda}
+  className="btn btn-success"
+  disabled={salvando || !existeAlgumRascunhoValido}
+>
+  {salvando ? "Salvando..." : "Confirmar e salvar vendas"}
+</button>
 
       <button onClick={limparTudo} className="btn btn-secondary">
         Cancelar
