@@ -26,6 +26,7 @@ type Produto = {
   unidade: string | null
   estoque: number
   user_id: string
+  cor: string | null
 }
 
 export default function Pedidos() {
@@ -707,18 +708,31 @@ export default function Pedidos() {
 
           <div className="grid-2">
             <select
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              disabled={bloqueiaCamposEstruturais}
-            >
-              <option value="">Selecione um produto</option>
-              {produtos.map((produto) => (
-                <option key={produto.id} value={produto.id}>
-                  {produto.nome} - {produto.sku}
-                  {produto.marca ? ` - ${produto.marca}` : ""}
-                </option>
-              ))}
-            </select>
+  value={productId}
+  onChange={(e) => setProductId(e.target.value)}
+  disabled={bloqueiaCamposEstruturais}
+>
+  <option value="">Selecione um produto</option>
+
+  {produtos.map((produto) => {
+    const detalhes = [
+      produto.marca,
+      produto.categoria,
+      produto.tipo,
+      produto.unidade,
+    ]
+      .filter(Boolean)
+      .join(" • ")
+
+    return (
+      <option key={produto.id} value={produto.id}>
+        {produto.nome}
+        {produto.sku ? ` • ${produto.sku}` : ""}
+        {detalhes ? ` • ${detalhes}` : ""}
+      </option>
+    )
+  })}
+</select>
 
             <input
               placeholder="Fornecedor"
