@@ -153,6 +153,49 @@ export default function Pedidos() {
     return { ok: true as const }
   }
 
+  async function estornarEstoqueDoPedido({
+  userId,
+  produtoSelecionado,
+  quantidadeNumerica,
+}: {
+  userId: string
+  produtoSelecionado: Produto
+  quantidadeNumerica: number
+}) {
+  const estoqueAtual = Number(produtoSelecionado.estoque || 0)
+  const novoEstoque = estoqueAtual - quantidadeNumerica
+
+  if (novoEstoque < 0) {
+    return {
+      ok: false as const,
+      mensagem: "Não foi possível estornar o estoque porque o saldo atual ficaria negativo.",
+    }
+  }
+
+  const { error: erroAtualizarEstoque } = await supabase
+    .from("products")
+    .update({ estoque: novoEstoque })
+    .eq("id", produtoSelecionado.id)
+    .eq("user_id", userId)
+
+  if (erroAtualizarEstoque) {
+    return {
+      ok: false as const,
+      mensagem: "Houve erro ao estornar o estoque do pedido.",
+    }
+  }
+
+  await registrarMovimentoEstoque({
+    productId: produtoSelecionado.id,
+    userId,
+    tipo: "saida",
+    quantidade: quantidadeNumerica,
+    motivo: "Cancelamento de pedido com estorno",
+  })
+
+  return { ok: true as const }
+}
+
   async function salvarPedido() {
     setMensagem("")
 
@@ -328,43 +371,128 @@ export default function Pedidos() {
     setModalAberto(true)
   }
 
-  async function excluirPedido(id: number) {
-    setMensagem("")
+  async function cancelarPedido(id: number) {
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
+
+  const pedido = pedidos.find((p) => p.id === id)
+
+  if (!pedido) {
+    setMensagem("Pedido não encontrado.")
+    return
+  }
+
+  if (pedido.status === "Cancelado") {
+    setMensagem("Esse pedido já está cancelado.")
+    return
+  }
+
+  if (pedido.estoque_lancado) {
+    const produtoRelacionado = produtos.find((p) => p.id === pedido.product_id)
+
+    if (!produtoRelacionado) {
+      setMensagem("Produto do pedido não encontrado para estorno.")
       return
     }
 
-    const pedido = pedidos.find((p) => p.id === id)
+    const resultado = await estornarEstoqueDoPedido({
+      userId: user.id,
+      produtoSelecionado: produtoRelacionado,
+      quantidadeNumerica: Number(pedido.quantidade),
+    })
 
-    if (pedido?.estoque_lancado) {
-      setMensagem("Não é possível excluir um pedido que já lançou estoque.")
+    if (!resultado.ok) {
+      setMensagem(resultado.mensagem)
       return
     }
 
     const { error } = await supabase
       .from("orders")
-      .delete()
+      .update({
+        status: "Cancelado",
+        estoque_lancado: false,
+      })
       .eq("id", id)
       .eq("user_id", user.id)
 
     if (error) {
-      setMensagem("Erro ao excluir pedido.")
+      setMensagem("Estoque estornado, mas houve erro ao cancelar o pedido.")
       return
     }
 
-    if (idEmEdicao === id) {
-      limparFormulario()
-    }
-
-    setMensagem("Pedido excluído com sucesso.")
+    setMensagem("Pedido cancelado e estoque estornado com sucesso.")
     await carregarPedidos()
+    await carregarProdutos()
+    return
   }
+
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      status: "Cancelado",
+    })
+    .eq("id", id)
+    .eq("user_id", user.id)
+
+  if (error) {
+    setMensagem("Erro ao cancelar pedido.")
+    return
+  }
+
+  setMensagem("Pedido cancelado com sucesso.")
+  await carregarPedidos()
+}
+
+  async function excluirPedido(id: number) {
+  setMensagem("")
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
+
+  const pedido = pedidos.find((p) => p.id === id)
+
+  if (!pedido) {
+    setMensagem("Pedido não encontrado.")
+    return
+  }
+
+  if (pedido.estoque_lancado) {
+    setMensagem("Não é possível excluir um pedido que ainda está com estoque lançado. Cancele o pedido primeiro.")
+    return
+  }
+
+  const { error } = await supabase
+    .from("orders")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id)
+
+  if (error) {
+    setMensagem("Erro ao excluir pedido.")
+    return
+  }
+
+  if (idEmEdicao === id) {
+    limparFormulario()
+  }
+
+  setMensagem("Pedido excluído com sucesso.")
+  await carregarPedidos()
+}
 
   function formatarData(dataIso: string) {
     const data = new Date(dataIso)
@@ -409,7 +537,10 @@ export default function Pedidos() {
   return (
     <div>
       <h2 className="page-title">Pedidos</h2>
-      <p className="page-subtitle">Controle de reposição e pedidos ao fornecedor.</p>
+      <p className="page-subtitle">
+  Controle de reposição e pedidos ao fornecedor. Pedidos já lançados no estoque podem ser cancelados com estorno automático.
+</p>
+
 
       {mensagem && !modalAberto && <p>{mensagem}</p>}
 
@@ -516,21 +647,31 @@ export default function Pedidos() {
                   </td>
                   <td style={td}>{formatarData(pedido.created_at)}</td>
                   <td style={td}>
-                    <div style={acoesTabela}>
-                      <button
-                        onClick={() => editarPedido(pedido)}
-                        className="btn btn-success btn-sm"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => excluirPedido(pedido.id)}
-                        className="btn btn-danger btn-sm"
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  </td>
+  <div style={acoesTabela}>
+    <button
+      onClick={() => editarPedido(pedido)}
+      className="btn btn-success btn-sm"
+    >
+      Editar
+    </button>
+
+    {pedido.status !== "Cancelado" && (
+      <button
+        onClick={() => cancelarPedido(pedido.id)}
+        className="btn btn-secondary btn-sm"
+      >
+        Cancelar
+      </button>
+    )}
+
+    <button
+      onClick={() => excluirPedido(pedido.id)}
+      className="btn btn-danger btn-sm"
+    >
+      Excluir
+    </button>
+  </div>
+</td>
                 </tr>
               )
             })}
@@ -644,6 +785,21 @@ export default function Pedidos() {
               Este pedido já lançou estoque. Produto e quantidade foram bloqueados para evitar inconsistência.
             </div>
           )}
+
+          {pedidoEmEdicao?.estoque_lancado && pedidoEmEdicao?.status !== "Cancelado" && (
+  <div
+    style={{
+      marginTop: 12,
+      padding: "10px 12px",
+      borderRadius: 10,
+      background: "#eff6ff",
+      color: "#1d4ed8",
+      fontSize: 14,
+    }}
+  >
+    Se este pedido for cancelado, o sistema estornará automaticamente a quantidade lançada no estoque.
+  </div>
+)}
         </>
       </AnimatedModal>
     </div>
