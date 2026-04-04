@@ -544,6 +544,21 @@ export default function AssistenteIAPage() {
   const compras = interpretarMultiplasCompras(texto)
   const recebimentos = interpretarRecebimentos(texto)
 
+  const textoNormalizado = normalizarTexto(texto)
+
+// PERGUNTAS FINANCEIRAS
+if (
+  textoNormalizado.includes("faturei") ||
+  textoNormalizado.includes("faturamento") ||
+  textoNormalizado.includes("pendente") ||
+  textoNormalizado.includes("estoque") ||
+  textoNormalizado.includes("mais vendido")
+) {
+  responderPergunta(textoNormalizado)
+  setLoadingIA(false)
+  return
+}
+
   if (itens.length === 0 && compras.length === 0 && recebimentos.length === 0) {
   setLoadingIA(false)
   setMensagem("A IA não identificou nenhuma venda, compra ou recebimento nesse texto.")
@@ -552,9 +567,9 @@ export default function AssistenteIAPage() {
 
  if (compras.length > 0 && itens.length === 0) {
   setLoadingIA(false)
-  setMensagem("A IA já identificou uma compra. No próximo passo vamos ligar isso à página de pedidos/compras.")
+  processarPedidosIA(compras)
   return
- }
+}
 
   if (recebimentos.length > 0 && itens.length === 0 && compras.length === 0) {
   setLoadingIA(false)
@@ -829,6 +844,148 @@ if (vendasSalvas.length > 0) {
 }
 
   setMensagem("Nenhuma ação foi concluída.")
+}
+
+async function responderPergunta(texto: string) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Usuário não autenticado.")
+    return
+  }
+
+  // 🔹 FATURAMENTO
+  if (texto.includes("faturei") || texto.includes("faturamento")) {
+    const { data } = await supabase
+      .from("sales")
+      .select("valor_total")
+      .eq("user_id", user.id)
+      .eq("status", "Ativa")
+
+    const total = (data || []).reduce((acc, v) => acc + Number(v.valor_total), 0)
+
+    setMensagem(`💰 Seu faturamento total é R$ ${total.toFixed(2)}`)
+    return
+  }
+
+  // 🔹 PENDENTE
+  if (texto.includes("pendente")) {
+    const { data: vendas } = await supabase
+      .from("sales")
+      .select("id, valor_total")
+      .eq("user_id", user.id)
+      .eq("status", "Ativa")
+
+    const { data: pagamentos } = await supabase
+      .from("sale_payments")
+      .select("sale_id, valor")
+
+    let pendente = 0
+
+    for (const venda of vendas || []) {
+      const pagos = (pagamentos || [])
+        .filter(p => p.sale_id === venda.id)
+        .reduce((acc, p) => acc + Number(p.valor), 0)
+
+      pendente += Number(venda.valor_total) - pagos
+    }
+
+    setMensagem(`📊 Você tem R$ ${pendente.toFixed(2)} pendentes para receber`)
+    return
+  }
+
+  // 🔹 ESTOQUE
+  if (texto.includes("estoque")) {
+    const { data } = await supabase
+      .from("products")
+      .select("estoque, preco")
+      .eq("user_id", user.id)
+
+    const total = (data || []).reduce(
+      (acc, p) => acc + Number(p.estoque) * Number(p.preco),
+      0
+    )
+
+    setMensagem(`📦 Você tem R$ ${total.toFixed(2)} em estoque`)
+    return
+  }
+
+  // 🔹 MAIS VENDIDO
+  if (texto.includes("mais vendido")) {
+    const { data } = await supabase
+      .from("sales")
+      .select("product_id, quantidade")
+
+    const mapa: Record<number, number> = {}
+
+    for (const v of data || []) {
+      mapa[v.product_id] = (mapa[v.product_id] || 0) + v.quantidade
+    }
+
+    const top = Object.entries(mapa).sort((a, b) => b[1] - a[1])[0]
+
+    if (!top) {
+      setMensagem("Nenhuma venda encontrada.")
+      return
+    }
+
+    const produto = produtos.find(p => p.id === Number(top[0]))
+
+    setMensagem(`🔥 Produto mais vendido: ${produto?.nome} (${top[1]} unidades)`)
+    return
+  }
+
+  setMensagem("Não entendi sua pergunta ainda.")
+}
+
+async function processarPedidosIA(compras: CompraInterpretadaItem[]) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Usuário não autenticado.")
+    return
+  }
+
+  for (const item of compras) {
+    const produtosOrdenados = encontrarProdutosOrdenados(produtos, item.produtoTexto)
+    const produto = produtosOrdenados[0]
+
+    if (!produto) continue
+
+    const quantidade = Number(item.quantidade)
+
+    // cria pedido
+    await supabase.from("orders").insert({
+      product_id: produto.id,
+      quantidade,
+      fornecedor: item.fornecedorTexto || "Fornecedor IA",
+      status: "Recebido",
+      user_id: user.id,
+    })
+
+    // atualiza estoque
+    const novoEstoque = Number(produto.estoque) + quantidade
+
+    await supabase
+      .from("products")
+      .update({ estoque: novoEstoque })
+      .eq("id", produto.id)
+
+    // movimentação
+    await registrarMovimentoEstoque({
+      productId: produto.id,
+      userId: user.id,
+      tipo: "entrada",
+      quantidade,
+      motivo: "Pedido via IA",
+    })
+  }
+
+  setMensagem("📦 Pedido registrado com sucesso via IA!")
 }
 
   return (
