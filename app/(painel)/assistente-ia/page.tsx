@@ -530,7 +530,7 @@ export default function AssistenteIAPage() {
   setInterpretado(false)
  }
 
-  function interpretar() {
+  async function interpretar() {
   setMensagem("")
   setLoadingIA(true)
 
@@ -546,14 +546,26 @@ export default function AssistenteIAPage() {
 
   const textoNormalizado = normalizarTexto(texto)
 
-// PERGUNTAS FINANCEIRAS
+// PERGUNTAS GERENCIAIS
 if (
   textoNormalizado.includes("faturei") ||
   textoNormalizado.includes("faturamento") ||
   textoNormalizado.includes("pendente") ||
   textoNormalizado.includes("estoque") ||
-  textoNormalizado.includes("mais vendido")
+  textoNormalizado.includes("mais vendido") ||
+  textoNormalizado.includes("resuma meu dia") ||
+  textoNormalizado.includes("resumo do dia") ||
+  textoNormalizado.includes("7 dias") ||
+  textoNormalizado.includes("ultimos 7 dias") ||
+  textoNormalizado.includes("últimos 7 dias") ||
+  textoNormalizado.includes("repor") ||
+  textoNormalizado.includes("reposicao") ||
+  textoNormalizado.includes("reposição") ||
+  textoNormalizado.includes("estoque baixo") ||
+  textoNormalizado.includes("zerado") ||
+  textoNormalizado.includes("sem estoque")
 ) {
+  await 
   responderPergunta(textoNormalizado)
   setLoadingIA(false)
   return
@@ -856,7 +868,87 @@ async function responderPergunta(texto: string) {
     return
   }
 
-  // 🔹 FATURAMENTO
+  const hoje = new Date()
+  const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()).toISOString()
+
+  const data7Dias = new Date()
+  data7Dias.setDate(data7Dias.getDate() - 7)
+  const inicio7Dias = data7Dias.toISOString()
+
+  // 🔹 RESUMO DO DIA
+  if (texto.includes("resuma meu dia") || texto.includes("resumo do dia")) {
+    const { data: vendasHoje } = await supabase
+      .from("sales")
+      .select("id, valor_total")
+      .eq("user_id", user.id)
+      .eq("status", "Ativa")
+      .gte("created_at", inicioHoje)
+
+    const { data: pagamentosHoje } = await supabase
+      .from("sale_payments")
+      .select("valor, created_at")
+      .eq("user_id", user.id)
+      .gte("created_at", inicioHoje)
+
+    const faturadoHoje = (vendasHoje || []).reduce(
+      (acc, v) => acc + Number(v.valor_total),
+      0
+    )
+
+    const recebidoHoje = (pagamentosHoje || []).reduce(
+      (acc, p) => acc + Number(p.valor),
+      0
+    )
+
+    const pendenteHoje = faturadoHoje - recebidoHoje
+    const qtdVendasHoje = (vendasHoje || []).length
+
+    setMensagem(
+      `📊 Resumo do dia: ${qtdVendasHoje} venda(s), faturamento de R$ ${faturadoHoje.toFixed(
+        2
+      )}, recebido de R$ ${recebidoHoje.toFixed(2)} e pendente de R$ ${pendenteHoje.toFixed(2)}.`
+    )
+    return
+  }
+
+  // 🔹 ÚLTIMOS 7 DIAS
+  if (
+    texto.includes("ultimos 7 dias") ||
+    texto.includes("últimos 7 dias") ||
+    texto.includes("7 dias")
+  ) {
+    const { data: vendas7Dias } = await supabase
+      .from("sales")
+      .select("id, valor_total")
+      .eq("user_id", user.id)
+      .eq("status", "Ativa")
+      .gte("created_at", inicio7Dias)
+
+    const { data: pagamentos7Dias } = await supabase
+      .from("sale_payments")
+      .select("valor, created_at")
+      .eq("user_id", user.id)
+      .gte("created_at", inicio7Dias)
+
+    const faturado7Dias = (vendas7Dias || []).reduce(
+      (acc, v) => acc + Number(v.valor_total),
+      0
+    )
+
+    const recebido7Dias = (pagamentos7Dias || []).reduce(
+      (acc, p) => acc + Number(p.valor),
+      0
+    )
+
+    setMensagem(
+      `📉 Nos últimos 7 dias você faturou R$ ${faturado7Dias.toFixed(
+        2
+      )}, recebeu R$ ${recebido7Dias.toFixed(2)} e realizou ${(vendas7Dias || []).length} venda(s).`
+    )
+    return
+  }
+
+  // 🔹 FATURAMENTO TOTAL
   if (texto.includes("faturei") || texto.includes("faturamento")) {
     const { data } = await supabase
       .from("sales")
@@ -870,7 +962,7 @@ async function responderPergunta(texto: string) {
     return
   }
 
-  // 🔹 PENDENTE
+  // 🔹 PENDENTE PARA RECEBER
   if (texto.includes("pendente")) {
     const { data: vendas } = await supabase
       .from("sales")
@@ -881,12 +973,13 @@ async function responderPergunta(texto: string) {
     const { data: pagamentos } = await supabase
       .from("sale_payments")
       .select("sale_id, valor")
+      .eq("user_id", user.id)
 
     let pendente = 0
 
     for (const venda of vendas || []) {
       const pagos = (pagamentos || [])
-        .filter(p => p.sale_id === venda.id)
+        .filter((p) => p.sale_id === venda.id)
         .reduce((acc, p) => acc + Number(p.valor), 0)
 
       pendente += Number(venda.valor_total) - pagos
@@ -896,11 +989,16 @@ async function responderPergunta(texto: string) {
     return
   }
 
-  // 🔹 ESTOQUE
-  if (texto.includes("estoque")) {
+  // 🔹 VALOR PARADO NO ESTOQUE
+  if (
+    texto.includes("parado no estoque") ||
+    texto.includes("valor em estoque") ||
+    texto.includes("quanto tenho em estoque") ||
+    texto.includes("estoque")
+  ) {
     const { data } = await supabase
       .from("products")
-      .select("estoque, preco")
+      .select("nome, estoque, preco")
       .eq("user_id", user.id)
 
     const total = (data || []).reduce(
@@ -908,32 +1006,85 @@ async function responderPergunta(texto: string) {
       0
     )
 
-    setMensagem(`📦 Você tem R$ ${total.toFixed(2)} em estoque`)
+    setMensagem(`📦 Você tem R$ ${total.toFixed(2)} em valor de venda parado no estoque.`)
     return
   }
 
-  // 🔹 MAIS VENDIDO
+  // 🔹 PRODUTO MAIS VENDIDO
   if (texto.includes("mais vendido")) {
     const { data } = await supabase
       .from("sales")
       .select("product_id, quantidade")
+      .eq("user_id", user.id)
+      .eq("status", "Ativa")
 
     const mapa: Record<number, number> = {}
 
     for (const v of data || []) {
-      mapa[v.product_id] = (mapa[v.product_id] || 0) + v.quantidade
+      mapa[v.product_id] = (mapa[v.product_id] || 0) + Number(v.quantidade)
     }
 
-    const top = Object.entries(mapa).sort((a, b) => b[1] - a[1])[0]
+    const top = Object.entries(mapa).sort((a, b) => Number(b[1]) - Number(a[1]))[0]
 
     if (!top) {
       setMensagem("Nenhuma venda encontrada.")
       return
     }
 
-    const produto = produtos.find(p => p.id === Number(top[0]))
+    const produto = produtos.find((p) => p.id === Number(top[0]))
 
-    setMensagem(`🔥 Produto mais vendido: ${produto?.nome} (${top[1]} unidades)`)
+    setMensagem(`🔥 Produto mais vendido: ${produto?.nome || "Produto"} (${top[1]} unidades)`)
+    return
+  }
+
+  // 🔹 REPOSIÇÃO INTELIGENTE
+  if (
+    texto.includes("repor") ||
+    texto.includes("reposicao") ||
+    texto.includes("reposição") ||
+    texto.includes("estoque baixo")
+  ) {
+    const { data } = await supabase
+      .from("products")
+      .select("nome, estoque")
+      .eq("user_id", user.id)
+
+    const criticos = (data || []).filter((p) => Number(p.estoque) <= 2)
+
+    if (criticos.length === 0) {
+      setMensagem("✅ Nenhum produto está em nível crítico de estoque.")
+      return
+    }
+
+    const lista = criticos
+      .slice(0, 5)
+      .map((p) => `${p.nome} (${p.estoque})`)
+      .join(", ")
+
+    setMensagem(`🚨 Produtos para repor: ${lista}`)
+    return
+  }
+
+  // 🔹 ALERTA DE PRODUTOS ZERADOS
+  if (texto.includes("zerado") || texto.includes("sem estoque")) {
+    const { data } = await supabase
+      .from("products")
+      .select("nome, estoque")
+      .eq("user_id", user.id)
+
+    const zerados = (data || []).filter((p) => Number(p.estoque) <= 0)
+
+    if (zerados.length === 0) {
+      setMensagem("✅ Nenhum produto está zerado no estoque.")
+      return
+    }
+
+    const lista = zerados
+      .slice(0, 5)
+      .map((p) => p.nome)
+      .join(", ")
+
+    setMensagem(`📦 Produtos sem estoque: ${lista}`)
     return
   }
 
@@ -992,8 +1143,8 @@ async function processarPedidosIA(compras: CompraInterpretadaItem[]) {
     <div>
       <h2 className="page-title">Assistente IA</h2>
       <p className="page-subtitle">
-        Digite uma venda em texto. A IA interpreta, encontra produto e cliente, e você confirma antes de salvar.
-      </p>
+  Digite vendas, pedidos ou perguntas sobre sua operação. A IA pode lançar vendas, registrar pedidos e responder indicadores do negócio.
+</p>
 
       {mensagem && (
         <div
@@ -1014,12 +1165,24 @@ async function processarPedidosIA(compras: CompraInterpretadaItem[]) {
 
       <div className="section-card" style={{ marginTop: 20 }}>
         <div style={{ marginBottom: 12, color: "#6b7280", fontSize: 14 }}>
-          Exemplos:
-          <br />
-          • vendi 2 meias preta para Arlene e recebi 30 no pix
-          <br />
-          • vendi 1 conjunto camila azul m para Maria e recebi 100 no dinheiro
-        </div>
+  Exemplos:
+  <br />
+  • vendi 2 meias preta para Arlene e recebi 30 no pix
+  <br />
+  • efetuei uma venda de uma meia preta para Arlene
+  <br />
+  • comprei 10 meias pretas por 8 reais cada
+  <br />
+  • quanto eu faturei?
+  <br />
+  • quanto tenho pendente para receber?
+  <br />
+  • resuma meu dia
+  <br />
+  • qual produto mais vendido?
+  <br />
+  • o que preciso repor?
+</div>
 
         <textarea
           value={texto}
