@@ -12,6 +12,9 @@ import HelpTooltip from "../../components/HelpTooltip"
 import HelpBanner from "../../components/InfoBanner"
 import { getMyPlanAccess } from "@/lib/getMyPlanAccess"
 import FeatureBlockedCard from "@/app/components/FeatureBlockedCard"
+import { cancelSale } from "@/lib/services/sales/cancelSale"
+import { restoreSale } from "@/lib/services/sales/restoreSale"
+import { addSalePayment } from "@/lib/services/sales/addSalePayment"
 
 type VendaBanco = {
   id: number
@@ -293,74 +296,16 @@ export default function HistoricoVendas() {
     return
   }
 
-  const { data: vendaAtual, error: erroVendaAtual } = await supabase
-    .from("sales")
-    .select("id, status, estoque_devolvido, quantidade, product_id")
-    .eq("id", venda.id)
-    .eq("user_id", user.id)
-    .maybeSingle()
+  const resultado = await cancelSale({
+    saleId: venda.id,
+    userId: user.id,
+  })
 
-  if (erroVendaAtual || !vendaAtual) {
-    setMensagem("Não foi possível localizar essa venda.")
-    return
+  setMensagem(resultado.message)
+
+  if (resultado.success) {
+    await carregarVendas()
   }
-
-  if (vendaAtual.status === "Cancelada") {
-    setMensagem("Essa venda já está cancelada.")
-    return
-  }
-
-  if (!vendaAtual.estoque_devolvido) {
-    const { data: produtoData, error: erroProduto } = await supabase
-      .from("products")
-      .select("id, estoque")
-      .eq("id", vendaAtual.product_id)
-      .eq("user_id", user.id)
-      .maybeSingle()
-
-    if (erroProduto || !produtoData) {
-      setMensagem("Não foi possível localizar o produto dessa venda.")
-      return
-    }
-
-    const novoEstoque = Number(produtoData.estoque) + Number(vendaAtual.quantidade)
-
-    const { error: erroAtualizarEstoque } = await supabase
-      .from("products")
-      .update({ estoque: novoEstoque })
-      .eq("id", vendaAtual.product_id)
-      .eq("user_id", user.id)
-
-    if (erroAtualizarEstoque) {
-      setMensagem("Erro ao devolver o item ao estoque.")
-      return
-    }
-
-    await registrarMovimentoEstoque({
-      productId: vendaAtual.product_id,
-      userId: user.id,
-      tipo: "cancelamento",
-      quantidade: Number(vendaAtual.quantidade),
-      motivo: "Cancelamento de venda",
-    })
-  }
-
-  const { error: erroVenda } = await supabase
-    .from("sales")
-    .update({
-      status: "Cancelada",
-      estoque_devolvido: true,
-    })
-    .eq("id", vendaAtual.id)
-    .eq("user_id", user.id)
-
-  if (erroVenda) {
-    setMensagem("Erro ao cancelar a venda.")
-    return
-  }
-
-  setMensagem("Venda cancelada e estoque devolvido com sucesso.")
-  await carregarVendas()
 }
 
   async function restaurarVenda(venda: VendaExibicao) {
@@ -375,84 +320,17 @@ export default function HistoricoVendas() {
     return
   }
 
-  const { data: vendaAtual, error: erroVendaAtual } = await supabase
-    .from("sales")
-    .select("id, status, estoque_devolvido, quantidade, product_id")
-    .eq("id", venda.id)
-    .eq("user_id", user.id)
-    .maybeSingle()
-
-  if (erroVendaAtual || !vendaAtual) {
-    setMensagem("Não foi possível localizar essa venda.")
-    return
-  }
-
-  if (vendaAtual.status?.toLowerCase() !== "cancelada") {
-    setMensagem("Somente vendas canceladas podem ser restauradas.")
-    return
-  }
-
-  if (!vendaAtual.estoque_devolvido) {
-    setMensagem("Essa venda já está ativa no estoque.")
-    return
-  }
-
-  const { data: produtoData, error: erroProduto } = await supabase
-    .from("products")
-    .select("id, estoque")
-    .eq("id", vendaAtual.product_id)
-    .eq("user_id", user.id)
-    .maybeSingle()
-
-  if (erroProduto || !produtoData) {
-    setMensagem("Não foi possível localizar o produto dessa venda.")
-    return
-  }
-
-  if (Number(produtoData.estoque) < Number(vendaAtual.quantidade)) {
-    setMensagem("Não há estoque suficiente para restaurar essa venda.")
-    return
-  }
-
-  const novoEstoque = Number(produtoData.estoque) - Number(vendaAtual.quantidade)
-
-  const { error: erroAtualizarEstoque } = await supabase
-    .from("products")
-    .update({ estoque: novoEstoque })
-    .eq("id", vendaAtual.product_id)
-    .eq("user_id", user.id)
-
-  if (erroAtualizarEstoque) {
-    setMensagem("Erro ao baixar novamente o estoque para restaurar a venda.")
-    return
-  }
-
-  await registrarMovimentoEstoque({
-    productId: vendaAtual.product_id,
+  const resultado = await restoreSale({
+    saleId: venda.id,
     userId: user.id,
-    tipo: "ajuste",
-    quantidade: -Math.abs(Number(vendaAtual.quantidade)),
-    motivo: "Restauração de venda cancelada",
   })
 
-  const { error: erroVenda } = await supabase
-    .from("sales")
-    .update({
-      status: "Ativa",
-      estoque_devolvido: false,
-    })
-    .eq("id", vendaAtual.id)
-    .eq("user_id", user.id)
+  setMensagem(resultado.message)
 
-  if (erroVenda) {
-    setMensagem("Erro ao restaurar a venda.")
-    return
+  if (resultado.success) {
+    await carregarVendas()
   }
-
-  setMensagem("Venda restaurada com sucesso.")
-  await carregarVendas()
 }
-
 
   function abrirModalPagamento(venda: VendaExibicao) {
     setVendaSelecionada(venda)
@@ -497,20 +375,10 @@ function fecharModalExcluirVenda() {
     return
   }
 
-  if (vendaSelecionada.status === "Cancelada") {
-    setMensagem("Não é possível adicionar pagamento em venda cancelada.")
-    return
-  }
-
   const valor = Number(valorPagamento || 0)
 
   if (valor <= 0) {
     setMensagem("Informe um valor de pagamento válido.")
-    return
-  }
-
-  if (valor > vendaSelecionada.valor_em_aberto) {
-    setMensagem("O pagamento não pode ser maior que o valor em aberto.")
     return
   }
 
@@ -521,33 +389,26 @@ function fecharModalExcluirVenda() {
 
   setSalvandoPagamento(true)
 
-  const payload = {
-    sale_id: vendaSelecionada.id,
-    user_id: user.id,
+  const resultado = await addSalePayment({
+    saleId: vendaSelecionada.id,
+    userId: user.id,
     valor,
-    forma_pagamento: formaPagamento,
+    formaPagamento,
     observacao: observacaoPagamento || null,
-    created_at: montarDataISO(dataPagamento),
-  }
-
-  console.log("PAYLOAD PAGAMENTO:", payload)
-
-  const { error } = await supabase
-    .from("sale_payments")
-    .insert([payload])
+    dataPagamentoIso: montarDataISO(dataPagamento),
+  })
 
   setSalvandoPagamento(false)
 
-  if (error) {
-    console.log("ERRO AO REGISTRAR PAGAMENTO:", error)
-    setMensagem(error.message || "Erro ao registrar pagamento.")
+  if (!resultado.success) {
+    setMensagem(resultado.message)
     return
   }
 
   fecharModalPagamento()
   setMensagem("Pagamento adicionado com sucesso.")
   await carregarVendas()
-}
+} 
 
   function abrirModalEditarPagamento(venda: VendaExibicao, pagamento: PagamentoBanco) {
   setVendaSelecionada(venda)
