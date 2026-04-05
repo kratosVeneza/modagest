@@ -52,11 +52,17 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
   }
 
   if (valorRecebidoInicial < 0) {
-    return { success: false, message: "O valor recebido inicial não pode ser negativo." }
+    return {
+      success: false,
+      message: "O valor recebido inicial não pode ser negativo.",
+    }
   }
 
   if (valorRecebidoInicial > valorTotal) {
-    return { success: false, message: "O valor recebido inicial não pode ser maior que o valor total." }
+    return {
+      success: false,
+      message: "O valor recebido inicial não pode ser maior que o valor total.",
+    }
   }
 
   const vendaPayload = {
@@ -68,6 +74,7 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     user_id: userId,
     status: "Ativa",
     created_at: dataVendaIso,
+    estoque_devolvido: false,
   }
 
   const { data: vendaCriada, error: erroVenda } = await supabase
@@ -81,68 +88,45 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
   }
 
   if (valorRecebidoInicial > 0) {
-  // 1. Registrar pagamento da venda
-  const { error: erroPagamento } = await supabase
-    .from("sale_payments")
-    .insert([
-      {
-        sale_id: vendaCriada.id,
-        user_id: userId,
-        valor: valorRecebidoInicial,
-        forma_pagamento: formaPagamentoInicial,
-        observacao: observacaoPagamentoInicial || null,
-        created_at: dataVendaIso,
-      },
-    ])
+    const { error: erroPagamento } = await supabase
+      .from("sale_payments")
+      .insert([
+        {
+          sale_id: vendaCriada.id,
+          user_id: userId,
+          valor: valorRecebidoInicial,
+          forma_pagamento: formaPagamentoInicial,
+          observacao: observacaoPagamentoInicial || null,
+          created_at: dataVendaIso,
+        },
+      ])
 
-  if (erroPagamento) {
-    return {
-      success: false,
-      message: "Venda criada, mas houve erro ao registrar o pagamento inicial.",
+    if (erroPagamento) {
+      return {
+        success: false,
+        message: "Venda criada, mas houve erro ao registrar o pagamento inicial.",
+      }
+    }
+
+    const { error: erroFinanceiro } = await supabase
+      .from("financial_transactions")
+      .insert([
+        {
+          user_id: userId,
+          type: "entrada",
+          amount: valorRecebidoInicial,
+          status: "pago",
+          created_at: dataVendaIso,
+        },
+      ])
+
+    if (erroFinanceiro) {
+      return {
+        success: false,
+        message: "Venda e pagamento registrados, mas erro ao lançar no financeiro.",
+      }
     }
   }
-
-  // 2. Registrar entrada no financeiro 🔥
-  const { error: erroFinanceiro } = await supabase
-    .from("financial_entries")
-    .insert([
-      {
-        user_id: userId,
-        tipo: "entrada",
-        valor: valorRecebidoInicial,
-        descricao: "Recebimento de venda",
-        referencia_id: vendaCriada.id,
-        created_at: dataVendaIso,
-      },
-    ])
-
-  if (erroFinanceiro) {
-    return {
-      success: false,
-      message: "Pagamento registrado, mas erro ao lançar no financeiro.",
-    }
-  }
-
-  // 3. Histórico de recebimento 🔥
-  const { error: erroHistorico } = await supabase
-    .from("sale_payment_history")
-    .insert([
-      {
-        sale_id: vendaCriada.id,
-        user_id: userId,
-        valor: valorRecebidoInicial,
-        forma_pagamento: formaPagamentoInicial,
-        created_at: dataVendaIso,
-      },
-    ])
-
-  if (erroHistorico) {
-    return {
-      success: false,
-      message: "Pagamento registrado, mas erro ao salvar histórico.",
-    }
-  }
-}
 
   const novoEstoque = Number(produto.estoque) - quantidade
 
