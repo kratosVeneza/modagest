@@ -3,6 +3,21 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
+import { createSale } from "@/lib/services/sales/createSale"
+import { hojeInputDate, montarDataISO } from "@/lib/utils/date"
+import {
+  normalizarTexto,
+  normalizarCor,
+  normalizarTamanho,
+  gerarVariacoesPalavra,
+  contemAlgumaVariacao,
+  numeroPorExtensoParaNumero,
+  extrairQuantidade,
+  identificarFormaPagamento,
+  limparInicioDeVenda,
+  normalizarNomePessoa,
+  similarityBasica,
+} from "@/lib/utils/text"
 
 type Produto = {
   id: number
@@ -22,12 +37,12 @@ type Cliente = {
   user_id: string
 }
 
-type VendaInterpretada = {
+type VendaInterpretadaItem = {
   quantidade: number
   produtoTexto: string
   clienteTexto: string
-  valorRecebido: number
-  formaPagamento: string
+  valorRecebido: number | null
+  formaPagamento: string | null
   observacao: string
   dataVenda: string
 }
@@ -49,152 +64,6 @@ const formasPagamento = [
   "Transferência",
   "Outro",
 ]
-
-function hojeInputDate() {
-  const hoje = new Date()
-  const ano = hoje.getFullYear()
-  const mes = String(hoje.getMonth() + 1).padStart(2, "0")
-  const dia = String(hoje.getDate()).padStart(2, "0")
-  return `${ano}-${mes}-${dia}`
-}
-
-function montarDataISO(dataInput: string) {
-  if (!dataInput) return new Date().toISOString()
-  return new Date(`${dataInput}T12:00:00-03:00`).toISOString()
-}
-
-function normalizarTexto(valor: string) {
-  return valor
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^\w\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-}
-
-function normalizarCor(valor: string) {
-  const v = normalizarTexto(valor)
-
-  if (v === "preto" || v === "preta" || v === "pretos" || v === "pretas") return "preto"
-  if (v === "branco" || v === "branca" || v === "brancos" || v === "brancas") return "branco"
-  if (v === "rosa" || v === "rosinha") return "rosa"
-  if (v === "azul marinho" || v === "marinho") return "marinho"
-  if (v === "cinza" || v === "chumbo" || v === "grafite") return "cinza"
-
-  return v
-}
-
-function normalizarTamanho(valor: string) {
-  const v = normalizarTexto(valor)
-
-  if (v === "pp") return "pp"
-  if (v === "p" || v === "pequeno") return "p"
-  if (v === "m" || v === "medio" || v === "médio") return "m"
-  if (v === "g" || v === "grande") return "g"
-  if (v === "gg" || v === "extra grande" || v === "xg" || v === "xgg") return "gg"
-
-  return v
-}
-
-function gerarVariacoesPalavra(valor: string) {
-  const base = normalizarTexto(valor)
-  if (!base) return []
-
-  const variacoes = new Set<string>()
-  variacoes.add(base)
-
-  // singular/plural simples
-  if (base.endsWith("s")) {
-    variacoes.add(base.slice(0, -1))
-  } else {
-    variacoes.add(`${base}s`)
-  }
-
-  // masculino/feminino simples
-  if (base.endsWith("o")) {
-    variacoes.add(base.slice(0, -1) + "a")
-    variacoes.add(base.slice(0, -1) + "os")
-    variacoes.add(base.slice(0, -1) + "as")
-  }
-
-  if (base.endsWith("a")) {
-    variacoes.add(base.slice(0, -1) + "o")
-    variacoes.add(base.slice(0, -1) + "os")
-    variacoes.add(base.slice(0, -1) + "as")
-  }
-
-  return [...variacoes]
-}
-
-function contemAlgumaVariacao(texto: string, valor: string) {
-  const textoNormalizado = normalizarTexto(texto)
-  const variacoes = gerarVariacoesPalavra(valor)
-
-  return variacoes.some((item) => textoNormalizado.includes(item))
-}
-
-type VendaInterpretadaItem = {
-  quantidade: number
-  produtoTexto: string
-  clienteTexto: string
-  valorRecebido: number | null
-  formaPagamento: string | null
-  observacao: string
-  dataVenda: string
-}
-
-function numeroPorExtensoParaNumero(texto: string) {
-  const mapa: Record<string, number> = {
-    um: 1,
-    uma: 1,
-    dois: 2,
-    duas: 2,
-    tres: 3,
-    três: 3,
-    quatro: 4,
-    cinco: 5,
-    seis: 6,
-    sete: 7,
-    oito: 8,
-    nove: 9,
-    dez: 10,
-  }
-
-  return mapa[normalizarTexto(texto)] || null
-}
-
-function extrairQuantidade(texto: string) {
-  const numeroDireto = texto.match(/\b(\d+)\b/)
-  if (numeroDireto) return Number(numeroDireto[1])
-
-  const palavras = texto.split(" ")
-  for (const palavra of palavras) {
-    const convertido = numeroPorExtensoParaNumero(palavra)
-    if (convertido) return convertido
-  }
-
-  return 1
-}
-
-function identificarFormaPagamento(texto: string) {
-  const textoNormalizado = normalizarTexto(texto)
-
-  const formaEncontrada = formasPagamento.find((forma) =>
-    textoNormalizado.includes(normalizarTexto(forma))
-  )
-
-  return formaEncontrada || null
-}
-
-function limparInicioDeVenda(texto: string) {
-  return texto
-    .replace(
-      /^(hoje\s+)?(vendi|efetuei uma venda de|efetuei uma venda|efetuei venda de|efetuei venda|fiz uma venda de|fiz uma venda|fiz venda de|fiz venda|realizei uma venda de|realizei uma venda|realizei venda de|realizei venda|registrei uma venda de|registrei uma venda|registrei venda de|registrei venda)\s*/i,
-      ""
-    )
-    .trim()
-}
 
 function interpretarMultiplasVendas(texto: string): VendaInterpretadaItem[] {
   const textoOriginal = texto.trim()
@@ -412,30 +281,6 @@ function encontrarProdutosOrdenados(produtos: Produto[], textoProduto: string) {
     .filter((item) => item.pontos > 0)
     .sort((a, b) => b.pontos - a.pontos)
     .map((item) => item.produto)
-}
-
-function normalizarNomePessoa(valor: string) {
-  return normalizarTexto(valor)
-    .replace(/\b(sr|sra|senhor|senhora|dona|seu)\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-}
-
-function similarityBasica(a: string, b: string) {
-  const aa = normalizarNomePessoa(a)
-  const bb = normalizarNomePessoa(b)
-
-  if (!aa || !bb) return 0
-  if (aa === bb) return 1
-  if (aa.includes(bb) || bb.includes(aa)) return 0.9
-
-  const palavrasA = aa.split(" ").filter(Boolean)
-  const palavrasB = bb.split(" ").filter(Boolean)
-
-  const emComum = palavrasA.filter((p) => palavrasB.includes(p)).length
-  const base = Math.max(palavrasA.length, palavrasB.length)
-
-  return base > 0 ? emComum / base : 0
 }
 
 function encontrarCliente(clientes: Cliente[], textoCliente: string) {
@@ -723,10 +568,10 @@ if (
 
     if (quantidadeNumero > Number(produtoSelecionado.estoque)) {
       mensagensErro.push(
-  `O produto ${produtoSelecionado.nome}${
-    produtoSelecionado.cor ? ` • ${produtoSelecionado.cor}` : ""
-  }${produtoSelecionado.tamanho ? ` • ${produtoSelecionado.tamanho}` : ""} não tem estoque suficiente`
-)
+        `O produto ${produtoSelecionado.nome}${
+          produtoSelecionado.cor ? ` • ${produtoSelecionado.cor}` : ""
+        }${produtoSelecionado.tamanho ? ` • ${produtoSelecionado.tamanho}` : ""} não tem estoque suficiente`
+      )
       continue
     }
 
@@ -767,85 +612,24 @@ if (
       }
     }
 
-    const createdAtIso = montarDataISO(rascunho.dataVenda)
-
-    const vendaPayload = {
-      product_id: produtoSelecionado.id,
-      customer_id: clienteIdFinal,
+    const resultado = await createSale({
+      userId: user.id,
+      productId: produtoSelecionado.id,
+      customerId: clienteIdFinal,
       quantidade: quantidadeNumero,
-      valor_unitario: valorUnitario,
-      valor_total: valorTotal,
-      created_at: createdAtIso,
-      user_id: user.id,
-      status: "Ativa",
-      estoque_devolvido: false,
-    }
+      valorUnitario,
+      valorTotal,
+      dataVendaIso: montarDataISO(rascunho.dataVenda),
+      valorRecebidoInicial: valorRecebidoNumero,
+      formaPagamentoInicial: rascunho.formaPagamento || "Pix",
+      observacaoPagamentoInicial: rascunho.observacao || null,
+    })
 
-    const { data: vendaInserida, error: erroVenda } = await supabase
-      .from("sales")
-      .insert([vendaPayload])
-      .select()
-      .single()
-
-    if (erroVenda || !vendaInserida) {
+    if (!resultado.success) {
       mensagensErro.push(
-        erroVenda?.message || `Erro ao salvar venda de: ${produtoSelecionado.nome}`
+        resultado.message || `Erro ao salvar venda de: ${produtoSelecionado.nome}`
       )
       continue
-    }
-
-    const novoEstoque = Number(produtoSelecionado.estoque) - quantidadeNumero
-
-    const { error: erroEstoque } = await supabase
-      .from("products")
-      .update({ estoque: novoEstoque })
-      .eq("id", produtoSelecionado.id)
-      .eq("user_id", user.id)
-
-    if (erroEstoque) {
-      mensagensErro.push(
-        erroEstoque.message || `Erro ao baixar estoque de: ${produtoSelecionado.nome}`
-      )
-      continue
-    }
-
-    try {
-  await registrarMovimentoEstoque({
-    productId: produtoSelecionado.id,
-    userId: user.id,
-    tipo: "saida",
-    quantidade: quantidadeNumero,
-    motivo: "Venda",
-  })
-} catch (error: any) {
-  setSalvando(false)
-  setMensagem(
-    error?.message || "Venda salva, mas houve erro ao registrar a movimentação de estoque."
-  )
-  return
-}
-
-    if (valorRecebidoNumero > 0) {
-      const pagamentoPayload = {
-        sale_id: vendaInserida.id,
-        user_id: user.id,
-        valor: valorRecebidoNumero,
-        forma_pagamento: rascunho.formaPagamento,
-        observacao: rascunho.observacao || null,
-        created_at: createdAtIso,
-      }
-
-      const { error: erroPagamento } = await supabase
-        .from("sale_payments")
-        .insert([pagamentoPayload])
-
-      if (erroPagamento) {
-        mensagensErro.push(
-          erroPagamento.message ||
-            `Erro ao registrar pagamento de: ${produtoSelecionado.nome}`
-        )
-        continue
-      }
     }
 
     vendasSalvas.push(
@@ -863,20 +647,20 @@ if (
   }
 
   if (vendasSalvas.length > 0 && mensagensErro.length > 0) {
-  limparTudo()
-  await carregarBase()
-  setMensagem(
-    `Vendas salvas: ${vendasSalvas.join(", ")}. Pendências: ${mensagensErro.join(" | ")}`
-  )
-  return
-}
+    limparTudo()
+    await carregarBase()
+    setMensagem(
+      `Vendas salvas: ${vendasSalvas.join(", ")}. Pendências: ${mensagensErro.join(" | ")}`
+    )
+    return
+  }
 
-if (vendasSalvas.length > 0) {
-  limparTudo()
-  await carregarBase()
-  setMensagem("Vendas lançadas com sucesso pelo Assistente IA.")
-  return
-}
+  if (vendasSalvas.length > 0) {
+    limparTudo()
+    await carregarBase()
+    setMensagem("Vendas lançadas com sucesso pelo Assistente IA.")
+    return
+  }
 
   setMensagem("Nenhuma ação foi concluída.")
 }

@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
-import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 import HelpTooltip from "../../components/HelpTooltip"
 import HelpBanner from "../../components/InfoBanner"
+import { createSale } from "@/lib/services/sales/createSale"
 
 type Produto = {
   id: number
@@ -201,87 +201,24 @@ export default function Vendas() {
 
     setSalvando(true)
 
-    const novoEstoque = produto.estoque - qtd
-    const dataVendaISO = montarDataISO(dataVenda)
+    const resultado = await createSale({
+  userId: user.id,
+  productId: produto.id,
+  customerId: clienteId ? Number(clienteId) : null,
+  quantidade: qtd,
+  valorUnitario: Number(produto.preco),
+  valorTotal: Number(produto.preco) * qtd,
+  dataVendaIso: montarDataISO(dataVenda),
+  valorRecebidoInicial: recebidoInicial,
+  formaPagamentoInicial,
+  observacaoPagamentoInicial: observacaoPagamentoInicial || null,
+})
 
-    const payload: {
-      product_id: number
-      quantidade: number
-      valor_unitario: number
-      valor_total: number
-      user_id: string
-      customer_id?: number | null
-      status?: string
-      created_at: string
-    } = {
-      product_id: produto.id,
-      quantidade: qtd,
-      valor_unitario: Number(produto.preco),
-      valor_total: Number(produto.preco) * qtd,
-      user_id: user.id,
-      customer_id: clienteId ? Number(clienteId) : null,
-      status: "Ativa",
-      created_at: dataVendaISO,
-    }
-
-    const { data: vendaCriada, error: erroVenda } = await supabase
-      .from("sales")
-      .insert([payload])
-      .select("id")
-      .single()
-
-    if (erroVenda || !vendaCriada) {
-      setSalvando(false)
-      setMensagem("Erro ao registrar venda.")
-      return
-    }
-
-    if (recebidoInicial > 0) {
-      const { error: erroPagamento } = await supabase.from("sale_payments").insert([
-        {
-          sale_id: vendaCriada.id,
-          user_id: user.id,
-          valor: recebidoInicial,
-          forma_pagamento: formaPagamentoInicial,
-          observacao: observacaoPagamentoInicial || null,
-          created_at: dataVendaISO,
-        },
-      ])
-
-      if (erroPagamento) {
-        setSalvando(false)
-        setMensagem("Venda criada, mas houve erro ao registrar o pagamento inicial.")
-        return
-      }
-    }
-
-    try {
-  await registrarMovimentoEstoque({
-    productId: produto.id,
-    userId: user.id,
-    tipo: "saida",
-    quantidade: quantidadeNumero,
-    motivo: "Venda",
-  })
-} catch (error: any) {
+if (!resultado.success) {
   setSalvando(false)
-  setMensagem(
-    error?.message || "Venda salva, mas houve erro ao registrar a movimentação de estoque."
-  )
+  setMensagem(resultado.message)
   return
 }
-
-    const { error: erroEstoque } = await supabase
-      .from("products")
-      .update({ estoque: novoEstoque })
-      .eq("id", produto.id)
-      .eq("user_id", user.id)
-
-    if (erroEstoque) {
-      setSalvando(false)
-      setMensagem("Venda salva, mas houve erro ao atualizar o estoque.")
-      return
-    }
 
     setProdutoId("")
     setClienteId("")
