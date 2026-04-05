@@ -18,69 +18,12 @@ import { addSalePayment } from "@/lib/services/sales/addSalePayment"
 import { updateSalePayment } from "@/lib/services/sales/updateSalePayment"
 import { deleteSalePayment } from "@/lib/services/sales/deleteSalePayment"
 import { deleteCanceledSale } from "@/lib/services/sales/deleteCanceledSale"
-
-
-type VendaBanco = {
-  id: number
-  product_id: number
-  customer_id: number | null
-  quantidade: number
-  valor_unitario: number
-  valor_total: number
-  created_at: string
-  user_id: string
-  status: string
-  estoque_devolvido: boolean
-}
-
-type ProdutoBanco = {
-  id: number
-  nome: string
-  sku: string
-  estoque: number
-  cor: string | null
-  tamanho: string | null
-}
-
-type ClienteBanco = {
-  id: number
-  nome: string
-}
-
-type PagamentoBanco = {
-  id: number
-  sale_id: number
-  valor: number
-  forma_pagamento: string
-  observacao: string | null
-  created_at: string
-}
-
-type Loja = {
-  nome_loja?: string | null
-  logo_url?: string | null
-}
-
-type VendaExibicao = {
-  id: number
-  product_id: number
-  customer_id: number | null
-  quantidade: number
-  valor_unitario: number
-  valor_total: number
-  valor_recebido: number
-  valor_em_aberto: number
-  payment_status: "Pendente" | "Parcial" | "Recebida"
-  created_at: string
-  status: string
-  estoque_devolvido: boolean
-  nomeProduto: string
-  skuProduto: string
-  corProduto: string
-  tamanhoProduto: string
-  nomeCliente: string
-  pagamentos: PagamentoBanco[]
-}
+import {
+  getSalesHistory,
+  type Loja,
+  type PagamentoBanco,
+  type VendaExibicao,
+} from "@/lib/services/sales/getSalesHistory"
 
 const formasPagamento = [
   "Dinheiro",
@@ -168,125 +111,35 @@ export default function HistoricoVendas() {
   }
 
   async function carregarVendas() {
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
-
-    const { data: lojaData } = await supabase
-      .from("stores")
-      .select("nome_loja, logo_url")
-      .eq("user_id", user.id)
-      .maybeSingle()
-
-    const loja = (lojaData ?? null) as Loja | null
-
-    if (loja?.nome_loja) {
-      setNomeLoja(loja.nome_loja)
-    }
-
-    if (loja?.logo_url) {
-      setLogoUrl(loja.logo_url)
-    }
-
-    const { data: vendasData, error: erroVendas } = await supabase
-      .from("sales")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-
-    if (erroVendas) {
-      setMensagem("Erro ao carregar vendas.")
-      return
-    }
-
-    const { data: produtosData, error: erroProdutos } = await supabase
-  .from("products")
-  .select("id, nome, sku, estoque, cor, tamanho")
-  .eq("user_id", user.id)
-
-    if (erroProdutos) {
-      setMensagem("Erro ao carregar produtos.")
-      return
-    }
-
-    const { data: clientesData, error: erroClientes } = await supabase
-      .from("customers")
-      .select("id, nome")
-      .eq("user_id", user.id)
-
-    if (erroClientes) {
-      setMensagem("Erro ao carregar clientes.")
-      return
-    }
-
-    const { data: pagamentosData, error: erroPagamentos } = await supabase
-      .from("sale_payments")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true })
-
-    if (erroPagamentos) {
-      setMensagem("Erro ao carregar pagamentos.")
-      return
-    }
-
-    const vendasTipadas = (vendasData ?? []) as VendaBanco[]
-    const produtosTipados = (produtosData ?? []) as ProdutoBanco[]
-    const clientesTipados = (clientesData ?? []) as ClienteBanco[]
-    const pagamentosTipados = (pagamentosData ?? []) as PagamentoBanco[]
-
-    const vendasFormatadas: VendaExibicao[] = vendasTipadas.map((venda) => {
-      const produtoRelacionado = produtosTipados.find(
-        (produto) => produto.id === venda.product_id
-      )
-
-      const clienteRelacionado = clientesTipados.find(
-        (cliente) => cliente.id === venda.customer_id
-      )
-
-      const pagamentosDaVenda = pagamentosTipados.filter(
-        (pagamento) => pagamento.sale_id === venda.id
-      )
-
-      const valorRecebido = pagamentosDaVenda.reduce(
-        (soma, item) => soma + Number(item.valor),
-        0
-      )
-
-      const valorEmAberto = Math.max(Number(venda.valor_total) - valorRecebido, 0)
-
-      return {
-        id: venda.id,
-        product_id: venda.product_id,
-        customer_id: venda.customer_id,
-        quantidade: venda.quantidade,
-        valor_unitario: Number(venda.valor_unitario),
-        valor_total: Number(venda.valor_total),
-        valor_recebido: valorRecebido,
-        valor_em_aberto: valorEmAberto,
-        payment_status: calcularStatusPagamento(Number(venda.valor_total), valorRecebido),
-        created_at: venda.created_at,
-        status: venda.status || "Ativa",
-        estoque_devolvido: Boolean(venda.estoque_devolvido),
-        nomeProduto: produtoRelacionado?.nome || "Produto removido",
-        skuProduto: produtoRelacionado?.sku || "-",
-        corProduto: produtoRelacionado?.cor || "-",
-        tamanhoProduto: produtoRelacionado?.tamanho || "-",
-        nomeCliente: clienteRelacionado?.nome || "Sem cliente",
-
-        pagamentos: pagamentosDaVenda,
-      }
-    })
-
-    setVendas(vendasFormatadas)
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
   }
+
+  const resultado = await getSalesHistory(user.id)
+
+  if (!resultado.success) {
+    setMensagem(resultado.message)
+    setVendas(resultado.vendas)
+    return
+  }
+
+  if (resultado.loja?.nome_loja) {
+    setNomeLoja(resultado.loja.nome_loja)
+  }
+
+  if (resultado.loja?.logo_url) {
+    setLogoUrl(resultado.loja.logo_url)
+  }
+
+  setVendas(resultado.vendas)
+}
 
   async function cancelarVenda(venda: VendaExibicao) {
   setMensagem("")
