@@ -282,26 +282,39 @@ export default function HistoricoVendas() {
   }
 
   async function cancelarVenda(venda: VendaExibicao) {
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
 
-    if (venda.status === "Cancelada") {
-      setMensagem("Essa venda já está cancelada.")
-      return
-    }
+  const { data: vendaAtual, error: erroVendaAtual } = await supabase
+    .from("sales")
+    .select("id, status, estoque_devolvido, quantidade, product_id")
+    .eq("id", venda.id)
+    .eq("user_id", user.id)
+    .maybeSingle()
 
+  if (erroVendaAtual || !vendaAtual) {
+    setMensagem("Não foi possível localizar essa venda.")
+    return
+  }
+
+  if (vendaAtual.status === "Cancelada") {
+    setMensagem("Essa venda já está cancelada.")
+    return
+  }
+
+  if (!vendaAtual.estoque_devolvido) {
     const { data: produtoData, error: erroProduto } = await supabase
       .from("products")
       .select("id, estoque")
-      .eq("id", venda.product_id)
+      .eq("id", vendaAtual.product_id)
       .eq("user_id", user.id)
       .maybeSingle()
 
@@ -310,46 +323,45 @@ export default function HistoricoVendas() {
       return
     }
 
-    const novoEstoque = Number(produtoData.estoque) + Number(venda.quantidade)
+    const novoEstoque = Number(produtoData.estoque) + Number(vendaAtual.quantidade)
 
-    if (!venda.estoque_devolvido) {
-      const { error: erroAtualizarEstoque } = await supabase
-        .from("products")
-        .update({ estoque: novoEstoque })
-        .eq("id", venda.product_id)
-        .eq("user_id", user.id)
-
-      if (erroAtualizarEstoque) {
-        setMensagem("Erro ao devolver o item ao estoque.")
-        return
-      }
-
-      await registrarMovimentoEstoque({
-        productId: venda.product_id,
-        userId: user.id,
-        tipo: "cancelamento",
-        quantidade: venda.quantidade,
-        motivo: "Cancelamento de venda",
-      })
-    }
-
-    const { error: erroVenda } = await supabase
-      .from("sales")
-      .update({
-        status: "Cancelada",
-        estoque_devolvido: true,
-      })
-      .eq("id", venda.id)
+    const { error: erroAtualizarEstoque } = await supabase
+      .from("products")
+      .update({ estoque: novoEstoque })
+      .eq("id", vendaAtual.product_id)
       .eq("user_id", user.id)
 
-    if (erroVenda) {
-      setMensagem("Erro ao cancelar a venda.")
+    if (erroAtualizarEstoque) {
+      setMensagem("Erro ao devolver o item ao estoque.")
       return
     }
 
-    setMensagem("Venda cancelada e estoque devolvido com sucesso.")
-    await carregarVendas()
+    await registrarMovimentoEstoque({
+      productId: vendaAtual.product_id,
+      userId: user.id,
+      tipo: "cancelamento",
+      quantidade: Number(vendaAtual.quantidade),
+      motivo: "Cancelamento de venda",
+    })
   }
+
+  const { error: erroVenda } = await supabase
+    .from("sales")
+    .update({
+      status: "Cancelada",
+      estoque_devolvido: true,
+    })
+    .eq("id", vendaAtual.id)
+    .eq("user_id", user.id)
+
+  if (erroVenda) {
+    setMensagem("Erro ao cancelar a venda.")
+    return
+  }
+
+  setMensagem("Venda cancelada e estoque devolvido com sucesso.")
+  await carregarVendas()
+}
 
   async function restaurarVenda(venda: VendaExibicao) {
   setMensagem("")
@@ -363,15 +375,32 @@ export default function HistoricoVendas() {
     return
   }
 
-  if (venda.status?.toLowerCase() !== "cancelada") {
+  const { data: vendaAtual, error: erroVendaAtual } = await supabase
+    .from("sales")
+    .select("id, status, estoque_devolvido, quantidade, product_id")
+    .eq("id", venda.id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (erroVendaAtual || !vendaAtual) {
+    setMensagem("Não foi possível localizar essa venda.")
+    return
+  }
+
+  if (vendaAtual.status?.toLowerCase() !== "cancelada") {
     setMensagem("Somente vendas canceladas podem ser restauradas.")
+    return
+  }
+
+  if (!vendaAtual.estoque_devolvido) {
+    setMensagem("Essa venda já está ativa no estoque.")
     return
   }
 
   const { data: produtoData, error: erroProduto } = await supabase
     .from("products")
     .select("id, estoque")
-    .eq("id", venda.product_id)
+    .eq("id", vendaAtual.product_id)
     .eq("user_id", user.id)
     .maybeSingle()
 
@@ -380,17 +409,17 @@ export default function HistoricoVendas() {
     return
   }
 
-  if (Number(produtoData.estoque) < Number(venda.quantidade)) {
+  if (Number(produtoData.estoque) < Number(vendaAtual.quantidade)) {
     setMensagem("Não há estoque suficiente para restaurar essa venda.")
     return
   }
 
-  const novoEstoque = Number(produtoData.estoque) - Number(venda.quantidade)
+  const novoEstoque = Number(produtoData.estoque) - Number(vendaAtual.quantidade)
 
   const { error: erroAtualizarEstoque } = await supabase
     .from("products")
     .update({ estoque: novoEstoque })
-    .eq("id", venda.product_id)
+    .eq("id", vendaAtual.product_id)
     .eq("user_id", user.id)
 
   if (erroAtualizarEstoque) {
@@ -399,10 +428,10 @@ export default function HistoricoVendas() {
   }
 
   await registrarMovimentoEstoque({
-    productId: venda.product_id,
+    productId: vendaAtual.product_id,
     userId: user.id,
     tipo: "ajuste",
-    quantidade: -Math.abs(venda.quantidade),
+    quantidade: -Math.abs(Number(vendaAtual.quantidade)),
     motivo: "Restauração de venda cancelada",
   })
 
@@ -412,7 +441,7 @@ export default function HistoricoVendas() {
       status: "Ativa",
       estoque_devolvido: false,
     })
-    .eq("id", venda.id)
+    .eq("id", vendaAtual.id)
     .eq("user_id", user.id)
 
   if (erroVenda) {
@@ -423,6 +452,7 @@ export default function HistoricoVendas() {
   setMensagem("Venda restaurada com sucesso.")
   await carregarVendas()
 }
+
 
   function abrirModalPagamento(venda: VendaExibicao) {
     setVendaSelecionada(venda)
