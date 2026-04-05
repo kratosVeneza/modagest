@@ -10,7 +10,7 @@ type AddPaymentInput = {
 }
 
 type AddPaymentResult =
-  | { success: true }
+  | { success: true; warning?: string }
   | { success: false; message: string }
 
 export async function addSalePayment(input: AddPaymentInput): Promise<AddPaymentResult> {
@@ -23,7 +23,6 @@ export async function addSalePayment(input: AddPaymentInput): Promise<AddPayment
     dataPagamentoIso,
   } = input
 
-  // 1. Buscar venda
   const { data: venda, error: erroVenda } = await supabase
     .from("sales")
     .select("id, valor_total, status")
@@ -39,12 +38,15 @@ export async function addSalePayment(input: AddPaymentInput): Promise<AddPayment
     return { success: false, message: "Não é possível adicionar pagamento em venda cancelada." }
   }
 
-  // 2. Somar pagamentos já existentes
-  const { data: pagamentos } = await supabase
+  const { data: pagamentos, error: erroPagamentos } = await supabase
     .from("sale_payments")
     .select("valor")
     .eq("sale_id", saleId)
     .eq("user_id", userId)
+
+  if (erroPagamentos) {
+    return { success: false, message: "Erro ao validar pagamentos da venda." }
+  }
 
   const totalRecebido = (pagamentos ?? []).reduce(
     (soma, p) => soma + Number(p.valor),
@@ -58,7 +60,6 @@ export async function addSalePayment(input: AddPaymentInput): Promise<AddPayment
     }
   }
 
-  // 3. Inserir pagamento
   const { error: erroPagamento } = await supabase
     .from("sale_payments")
     .insert([
@@ -76,26 +77,25 @@ export async function addSalePayment(input: AddPaymentInput): Promise<AddPayment
     return { success: false, message: "Erro ao registrar pagamento." }
   }
 
-  // 4. 🔥 Lançar no financeiro
   const { error: erroFinanceiro } = await supabase
-    .from("financial_entries")
+    .from("financial_transactions")
     .insert([
       {
         user_id: userId,
-        tipo: "entrada",
-        valor,
-        descricao: "Pagamento de venda",
-        referencia_id: saleId,
+        type: "entrada",
+        amount: valor,
+        status: "pago",
         created_at: dataPagamentoIso,
       },
     ])
 
   if (erroFinanceiro) {
     return {
-      success: false,
-      message: "Pagamento registrado, mas erro no financeiro.",
+      success: true,
+      warning: "Pagamento registrado, mas houve erro ao lançar no financeiro.",
     }
   }
 
   return { success: true }
 }
+

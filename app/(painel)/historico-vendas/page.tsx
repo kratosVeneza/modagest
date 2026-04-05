@@ -404,13 +404,20 @@ function fecharModalExcluirVenda() {
   setSalvandoPagamento(false)
 
   if (!resultado.success) {
-    setMensagem(resultado.message)
-    return
-  }
+  setMensagem(resultado.message)
+  return
+}
 
-  fecharModalPagamento()
+fecharModalPagamento()
+
+if (resultado.warning) {
+  setMensagem(resultado.warning)
+} else {
   setMensagem("Pagamento adicionado com sucesso.")
-  await carregarVendas()
+}
+
+await carregarVendas()
+
 } 
 
   function abrirModalEditarPagamento(venda: VendaExibicao, pagamento: PagamentoBanco) {
