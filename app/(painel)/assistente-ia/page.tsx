@@ -393,6 +393,45 @@ export default function AssistenteIAPage() {
 
   const textoNormalizado = normalizarTexto(texto)
 
+  if (itens.length > 0) {
+  const novosRascunhos: VendaRascunho[] = itens.map((item) => {
+    const produtosOrdenados = encontrarProdutosOrdenados(produtos, item.produtoTexto)
+    const produtoPrincipal = produtosOrdenados[0] || null
+    const clienteEncontrado = encontrarCliente(clientes, item.clienteTexto)
+
+    const precoPadrao = produtoPrincipal ? Number(produtoPrincipal.preco || 0) : 0
+    const quantidadeNumero = Number(item.quantidade || 1)
+    const valorTotalPadrao = precoPadrao * quantidadeNumero
+
+    return {
+      quantidade: String(item.quantidade || 1),
+      produtoIdSelecionado: produtoPrincipal ? String(produtoPrincipal.id) : "",
+      clienteIdSelecionado: clienteEncontrado ? String(clienteEncontrado.id) : "",
+      valorRecebido:
+        item.valorRecebido !== null && item.valorRecebido !== undefined
+          ? String(item.valorRecebido)
+          : String(valorTotalPadrao),
+      formaPagamento: item.formaPagamento || "Pix",
+      observacao: item.observacao || "",
+      dataVenda: item.dataVenda || hojeInputDate(),
+      produtoTextoIA: item.produtoTexto,
+      clienteTextoIA: item.clienteTexto,
+    }
+  })
+
+  setRascunhos(novosRascunhos)
+  setInterpretado(true)
+  setLoadingIA(false)
+
+  if (novosRascunhos.some((item) => !item.produtoIdSelecionado)) {
+    setMensagem("A IA interpretou o texto, mas você precisa revisar alguns produtos antes de salvar.")
+    return
+  }
+
+  setMensagem("Texto interpretado com sucesso. Revise as vendas antes de confirmar.")
+  return
+}
+
 // PERGUNTAS GERENCIAIS
 if (
   textoNormalizado.includes("faturei") ||
@@ -457,42 +496,6 @@ if (
   setMensagem("A IA já identificou um recebimento. No próximo passo vamos ligar isso ao histórico/financeiro.")
   return
   } 
-
-    const novosRascunhos: VendaRascunho[] = itens.map((item) => {
-    const produtosOrdenados = encontrarProdutosOrdenados(produtos, item.produtoTexto)
-    const produtoPrincipal = produtosOrdenados[0] || null
-    const clienteEncontrado = encontrarCliente(clientes, item.clienteTexto)
-
-    const precoPadrao = produtoPrincipal ? Number(produtoPrincipal.preco || 0) : 0
-    const quantidadeNumero = Number(item.quantidade || 1)
-    const valorTotalPadrao = precoPadrao * quantidadeNumero
-
-    return {
-      quantidade: String(item.quantidade || 1),
-      produtoIdSelecionado: produtoPrincipal ? String(produtoPrincipal.id) : "",
-      clienteIdSelecionado: clienteEncontrado ? String(clienteEncontrado.id) : "",
-      valorRecebido:
-  item.valorRecebido !== null && item.valorRecebido !== undefined
-    ? String(item.valorRecebido)
-    : String(valorTotalPadrao),
-      formaPagamento: item.formaPagamento || "Pix",
-      observacao: item.observacao || "",
-      dataVenda: item.dataVenda || hojeInputDate(),
-      produtoTextoIA: item.produtoTexto,
-      clienteTextoIA: item.clienteTexto,
-    }
-  })
-
-  setRascunhos(novosRascunhos)
-  setInterpretado(true)
-  setLoadingIA(false)
-
-  if (novosRascunhos.some((item) => !item.produtoIdSelecionado)) {
-    setMensagem("A IA interpretou o texto, mas você precisa revisar alguns produtos antes de salvar.")
-    return
-  }
-
-  setMensagem("Texto interpretado com sucesso. Revise as vendas antes de confirmar.")
 }
   function atualizarRascunho(index: number, campo: keyof VendaRascunho, valor: string) {
   setRascunhos((atual) =>
