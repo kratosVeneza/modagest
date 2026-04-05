@@ -70,7 +70,7 @@ function interpretarMultiplasVendas(texto: string): VendaInterpretadaItem[] {
   const textoNormalizado = normalizarTexto(textoOriginal)
 
   const temVerboVenda =
-  textoNormalizado.includes("vendi") ||
+  /\b(vendi|venda|vender|realizei|fiz|registre[iy])\b/i.test(textoOriginal)
   textoNormalizado.includes("efetuei uma venda") ||
   textoNormalizado.includes("efetuei venda") ||
   textoNormalizado.includes("fiz uma venda") ||
