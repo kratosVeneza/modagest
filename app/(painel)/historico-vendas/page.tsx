@@ -17,6 +17,7 @@ import { restoreSale } from "@/lib/services/sales/restoreSale"
 import { addSalePayment } from "@/lib/services/sales/addSalePayment"
 import { updateSalePayment } from "@/lib/services/sales/updateSalePayment"
 import { deleteSalePayment } from "@/lib/services/sales/deleteSalePayment"
+import { deleteCanceledSale } from "@/lib/services/sales/deleteCanceledSale"
 
 
 type VendaBanco = {
@@ -532,42 +533,21 @@ async function excluirVendaCancelada(venda: VendaExibicao) {
     return
   }
 
-  if (venda.status?.toLowerCase() !== "cancelada") {
-    setMensagem("Somente vendas canceladas podem ser excluídas do histórico.")
-    return
-  }
-
   setExcluindoVenda(true)
 
-  const { error: erroPagamentos } = await supabase
-    .from("sale_payments")
-    .delete()
-    .eq("sale_id", venda.id)
-    .eq("user_id", user.id)
-
-  if (erroPagamentos) {
-    console.log("ERRO AO EXCLUIR PAGAMENTOS DA VENDA:", erroPagamentos)
-    setExcluindoVenda(false)
-    setMensagem(erroPagamentos.message || "Erro ao excluir pagamentos da venda.")
-    return
-  }
-
-  const { error: erroVenda } = await supabase
-    .from("sales")
-    .delete()
-    .eq("id", venda.id)
-    .eq("user_id", user.id)
+  const resultado = await deleteCanceledSale({
+    saleId: venda.id,
+    userId: user.id,
+  })
 
   setExcluindoVenda(false)
+  setMensagem(resultado.message)
 
-  if (erroVenda) {
-    console.log("ERRO AO EXCLUIR VENDA CANCELADA:", erroVenda)
-    setMensagem(erroVenda.message || "Erro ao excluir venda cancelada.")
+  if (!resultado.success) {
     return
   }
 
   fecharModalExcluirVenda()
-  setMensagem("Venda cancelada excluída do histórico com sucesso.")
   await carregarVendas()
 }
 
