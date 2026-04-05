@@ -15,7 +15,7 @@ type CreateSaleInput = {
 }
 
 type CreateSaleResult =
-  | { success: true; saleId: number }
+  | { success: true; saleId: number; warning?: string }
   | { success: false; message: string }
 
 export async function createSale(input: CreateSaleInput): Promise<CreateSaleResult> {
@@ -87,47 +87,7 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     return { success: false, message: "Erro ao registrar venda." }
   }
 
-  if (valorRecebidoInicial > 0) {
-    const { error: erroPagamento } = await supabase
-      .from("sale_payments")
-      .insert([
-        {
-          sale_id: vendaCriada.id,
-          user_id: userId,
-          valor: valorRecebidoInicial,
-          forma_pagamento: formaPagamentoInicial,
-          observacao: observacaoPagamentoInicial || null,
-          created_at: dataVendaIso,
-        },
-      ])
-
-    if (erroPagamento) {
-      return {
-        success: false,
-        message: "Venda criada, mas houve erro ao registrar o pagamento inicial.",
-      }
-    }
-
-    const { error: erroFinanceiro } = await supabase
-      .from("financial_transactions")
-      .insert([
-        {
-          user_id: userId,
-          type: "entrada",
-          amount: valorRecebidoInicial,
-          status: "pago",
-          created_at: dataVendaIso,
-        },
-      ])
-
-    if (erroFinanceiro) {
-      return {
-        success: false,
-        message: "Venda e pagamento registrados, mas erro ao lançar no financeiro.",
-      }
-    }
-  }
-
+  // 1) Baixar estoque primeiro
   const novoEstoque = Number(produto.estoque) - quantidade
 
   const { error: erroEstoque } = await supabase
@@ -143,6 +103,7 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     }
   }
 
+  // 2) Registrar movimento de estoque logo depois
   try {
     await registrarMovimentoEstoque({
       productId,
@@ -157,6 +118,46 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
       message:
         error?.message ||
         "Venda salva, mas houve erro ao registrar a movimentação de estoque.",
+    }
+  }
+
+  let warning = ""
+
+  // 3) Registrar pagamento e financeiro depois
+  if (valorRecebidoInicial > 0) {
+    const { error: erroPagamento } = await supabase
+      .from("sale_payments")
+      .insert([
+        {
+          sale_id: vendaCriada.id,
+          user_id: userId,
+          valor: valorRecebidoInicial,
+          forma_pagamento: formaPagamentoInicial,
+          observacao: observacaoPagamentoInicial || null,
+          created_at: dataVendaIso,
+        },
+      ])
+
+    if (erroPagamento) {
+      warning = "Venda salva e estoque baixado, mas houve erro ao registrar o pagamento inicial."
+      return { success: true, saleId: vendaCriada.id, warning }
+    }
+
+    const { error: erroFinanceiro } = await supabase
+      .from("financial_transactions")
+      .insert([
+        {
+          user_id: userId,
+          type: "entrada",
+          amount: valorRecebidoInicial,
+          status: "pago",
+          created_at: dataVendaIso,
+        },
+      ])
+
+    if (erroFinanceiro) {
+      warning = "Venda salva, estoque baixado e pagamento registrado, mas erro ao lançar no financeiro."
+      return { success: true, saleId: vendaCriada.id, warning }
     }
   }
 
