@@ -79,15 +79,18 @@ export async function addSalePayment(input: AddPaymentInput): Promise<AddPayment
 
   const { error: erroFinanceiro } = await supabase
     .from("financial_transactions")
-    .insert([
-      {
-        user_id: userId,
-        type: "entrada",
-        amount: valor,
-        status: "pago",
-        created_at: dataPagamentoIso,
-      },
-    ])
+.insert([
+  {
+    user_id: userId,
+    type: "entrada",
+    amount: valor,
+    status: "pago",
+    description: "Recebimento de venda",
+    reference_type: "venda",
+    reference_id: saleId,
+    created_at: dataPagamentoIso,
+  },
+])
 
   if (erroFinanceiro) {
     return {
