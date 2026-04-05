@@ -85,8 +85,9 @@ function interpretarMultiplasVendas(texto: string): VendaInterpretadaItem[] {
   const formaPagamentoGlobal = identificarFormaPagamento(textoOriginal)
 
   const recebidoGlobalMatch =
-    textoOriginal.match(/recebi\s+(\d+[.,]?\d*)/i) ||
-    textoOriginal.match(/recebido\s+(\d+[.,]?\d*)/i)
+  textoOriginal.match(/recebi\s+(\d+[.,]?\d*)/i) ||
+  textoOriginal.match(/recebido\s+(\d+[.,]?\d*)/i) ||
+  textoOriginal.match(/pagou\s+(\d+[.,]?\d*)/i)
 
   const valorRecebidoGlobal = recebidoGlobalMatch
     ? Number(recebidoGlobalMatch[1].replace(",", "."))
@@ -343,7 +344,7 @@ export default function AssistenteIAPage() {
 
     const { data: produtosData, error: erroProdutos } = await supabase
       .from("products")
-      .select("id, nome, sku, estoque, preco, preco_custo, cor, tamanho, user_id")
+      .select("*")
       .eq("user_id", user.id)
       .order("nome", { ascending: true })
 
@@ -1513,7 +1514,10 @@ async function processarPedidosIA(compras: CompraInterpretadaItem[]) {
 
                 <div style={resumoItem}>
                   <span style={resumoLabel}>Em aberto</span>
-                  <strong>R$ {valorEmAberto.toFixed(2)}</strong>
+                  <strong style={{ color: valorEmAberto > 0 ? "#b45309" : "#065f46" }}>
+  R$ {valorEmAberto.toFixed(2)}
+</strong>
+
                 </div>
 
                 <div style={resumoItem}>
