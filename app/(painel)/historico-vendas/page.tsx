@@ -15,6 +15,9 @@ import FeatureBlockedCard from "@/app/components/FeatureBlockedCard"
 import { cancelSale } from "@/lib/services/sales/cancelSale"
 import { restoreSale } from "@/lib/services/sales/restoreSale"
 import { addSalePayment } from "@/lib/services/sales/addSalePayment"
+import { updateSalePayment } from "@/lib/services/sales/updateSalePayment"
+import { deleteSalePayment } from "@/lib/services/sales/deleteSalePayment"
+
 
 type VendaBanco = {
   id: number
@@ -456,47 +459,24 @@ function fecharModalEditarPagamento() {
     return
   }
 
-  const pagamentoAtual = vendaSelecionada.pagamentos.find(
-    (item) => item.id === editandoPagamentoId
-  )
-
-  if (!pagamentoAtual) {
-    setMensagem("Pagamento não encontrado.")
-    return
-  }
-
-  const totalOutrosPagamentos = vendaSelecionada.pagamentos
-    .filter((item) => item.id !== editandoPagamentoId)
-    .reduce((soma, item) => soma + Number(item.valor), 0)
-
-  const totalComEdicao = totalOutrosPagamentos + valorNovo
-
-  if (totalComEdicao > vendaSelecionada.valor_total) {
-    setMensagem("A soma dos pagamentos não pode ultrapassar o valor total da venda.")
-    return
-  }
-
   setSalvandoPagamento(true)
 
-  const { error } = await supabase
-  .from("sale_payments")
-  .update({
+  const resultado = await updateSalePayment({
+    paymentId: editandoPagamentoId,
+    saleId: vendaSelecionada.id,
+    userId: user.id,
     valor: valorNovo,
-    forma_pagamento: formaPagamento,
+    formaPagamento,
     observacao: observacaoPagamento || null,
-    created_at: montarDataISO(dataPagamento),
+    dataPagamentoIso: montarDataISO(dataPagamento),
   })
-  .eq("id", editandoPagamentoId)
-  .eq("sale_id", vendaSelecionada.id)
-  .eq("user_id", user.id)
 
   setSalvandoPagamento(false)
 
-  if (error) {
-  console.log("ERRO AO ATUALIZAR PAGAMENTO:", error)
-  setMensagem(error.message || "Erro ao atualizar pagamento.")
-  return
-}
+  if (!resultado.success) {
+    setMensagem(resultado.message)
+    return
+  }
 
   fecharModalEditarPagamento()
   setMensagem("Pagamento atualizado com sucesso.")
@@ -518,21 +498,14 @@ async function excluirPagamento(venda: VendaExibicao, pagamentoId: number) {
     return
   }
 
-  if (venda.status === "Cancelada") {
-    setMensagem("Não é possível excluir pagamento de uma venda cancelada.")
-    return
-  }
+  const resultado = await deleteSalePayment({
+    paymentId: pagamentoId,
+    saleId: venda.id,
+    userId: user.id,
+  })
 
-  const { error } = await supabase
-    .from("sale_payments")
-    .delete()
-    .eq("id", pagamentoId)
-    .eq("sale_id", venda.id)
-    .eq("user_id", user.id)
-
-  if (error) {
-    console.log("ERRO AO EXCLUIR PAGAMENTO:", error)
-    setMensagem(error.message || "Erro ao excluir pagamento.")
+  if (!resultado.success) {
+    setMensagem(resultado.message)
     return
   }
 
