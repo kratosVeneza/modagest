@@ -23,10 +23,6 @@ import {
   BarChart3,
 } from "lucide-react"
 
-import DashboardHeader from "./components/DashboardHeader"
-import MetricCard from "./components/MetricCard"
-import TrendBadge from "./components/TrendBadge" 
-
 type Venda = {
   id: number
   product_id: number
