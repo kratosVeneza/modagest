@@ -19,11 +19,15 @@ import {
   Wallet,
   BadgeDollarSign,
   BarChart3,
+  ShoppingBag,
+  AlertTriangle,
+  Boxes,
 } from "lucide-react"
 
 type Venda = {
   id: number
   product_id: number
+  customer_id?: number | null
   quantidade: number
   valor_total: number
   created_at: string
@@ -41,6 +45,13 @@ type Produto = {
   id: number
   nome: string
   custo: number | null
+  estoque?: number | null
+  estoque_minimo?: number | null
+}
+
+type Cliente = {
+  id: number
+  nome: string
 }
 
 type GraficoDia = {
@@ -56,6 +67,22 @@ type TrendInfo = {
 
 type Periodo = "hoje" | "7dias" | "30dias" | "mes"
 
+type UltimaVenda = {
+  id: number
+  nomeProduto: string
+  nomeCliente: string
+  valorTotal: number
+  valorRecebido: number
+  valorEmAberto: number
+  created_at: string
+}
+
+type ProdutoRanking = {
+  id: number
+  nome: string
+  quantidade: number
+}
+
 const periodos: { value: Periodo; label: string }[] = [
   { value: "hoje", label: "Hoje" },
   { value: "7dias", label: "7 dias" },
@@ -67,6 +94,7 @@ export default function Dashboard() {
   const [vendas, setVendas] = useState<Venda[]>([])
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
 
   const [periodo, setPeriodo] = useState<Periodo>("7dias")
 
@@ -82,13 +110,17 @@ export default function Dashboard() {
   const [graficoVendas, setGraficoVendas] = useState<GraficoDia[]>([])
   const [graficoRecebido, setGraficoRecebido] = useState<GraficoDia[]>([])
 
+  const [ultimasVendas, setUltimasVendas] = useState<UltimaVenda[]>([])
+  const [produtoMaisVendido, setProdutoMaisVendido] = useState<ProdutoRanking | null>(null)
+  const [estoqueBaixo, setEstoqueBaixo] = useState<Produto[]>([])
+
   useEffect(() => {
     carregarDados()
   }, [])
 
   useEffect(() => {
     if (vendas.length || pagamentos.length || produtos.length) {
-      calcular(vendas, pagamentos, produtos)
+      calcular(vendas, pagamentos, produtos, clientes)
     }
   }, [periodo])
 
@@ -114,15 +146,22 @@ export default function Dashboard() {
       .select("*")
       .eq("user_id", user.id)
 
+    const { data: clientesData } = await supabase
+      .from("customers")
+      .select("id, nome")
+      .eq("user_id", user.id)
+
     const vendasLista = (vendasData || []) as Venda[]
     const pagamentosLista = (pagamentosData || []) as Pagamento[]
     const produtosLista = (produtosData || []) as Produto[]
+    const clientesLista = (clientesData || []) as Cliente[]
 
     setVendas(vendasLista)
     setPagamentos(pagamentosLista)
     setProdutos(produtosLista)
+    setClientes(clientesLista)
 
-    calcular(vendasLista, pagamentosLista, produtosLista)
+    calcular(vendasLista, pagamentosLista, produtosLista, clientesLista)
   }
 
   function obterIntervalos() {
@@ -214,7 +253,8 @@ export default function Dashboard() {
   function calcular(
     vendasLista: Venda[],
     pagamentosLista: Pagamento[],
-    produtosLista: Produto[]
+    produtosLista: Produto[],
+    clientesLista: Cliente[]
   ) {
     const vendasAtivas = vendasLista.filter((v) => v.status !== "Cancelada")
 
@@ -325,6 +365,9 @@ export default function Dashboard() {
 
     gerarGraficoVendas(vendasPeriodoAtual, inicioAtual, quantidadeDias)
     gerarGraficoRecebido(pagamentosAtual, inicioAtual, quantidadeDias)
+    gerarUltimasVendas(vendasPeriodoAtual, pagamentosLista, produtosLista, clientesLista)
+    gerarProdutoMaisVendido(vendasPeriodoAtual, produtosLista)
+    gerarEstoqueBaixo(produtosLista)
   }
 
   function gerarGraficoVendas(
@@ -399,6 +442,69 @@ export default function Dashboard() {
     setGraficoRecebido(dados)
   }
 
+  function gerarUltimasVendas(
+    vendasPeriodo: Venda[],
+    pagamentosLista: Pagamento[],
+    produtosLista: Produto[],
+    clientesLista: Cliente[]
+  ) {
+    const lista = [...vendasPeriodo]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5)
+      .map((venda) => {
+        const produto = produtosLista.find((p) => p.id === venda.product_id)
+        const cliente = clientesLista.find((c) => c.id === venda.customer_id)
+
+        const pagamentosDaVenda = pagamentosLista.filter((p) => p.sale_id === venda.id)
+        const valorRecebido = pagamentosDaVenda.reduce((soma, p) => soma + Number(p.valor), 0)
+
+        return {
+          id: venda.id,
+          nomeProduto: produto?.nome || "Produto removido",
+          nomeCliente: cliente?.nome || "Sem cliente",
+          valorTotal: Number(venda.valor_total),
+          valorRecebido,
+          valorEmAberto: Math.max(Number(venda.valor_total) - valorRecebido, 0),
+          created_at: venda.created_at,
+        }
+      })
+
+    setUltimasVendas(lista)
+  }
+
+  function gerarProdutoMaisVendido(vendasPeriodo: Venda[], produtosLista: Produto[]) {
+    const mapa = new Map<number, ProdutoRanking>()
+
+    vendasPeriodo.forEach((venda) => {
+      const produto = produtosLista.find((p) => p.id === venda.product_id)
+      const nome = produto?.nome || "Produto removido"
+
+      if (!mapa.has(venda.product_id)) {
+        mapa.set(venda.product_id, {
+          id: venda.product_id,
+          nome,
+          quantidade: 0,
+        })
+      }
+
+      mapa.get(venda.product_id)!.quantidade += Number(venda.quantidade)
+    })
+
+    const ranking = Array.from(mapa.values()).sort((a, b) => b.quantidade - a.quantidade)
+    setProdutoMaisVendido(ranking[0] || null)
+  }
+
+  function gerarEstoqueBaixo(produtosLista: Produto[]) {
+    const lista = produtosLista.filter((produto) => {
+      const estoqueAtual = Number(produto.estoque || 0)
+      const estoqueMinimo = Number(produto.estoque_minimo || 0)
+
+      return estoqueMinimo > 0 && estoqueAtual <= estoqueMinimo
+    })
+
+    setEstoqueBaixo(lista)
+  }
+
   function tendencia(atual: number, anterior: number): TrendInfo {
     if (anterior === 0 && atual > 0) {
       return {
@@ -463,6 +569,46 @@ export default function Dashboard() {
       ? "vs mês anterior"
       : "vs período anterior"
 
+  const leituraRapida = useMemo(() => {
+    if (lucro > 0 && recebido > 0) {
+      return {
+        titulo: "Operação positiva",
+        texto: `Seu lucro recebido no período está em R$ ${lucro.toFixed(2)}.`,
+        cor: "#065f46",
+        fundo: "#ecfdf5",
+        borda: "#a7f3d0",
+      }
+    }
+
+    if (faturamento > 0 && recebido === 0) {
+      return {
+        titulo: "Atenção aos recebimentos",
+        texto: "Você vendeu no período, mas ainda não houve recebimentos registrados.",
+        cor: "#92400e",
+        fundo: "#fffbeb",
+        borda: "#fde68a",
+      }
+    }
+
+    if (faturamento <= 0) {
+      return {
+        titulo: "Sem movimento no período",
+        texto: "Ainda não há vendas registradas no período selecionado.",
+        cor: "#334155",
+        fundo: "#f8fafc",
+        borda: "#cbd5e1",
+      }
+    }
+
+    return {
+      titulo: "Período em acompanhamento",
+      texto: "Continue acompanhando as vendas, recebimentos e lucro da operação.",
+      cor: "#1d4ed8",
+      fundo: "#eff6ff",
+      borda: "#bfdbfe",
+    }
+  }, [faturamento, recebido, lucro])
+
   return (
     <div style={{ padding: 24 }}>
       <div style={headerWrap}>
@@ -489,6 +635,21 @@ export default function Dashboard() {
             {item.label}
           </button>
         ))}
+      </div>
+
+      <div
+        style={{
+          ...leituraCard,
+          background: leituraRapida.fundo,
+          borderColor: leituraRapida.borda,
+          color: leituraRapida.cor,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <AlertTriangle size={18} />
+          <strong>{leituraRapida.titulo}</strong>
+        </div>
+        <p style={{ margin: "8px 0 0 0", fontSize: 14 }}>{leituraRapida.texto}</p>
       </div>
 
       <div style={grid}>
@@ -593,6 +754,36 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div style={infoGrid}>
+        <div style={miniCard}>
+          <div style={miniCardTop}>
+            <ShoppingBag size={18} />
+            <strong>Produto mais vendido</strong>
+          </div>
+          <p style={miniCardTitle}>
+            {produtoMaisVendido ? produtoMaisVendido.nome : "Sem dados ainda"}
+          </p>
+          <p style={miniCardText}>
+            {produtoMaisVendido
+              ? `${produtoMaisVendido.quantidade} unidade(s) vendida(s) no período`
+              : "Registre vendas para visualizar este indicador."}
+          </p>
+        </div>
+
+        <div style={miniCard}>
+          <div style={miniCardTop}>
+            <Boxes size={18} />
+            <strong>Estoque baixo</strong>
+          </div>
+          <p style={miniCardTitle}>{estoqueBaixo.length} produto(s)</p>
+          <p style={miniCardText}>
+            {estoqueBaixo.length > 0
+              ? "Existem produtos no limite mínimo de estoque."
+              : "Nenhum produto com estoque baixo no momento."}
+          </p>
+        </div>
+      </div>
+
       <div style={chartsGrid}>
         <div style={chartCard}>
           <div style={chartHeader}>
@@ -678,8 +869,56 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      <div style={tableCard}>
+        <div style={chartHeader}>
+          <div>
+            <h2 style={chartTitle}>Últimas vendas</h2>
+            <p style={chartSubtitle}>Resumo das vendas mais recentes do período</p>
+          </div>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={table}>
+            <thead>
+              <tr>
+                <th style={th}>Cliente</th>
+                <th style={th}>Produto</th>
+                <th style={th}>Vendido</th>
+                <th style={th}>Recebido</th>
+                <th style={th}>Em aberto</th>
+                <th style={th}>Data</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ultimasVendas.length > 0 ? (
+                ultimasVendas.map((venda) => (
+                  <tr key={venda.id}>
+                    <td style={td}>{venda.nomeCliente}</td>
+                    <td style={td}>{venda.nomeProduto}</td>
+                    <td style={td}>R$ {venda.valorTotal.toFixed(2)}</td>
+                    <td style={td}>R$ {venda.valorRecebido.toFixed(2)}</td>
+                    <td style={td}>R$ {venda.valorEmAberto.toFixed(2)}</td>
+                    <td style={td}>{formatarData(venda.created_at)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} style={tdVazio}>
+                    Nenhuma venda encontrada no período.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
+}
+
+function formatarData(dataIso: string) {
+  return new Date(dataIso).toLocaleString("pt-BR")
 }
 
 const headerWrap: React.CSSProperties = {
@@ -732,6 +971,13 @@ const periodButtonActive: React.CSSProperties = {
   border: "1px solid #2563eb",
 }
 
+const leituraCard: React.CSSProperties = {
+  border: "1px solid",
+  borderRadius: 18,
+  padding: 18,
+  marginBottom: 20,
+}
+
 const grid: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
@@ -740,10 +986,18 @@ const grid: React.CSSProperties = {
   marginBottom: 24,
 }
 
+const infoGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gap: 16,
+  marginBottom: 24,
+}
+
 const chartsGrid: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
   gap: 16,
+  marginBottom: 24,
 }
 
 const card: React.CSSProperties = {
@@ -752,6 +1006,35 @@ const card: React.CSSProperties = {
   borderRadius: 18,
   padding: 18,
   boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
+}
+
+const miniCard: React.CSSProperties = {
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+  padding: 18,
+  boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
+}
+
+const miniCardTop: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: "#334155",
+  marginBottom: 12,
+}
+
+const miniCardTitle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 22,
+  fontWeight: 800,
+  color: "#0f172a",
+}
+
+const miniCardText: React.CSSProperties = {
+  margin: "8px 0 0 0",
+  fontSize: 14,
+  color: "#64748b",
 }
 
 const cardTop: React.CSSProperties = {
@@ -837,6 +1120,14 @@ const chartCard: React.CSSProperties = {
   boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
 }
 
+const tableCard: React.CSSProperties = {
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 20,
+  padding: 20,
+  boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
+}
+
 const chartHeader: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
@@ -856,5 +1147,31 @@ const chartTitle: React.CSSProperties = {
 const chartSubtitle: React.CSSProperties = {
   margin: "6px 0 0 0",
   fontSize: 14,
+  color: "#64748b",
+}
+
+const table: React.CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+}
+
+const th: React.CSSProperties = {
+  textAlign: "left",
+  padding: "12px",
+  borderBottom: "1px solid #e5e7eb",
+  fontSize: 13,
+  color: "#64748b",
+}
+
+const td: React.CSSProperties = {
+  padding: "12px",
+  borderBottom: "1px solid #f1f5f9",
+  fontSize: 14,
+  color: "#0f172a",
+}
+
+const tdVazio: React.CSSProperties = {
+  padding: "20px",
+  textAlign: "center",
   color: "#64748b",
 }
