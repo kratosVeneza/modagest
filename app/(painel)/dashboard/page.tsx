@@ -54,10 +54,21 @@ type TrendInfo = {
   icon: React.ReactNode
 }
 
+type Periodo = "hoje" | "7dias" | "30dias" | "mes"
+
+const periodos: { value: Periodo; label: string }[] = [
+  { value: "hoje", label: "Hoje" },
+  { value: "7dias", label: "7 dias" },
+  { value: "30dias", label: "30 dias" },
+  { value: "mes", label: "Mês atual" },
+]
+
 export default function Dashboard() {
   const [vendas, setVendas] = useState<Venda[]>([])
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
+
+  const [periodo, setPeriodo] = useState<Periodo>("7dias")
 
   const [faturamento, setFaturamento] = useState(0)
   const [recebido, setRecebido] = useState(0)
@@ -68,11 +79,18 @@ export default function Dashboard() {
   const [recebidoComparacao, setRecebidoComparacao] = useState(0)
   const [lucroComparacao, setLucroComparacao] = useState(0)
 
-  const [grafico, setGrafico] = useState<GraficoDia[]>([])
+  const [graficoVendas, setGraficoVendas] = useState<GraficoDia[]>([])
+  const [graficoRecebido, setGraficoRecebido] = useState<GraficoDia[]>([])
 
   useEffect(() => {
     carregarDados()
   }, [])
+
+  useEffect(() => {
+    if (vendas.length || pagamentos.length || produtos.length) {
+      calcular(vendas, pagamentos, produtos)
+    }
+  }, [periodo])
 
   async function carregarDados() {
     const {
@@ -110,23 +128,86 @@ export default function Dashboard() {
   function obterIntervalos() {
     const agora = new Date()
 
-    const inicioAtual = new Date()
-    inicioAtual.setDate(agora.getDate() - 6)
-    inicioAtual.setHours(0, 0, 0, 0)
+    if (periodo === "hoje") {
+      const inicioAtual = new Date()
+      inicioAtual.setHours(0, 0, 0, 0)
 
+      const fimAtual = new Date()
+
+      const inicioAnterior = new Date(inicioAtual)
+      inicioAnterior.setDate(inicioAnterior.getDate() - 1)
+
+      const fimAnterior = new Date(inicioAtual)
+      fimAnterior.setMilliseconds(-1)
+
+      return {
+        inicioAtual,
+        fimAtual,
+        inicioAnterior,
+        fimAnterior,
+        quantidadeDias: 1,
+      }
+    }
+
+    if (periodo === "7dias") {
+      const inicioAtual = new Date()
+      inicioAtual.setDate(agora.getDate() - 6)
+      inicioAtual.setHours(0, 0, 0, 0)
+
+      const fimAtual = new Date()
+
+      const inicioAnterior = new Date(inicioAtual)
+      inicioAnterior.setDate(inicioAnterior.getDate() - 7)
+
+      const fimAnterior = new Date(inicioAtual)
+      fimAnterior.setMilliseconds(-1)
+
+      return {
+        inicioAtual,
+        fimAtual,
+        inicioAnterior,
+        fimAnterior,
+        quantidadeDias: 7,
+      }
+    }
+
+    if (periodo === "30dias") {
+      const inicioAtual = new Date()
+      inicioAtual.setDate(agora.getDate() - 29)
+      inicioAtual.setHours(0, 0, 0, 0)
+
+      const fimAtual = new Date()
+
+      const inicioAnterior = new Date(inicioAtual)
+      inicioAnterior.setDate(inicioAnterior.getDate() - 30)
+
+      const fimAnterior = new Date(inicioAtual)
+      fimAnterior.setMilliseconds(-1)
+
+      return {
+        inicioAtual,
+        fimAtual,
+        inicioAnterior,
+        fimAnterior,
+        quantidadeDias: 30,
+      }
+    }
+
+    const inicioAtual = new Date(agora.getFullYear(), agora.getMonth(), 1)
     const fimAtual = new Date()
 
-    const inicioAnterior = new Date(inicioAtual)
-    inicioAnterior.setDate(inicioAnterior.getDate() - 7)
+    const inicioAnterior = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
+    const fimAnterior = new Date(agora.getFullYear(), agora.getMonth(), 0, 23, 59, 59, 999)
 
-    const fimAnterior = new Date(inicioAtual)
-    fimAnterior.setMilliseconds(-1)
+    const quantidadeDias =
+      Math.ceil((fimAtual.getTime() - inicioAtual.getTime()) / (1000 * 60 * 60 * 24)) + 1
 
     return {
       inicioAtual,
       fimAtual,
       inicioAnterior,
       fimAnterior,
+      quantidadeDias,
     }
   }
 
@@ -137,7 +218,13 @@ export default function Dashboard() {
   ) {
     const vendasAtivas = vendasLista.filter((v) => v.status !== "Cancelada")
 
-    const { inicioAtual, fimAtual, inicioAnterior, fimAnterior } = obterIntervalos()
+    const {
+      inicioAtual,
+      fimAtual,
+      inicioAnterior,
+      fimAnterior,
+      quantidadeDias,
+    } = obterIntervalos()
 
     const vendasPeriodoAtual = vendasAtivas.filter((v) => {
       const data = new Date(v.created_at)
@@ -236,14 +323,18 @@ export default function Dashboard() {
     setRecebidoComparacao(recebidoAnterior)
     setLucroComparacao(lucroAnterior)
 
-    gerarGrafico(vendasPeriodoAtual)
+    gerarGraficoVendas(vendasPeriodoAtual, inicioAtual, quantidadeDias)
+    gerarGraficoRecebido(pagamentosAtual, inicioAtual, quantidadeDias)
   }
 
-  function gerarGrafico(vendasPeriodo: Venda[]) {
-    const { inicioAtual } = obterIntervalos()
+  function gerarGraficoVendas(
+    vendasPeriodo: Venda[],
+    inicioAtual: Date,
+    quantidadeDias: number
+  ) {
     const mapa = new Map<string, number>()
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < quantidadeDias; i++) {
       const data = new Date(inicioAtual)
       data.setDate(inicioAtual.getDate() + i)
 
@@ -269,7 +360,43 @@ export default function Dashboard() {
       total,
     }))
 
-    setGrafico(dados)
+    setGraficoVendas(dados)
+  }
+
+  function gerarGraficoRecebido(
+    pagamentosPeriodo: Pagamento[],
+    inicioAtual: Date,
+    quantidadeDias: number
+  ) {
+    const mapa = new Map<string, number>()
+
+    for (let i = 0; i < quantidadeDias; i++) {
+      const data = new Date(inicioAtual)
+      data.setDate(inicioAtual.getDate() + i)
+
+      const chave = data.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+      })
+
+      mapa.set(chave, 0)
+    }
+
+    pagamentosPeriodo.forEach((pagamento) => {
+      const dia = new Date(pagamento.created_at).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+      })
+
+      mapa.set(dia, (mapa.get(dia) || 0) + Number(pagamento.valor))
+    })
+
+    const dados = Array.from(mapa.entries()).map(([dia, total]) => ({
+      dia,
+      total,
+    }))
+
+    setGraficoRecebido(dados)
   }
 
   function tendencia(atual: number, anterior: number): TrendInfo {
@@ -329,6 +456,13 @@ export default function Dashboard() {
     [lucro, lucroComparacao]
   )
 
+  const textoComparacao =
+    periodo === "hoje"
+      ? "vs ontem"
+      : periodo === "mes"
+      ? "vs mês anterior"
+      : "vs período anterior"
+
   return (
     <div style={{ padding: 24 }}>
       <div style={headerWrap}>
@@ -336,9 +470,25 @@ export default function Dashboard() {
           <p style={eyebrow}>Dashboard</p>
           <h1 style={pageTitle}>Visão geral da sua operação</h1>
           <p style={pageSubtitle}>
-            Acompanhe faturamento, recebimentos, valores em aberto e lucro dos últimos 7 dias.
+            Acompanhe faturamento, recebimentos, valores em aberto e lucro conforme o período selecionado.
           </p>
         </div>
+      </div>
+
+      <div style={periodWrap}>
+        {periodos.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => setPeriodo(item.value)}
+            style={{
+              ...periodButton,
+              ...(periodo === item.value ? periodButtonActive : {}),
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
 
       <div style={grid}>
@@ -367,7 +517,7 @@ export default function Dashboard() {
               {tendenciaFaturamento.icon}
               {tendenciaFaturamento.label}
             </span>
-            <span style={helperText}>vs 7 dias anteriores</span>
+            <span style={helperText}>{textoComparacao}</span>
           </div>
         </div>
 
@@ -396,7 +546,7 @@ export default function Dashboard() {
               {tendenciaRecebido.icon}
               {tendenciaRecebido.label}
             </span>
-            <span style={helperText}>vs 7 dias anteriores</span>
+            <span style={helperText}>{textoComparacao}</span>
           </div>
         </div>
 
@@ -438,51 +588,95 @@ export default function Dashboard() {
               {tendenciaLucro.icon}
               {tendenciaLucro.label}
             </span>
-            <span style={helperText}>vs 7 dias anteriores</span>
+            <span style={helperText}>{textoComparacao}</span>
           </div>
         </div>
       </div>
 
-      <div style={chartCard}>
-        <div style={chartHeader}>
-          <div>
-            <h2 style={chartTitle}>Vendas por dia</h2>
-            <p style={chartSubtitle}>Distribuição do faturamento nos últimos 7 dias</p>
+      <div style={chartsGrid}>
+        <div style={chartCard}>
+          <div style={chartHeader}>
+            <div>
+              <h2 style={chartTitle}>Vendas por dia</h2>
+              <p style={chartSubtitle}>Distribuição do faturamento no período</p>
+            </div>
           </div>
+
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={graficoVendas}>
+              <defs>
+                <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#2563eb" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="dia" stroke="#64748b" />
+              <YAxis stroke="#64748b" />
+
+              <Tooltip
+                formatter={(value) => `R$ ${Number(value).toFixed(2)}`}
+                contentStyle={{
+                  borderRadius: 12,
+                  border: "none",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+                }}
+              />
+
+              <Area
+                type="monotone"
+                dataKey="total"
+                stroke="#2563eb"
+                strokeWidth={3}
+                fill="url(#colorVendas)"
+                isAnimationActive
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
 
-        <ResponsiveContainer width="100%" height={320}>
-          <AreaChart data={grafico}>
-            <defs>
-              <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="#2563eb" stopOpacity={0.03} />
-              </linearGradient>
-            </defs>
+        <div style={chartCard}>
+          <div style={chartHeader}>
+            <div>
+              <h2 style={chartTitle}>Recebido por dia</h2>
+              <p style={chartSubtitle}>Entradas reais de caixa no período</p>
+            </div>
+          </div>
 
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="dia" stroke="#64748b" />
-            <YAxis stroke="#64748b" />
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={graficoRecebido}>
+              <defs>
+                <linearGradient id="colorRecebido" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#059669" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#059669" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
 
-            <Tooltip
-              formatter={(value) => `R$ ${Number(value).toFixed(2)}`}
-              contentStyle={{
-                borderRadius: 12,
-                border: "none",
-                boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
-              }}
-            />
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="dia" stroke="#64748b" />
+              <YAxis stroke="#64748b" />
 
-            <Area
-              type="monotone"
-              dataKey="total"
-              stroke="#2563eb"
-              strokeWidth={3}
-              fill="url(#colorVendas)"
-              isAnimationActive
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+              <Tooltip
+                formatter={(value) => `R$ ${Number(value).toFixed(2)}`}
+                contentStyle={{
+                  borderRadius: 12,
+                  border: "none",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+                }}
+              />
+
+              <Area
+                type="monotone"
+                dataKey="total"
+                stroke="#059669"
+                strokeWidth={3}
+                fill="url(#colorRecebido)"
+                isAnimationActive
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   )
@@ -514,12 +708,42 @@ const pageSubtitle: React.CSSProperties = {
   color: "#64748b",
 }
 
+const periodWrap: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 20,
+}
+
+const periodButton: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 999,
+  border: "1px solid #d1d5db",
+  background: "#ffffff",
+  color: "#334155",
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
+}
+
+const periodButtonActive: React.CSSProperties = {
+  background: "#2563eb",
+  color: "#ffffff",
+  border: "1px solid #2563eb",
+}
+
 const grid: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
   gap: 16,
   marginTop: 20,
   marginBottom: 24,
+}
+
+const chartsGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gap: 16,
 }
 
 const card: React.CSSProperties = {
