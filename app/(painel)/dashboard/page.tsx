@@ -1,5 +1,6 @@
 "use client"
 
+
 import React from "react" 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
@@ -350,26 +351,37 @@ const tendenciaRecebido = useMemo(
 
       <ResponsiveContainer width="100%" height={320}>
         <AreaChart data={grafico}>
-          <defs>
-            <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
-              <stop offset="95%" stopColor="#2563eb" stopOpacity={0.03} />
-            </linearGradient>
-          </defs>
+  <defs>
+    <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
+      <stop offset="95%" stopColor="#2563eb" stopOpacity={0.03} />
+    </linearGradient>
+  </defs>
 
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="dia" />
-          <YAxis />
-          <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
-          <Area
-            type="monotone"
-            dataKey="total"
-            stroke="#2563eb"
-            strokeWidth={3}
-            fillOpacity={1}
-            fill="url(#colorVendas)"
-          />
-        </AreaChart>
+  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+  <XAxis dataKey="dia" stroke="#64748b" />
+  <YAxis stroke="#64748b" />
+
+  <Tooltip
+    formatter={(value) => `R$ ${Number(value).toFixed(2)}`}
+    contentStyle={{
+      borderRadius: 12,
+      border: "none",
+      boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+    }}
+  />
+
+  <Area
+    type="monotone"
+    dataKey="total"
+    stroke="#2563eb"
+    strokeWidth={3}
+    fill="url(#colorVendas)"
+    isAnimationActive
+  />
+</AreaChart>
+
       </ResponsiveContainer>
     </div>
   </div>
