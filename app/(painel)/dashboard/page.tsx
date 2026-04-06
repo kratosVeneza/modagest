@@ -11,12 +11,15 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts"
-
 import {
   TrendingUp,
   TrendingDown,
   Minus,
 } from "lucide-react"
+import { DollarSign, Wallet, BadgeDollarSign, Landmark } from "lucide-react"
+import DashboardHeader from "./components/DashboardHeader"
+import MetricCard from "./components/MetricCard"
+import TrendBadge from "./components/TrendBadge" 
 
 type Venda = {
   id: number
@@ -143,26 +146,33 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 28, fontWeight: "bold" }}>Dashboard</h1>
+      <DashboardHeader
+  title="Dashboard"
+  subtitle="Visão geral da sua operação"
+/>
 
-      <div style={{ display: "flex", gap: 20, marginTop: 20 }}>
+      <div style={grid}>
+  <MetricCard
+    title="Total vendido"
+    value={`R$ ${faturamento.toFixed(2)}`}
+    icon={<DollarSign size={20} />}
+    color="default"
+  />
 
-        <div style={{ background: "#fff", padding: 20, borderRadius: 12 }}>
-          <h3>Faturamento</h3>
-          <p>R$ {faturamento.toFixed(2)}</p>
-        </div>
+  <MetricCard
+    title="Total recebido"
+    value={`R$ ${recebido.toFixed(2)}`}
+    icon={<Wallet size={20} />}
+    color="green"
+  />
 
-        <div style={{ background: "#fff", padding: 20, borderRadius: 12 }}>
-          <h3>Recebido</h3>
-          <p>R$ {recebido.toFixed(2)}</p>
-        </div>
-
-        <div style={{ background: "#fff", padding: 20, borderRadius: 12 }}>
-          <h3>Lucro</h3>
-          <p>R$ {lucro.toFixed(2)}</p>
-        </div>
-
-      </div>
+  <MetricCard
+    title="Lucro"
+    value={`R$ ${lucro.toFixed(2)}`}
+    icon={<TrendingUp size={20} />}
+    color="purple"
+  />
+</div>
 
       <div style={{ marginTop: 40 }}>
         <h2>Vendas por dia</h2>
@@ -184,4 +194,11 @@ export default function Dashboard() {
       </div>
     </div>
   )
+}
+const grid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 16,
+  marginTop: 20,
+  marginBottom: 24,
 }
