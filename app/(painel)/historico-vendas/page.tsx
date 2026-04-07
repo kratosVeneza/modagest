@@ -234,10 +234,19 @@ function fecharModalExcluirVenda() {
 
   const valor = Number(valorPagamento || 0)
 
-  if (valor <= 0) {
-    setMensagem("Informe um valor de pagamento válido.")
-    return
-  }
+if (valor <= 0) {
+  setMensagem("Informe um valor de recebimento válido.")
+  return
+}
+
+if (vendaSelecionada && valor > Number(vendaSelecionada.valor_em_aberto)) {
+  setMensagem(
+    `O valor informado é maior que o saldo em aberto da venda (R$ ${Number(
+      vendaSelecionada.valor_em_aberto
+    ).toFixed(2)}).`
+  )
+  return
+}
 
   if (!dataPagamento) {
     setMensagem("Informe a data do pagamento.")
@@ -778,13 +787,13 @@ const passouFiltroStatus =
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
   <div style={acoesTabela}>
     {venda.status !== "Cancelada" && venda.valor_em_aberto > 0 && (
-      <button
-        onClick={() => abrirModalPagamento(venda)}
-        className="btn btn-primary btn-sm"
-      >
-        Adicionar pagamento
-      </button>
-    )}
+  <button
+    onClick={() => abrirModalPagamento(venda)}
+    className="btn btn-primary btn-sm"
+  >
+    Registrar recebimento
+  </button>
+)}
 
     {venda.status !== "Cancelada" ? (
   <button
@@ -900,25 +909,42 @@ const passouFiltroStatus =
 >
   <>
     {vendaSelecionada && (
-      <div style={{ marginBottom: 16 }}>
-        <div>
-          <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
-        </div>
-        <div>
-          <strong>Total:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}
-        </div>
-        <div>
-          <strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}
-        </div>
-        <div>
-          <strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}
-        </div>
-      </div>
-    )}
-
-    <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280" }}>
-      Use este formulário para registrar pagamentos feitos depois da venda, inclusive com data retroativa.
+  <div style={{ marginBottom: 16 }}>
+    <div>
+      <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
     </div>
+    <div>
+      <strong>Total:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}
+    </div>
+    <div>
+      <strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}
+    </div>
+    <div>
+      <strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}
+    </div>
+
+    <div
+      style={{
+        marginTop: 12,
+        padding: "10px 12px",
+        background: "#eff6ff",
+        border: "1px solid #bfdbfe",
+        borderRadius: 10,
+        color: "#1d4ed8",
+        fontSize: 14,
+        fontWeight: 600,
+      }}
+    >
+      Saldo restante disponível para receber: R${" "}
+      {vendaSelecionada.valor_em_aberto.toFixed(2)}
+    </div>
+  </div>
+)}
+
+    <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280", lineHeight: 1.5 }}>
+  Use este formulário para registrar um recebimento total ou parcial desta venda.
+  Você também pode informar a data real em que o cliente pagou.
+</div>
 
     <div className="grid-2">
       <div>
@@ -927,12 +953,12 @@ const passouFiltroStatus =
           <HelpTooltip text="Informe o valor recebido neste pagamento." />
         </label>
         <input
-          type="number"
-          step="0.01"
-          placeholder="Valor do pagamento"
-          value={valorPagamento}
-          onChange={(e) => setValorPagamento(e.target.value)}
-        />
+  type="number"
+  step="0.01"
+  placeholder="Digite o valor recebido"
+  value={valorPagamento}
+  onChange={(e) => setValorPagamento(e.target.value)}
+/>
       </div>
 
       <div>
