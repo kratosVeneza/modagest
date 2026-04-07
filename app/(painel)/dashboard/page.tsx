@@ -137,21 +137,31 @@ export default function Dashboard() {
   const [produtoMaisVendido, setProdutoMaisVendido] = useState<ProdutoRanking | null>(null)
   const [estoqueBaixo, setEstoqueBaixo] = useState<Produto[]>([])
 
-  useEffect(() => {
-    carregarDados()
-  }, [])
+ useEffect(() => {
+  carregarDados()
 
-  useEffect(() => {
-    if (
-      vendas.length ||
-      pagamentos.length ||
-      produtos.length ||
-      clientes.length ||
-      movimentacoesFinanceiras.length
-    ) {
-      calcular(vendas, pagamentos, produtos, clientes, movimentacoesFinanceiras)
+  function atualizarDashboard() {
+    carregarDados()
+  }
+
+  function aoVoltarParaPagina() {
+    if (document.visibilityState === "visible") {
+      carregarDados()
     }
-  }, [periodo])
+  }
+
+  window.addEventListener("focus", atualizarDashboard)
+  document.addEventListener("visibilitychange", aoVoltarParaPagina)
+
+  return () => {
+    window.removeEventListener("focus", atualizarDashboard)
+    document.removeEventListener("visibilitychange", aoVoltarParaPagina)
+  }
+}, [])
+
+ useEffect(() => {
+  calcular(vendas, pagamentos, produtos, clientes, movimentacoesFinanceiras)
+}, [periodo, vendas, pagamentos, produtos, clientes, movimentacoesFinanceiras])
 
   async function carregarDados() {
     const {
@@ -186,18 +196,16 @@ export default function Dashboard() {
       .eq("user_id", user.id)
 
     const vendasLista = (vendasData || []) as Venda[]
-    const pagamentosLista = (pagamentosData || []) as Pagamento[]
-    const produtosLista = (produtosData || []) as Produto[]
-    const clientesLista = (clientesData || []) as Cliente[]
-    const movimentacoesLista = (movimentacoesData || []) as FinancialTransaction[]
+const pagamentosLista = (pagamentosData || []) as Pagamento[]
+const produtosLista = (produtosData || []) as Produto[]
+const clientesLista = (clientesData || []) as Cliente[]
+const movimentacoesLista = (movimentacoesData || []) as FinancialTransaction[]
 
-    setVendas(vendasLista)
-    setPagamentos(pagamentosLista)
-    setProdutos(produtosLista)
-    setClientes(clientesLista)
-    setMovimentacoesFinanceiras(movimentacoesLista)
-
-    calcular(vendasLista, pagamentosLista, produtosLista, clientesLista, movimentacoesLista)
+setVendas(vendasLista)
+setPagamentos(pagamentosLista)
+setProdutos(produtosLista)
+setClientes(clientesLista)
+setMovimentacoesFinanceiras(movimentacoesLista) 
   }
 
   function obterIntervalos() {
@@ -320,154 +328,154 @@ export default function Dashboard() {
     }
   }
 
-  function calcular(
-    vendasLista: Venda[],
-    pagamentosLista: Pagamento[],
-    produtosLista: Produto[],
-    clientesLista: Cliente[],
-    movimentacoesLista: FinancialTransaction[]
-  ) {
-    const vendasAtivas = vendasLista.filter((v) => v.status !== "Cancelada")
+  const calcular = (
+  vendasLista: Venda[],
+  pagamentosLista: Pagamento[],
+  produtosLista: Produto[],
+  clientesLista: Cliente[],
+  movimentacoesLista: FinancialTransaction[]
+) => {
+  const vendasAtivas = vendasLista.filter((v) => v.status !== "Cancelada")
 
-    const {
-      inicioAtual,
-      fimAtual,
-      inicioAnterior,
-      fimAnterior,
-      quantidadeDias,
-    } = obterIntervalos()
+  const {
+    inicioAtual,
+    fimAtual,
+    inicioAnterior,
+    fimAnterior,
+    quantidadeDias,
+  } = obterIntervalos()
 
-    const vendasPeriodoAtual = vendasAtivas.filter((v) => {
-      const data = new Date(v.created_at)
-      return data >= inicioAtual && data <= fimAtual
-    })
+  const vendasPeriodoAtual = vendasAtivas.filter((v) => {
+    const data = new Date(v.created_at)
+    return data >= inicioAtual && data <= fimAtual
+  })
 
-    const vendasPeriodoAnterior = vendasAtivas.filter((v) => {
-      const data = new Date(v.created_at)
-      return data >= inicioAnterior && data <= fimAnterior
-    })
+  const vendasPeriodoAnterior = vendasAtivas.filter((v) => {
+    const data = new Date(v.created_at)
+    return data >= inicioAnterior && data <= fimAnterior
+  })
 
-    const idsAtual = new Set(vendasPeriodoAtual.map((v) => v.id))
-    const idsAnterior = new Set(vendasPeriodoAnterior.map((v) => v.id))
+  const idsAtual = new Set(vendasPeriodoAtual.map((v) => v.id))
+  const idsAnterior = new Set(vendasPeriodoAnterior.map((v) => v.id))
 
-    const pagamentosAtual = pagamentosLista.filter((p) => {
-      const data = new Date(p.created_at)
-      return data >= inicioAtual && data <= fimAtual && idsAtual.has(p.sale_id)
-    })
+  const pagamentosAtual = pagamentosLista.filter((p) => {
+    const data = new Date(p.created_at)
+    return data >= inicioAtual && data <= fimAtual && idsAtual.has(p.sale_id)
+  })
 
-    const pagamentosAnterior = pagamentosLista.filter((p) => {
-      const data = new Date(p.created_at)
-      return data >= inicioAnterior && data <= fimAnterior && idsAnterior.has(p.sale_id)
-    })
+  const pagamentosAnterior = pagamentosLista.filter((p) => {
+    const data = new Date(p.created_at)
+    return data >= inicioAnterior && data <= fimAnterior && idsAnterior.has(p.sale_id)
+  })
 
-    const faturamentoAtual = vendasPeriodoAtual.reduce(
-      (soma, venda) => soma + Number(venda.valor_total),
-      0
-    )
+  const faturamentoAtual = vendasPeriodoAtual.reduce(
+    (soma, venda) => soma + Number(venda.valor_total),
+    0
+  )
 
-    const faturamentoAnterior = vendasPeriodoAnterior.reduce(
-      (soma, venda) => soma + Number(venda.valor_total),
-      0
-    )
+  const faturamentoAnterior = vendasPeriodoAnterior.reduce(
+    (soma, venda) => soma + Number(venda.valor_total),
+    0
+  )
 
-    const recebidoAtual = pagamentosAtual.reduce(
-      (soma, pagamento) => soma + Number(pagamento.valor),
-      0
-    )
+  const recebidoAtual = pagamentosAtual.reduce(
+    (soma, pagamento) => soma + Number(pagamento.valor),
+    0
+  )
 
-    const recebidoAnterior = pagamentosAnterior.reduce(
-      (soma, pagamento) => soma + Number(pagamento.valor),
-      0
-    )
+  const recebidoAnterior = pagamentosAnterior.reduce(
+    (soma, pagamento) => soma + Number(pagamento.valor),
+    0
+  )
 
-    const recebidoPorVendaPeriodo = vendasPeriodoAtual.reduce((soma, venda) => {
-      const totalRecebidoDaVenda = pagamentosLista
-        .filter((pagamento) => pagamento.sale_id === venda.id)
-        .reduce((acc, item) => acc + Number(item.valor), 0)
+  const recebidoPorVendaPeriodo = vendasPeriodoAtual.reduce((soma, venda) => {
+    const totalRecebidoDaVenda = pagamentosLista
+      .filter((pagamento) => pagamento.sale_id === venda.id)
+      .reduce((acc, item) => acc + Number(item.valor), 0)
 
-      return soma + totalRecebidoDaVenda
-    }, 0)
+    return soma + totalRecebidoDaVenda
+  }, 0)
 
-    const emAbertoAtual = Math.max(faturamentoAtual - recebidoPorVendaPeriodo, 0)
+  const emAbertoAtual = Math.max(faturamentoAtual - recebidoPorVendaPeriodo, 0)
 
-    let lucroAtual = 0
-    let lucroAnterior = 0
+  let lucroAtual = 0
+  let lucroAnterior = 0
 
-    pagamentosAtual.forEach((pagamento) => {
-      const venda = vendasPeriodoAtual.find((v) => v.id === pagamento.sale_id)
-      if (!venda) return
+  pagamentosAtual.forEach((pagamento) => {
+    const venda = vendasPeriodoAtual.find((v) => v.id === pagamento.sale_id)
+    if (!venda) return
 
-      const produto = produtosLista.find((p) => p.id === venda.product_id)
-      const custo = Number(produto?.custo || 0)
+    const produto = produtosLista.find((p) => p.id === venda.product_id)
+    const custo = Number(produto?.custo || 0)
 
-      const proporcao =
-        Number(venda.valor_total) > 0
-          ? Number(pagamento.valor) / Number(venda.valor_total)
-          : 0
+    const proporcao =
+      Number(venda.valor_total) > 0
+        ? Number(pagamento.valor) / Number(venda.valor_total)
+        : 0
 
-      const custoProporcional = custo * Number(venda.quantidade) * proporcao
-      lucroAtual += Number(pagamento.valor) - custoProporcional
-    })
+    const custoProporcional = custo * Number(venda.quantidade) * proporcao
+    lucroAtual += Number(pagamento.valor) - custoProporcional
+  })
 
-    pagamentosAnterior.forEach((pagamento) => {
-      const venda = vendasPeriodoAnterior.find((v) => v.id === pagamento.sale_id)
-      if (!venda) return
+  pagamentosAnterior.forEach((pagamento) => {
+    const venda = vendasPeriodoAnterior.find((v) => v.id === pagamento.sale_id)
+    if (!venda) return
 
-      const produto = produtosLista.find((p) => p.id === venda.product_id)
-      const custo = Number(produto?.custo || 0)
+    const produto = produtosLista.find((p) => p.id === venda.product_id)
+    const custo = Number(produto?.custo || 0)
 
-      const proporcao =
-        Number(venda.valor_total) > 0
-          ? Number(pagamento.valor) / Number(venda.valor_total)
-          : 0
+    const proporcao =
+      Number(venda.valor_total) > 0
+        ? Number(pagamento.valor) / Number(venda.valor_total)
+        : 0
 
-      const custoProporcional = custo * Number(venda.quantidade) * proporcao
-      lucroAnterior += Number(pagamento.valor) - custoProporcional
-    })
+    const custoProporcional = custo * Number(venda.quantidade) * proporcao
+    lucroAnterior += Number(pagamento.valor) - custoProporcional
+  })
 
-    const entradasManuaisPagas = movimentacoesLista
-      .filter((m) => m.type === "entrada" && m.status === "pago")
-      .reduce((soma, m) => soma + Number(m.amount), 0)
+  const entradasManuaisPagas = movimentacoesLista
+    .filter((m) => m.type === "entrada" && m.status === "pago")
+    .reduce((soma, m) => soma + Number(m.amount), 0)
 
-    const saidasManuaisPagas = movimentacoesLista
-      .filter((m) => m.type === "saida" && m.status === "pago")
-      .reduce((soma, m) => soma + Number(m.amount), 0)
+  const saidasManuaisPagas = movimentacoesLista
+    .filter((m) => m.type === "saida" && m.status === "pago")
+    .reduce((soma, m) => soma + Number(m.amount), 0)
 
-    const entradasManuaisPendentes = movimentacoesLista
-      .filter((m) => m.type === "entrada" && m.status === "pendente")
-      .reduce((soma, m) => soma + Number(m.amount), 0)
+  const entradasManuaisPendentes = movimentacoesLista
+    .filter((m) => m.type === "entrada" && m.status === "pendente")
+    .reduce((soma, m) => soma + Number(m.amount), 0)
 
-    const saidasManuaisPendentes = movimentacoesLista
-      .filter((m) => m.type === "saida" && m.status === "pendente")
-      .reduce((soma, m) => soma + Number(m.amount), 0)
+  const saidasManuaisPendentes = movimentacoesLista
+    .filter((m) => m.type === "saida" && m.status === "pendente")
+    .reduce((soma, m) => soma + Number(m.amount), 0)
 
-    const entradasPagasTotal =
-      pagamentosLista.reduce((soma, p) => soma + Number(p.valor), 0) + entradasManuaisPagas
+  const entradasPagasTotal =
+    pagamentosLista.reduce((soma, p) => soma + Number(p.valor), 0) + entradasManuaisPagas
 
-    const saldoAtualCalculado = entradasPagasTotal - saidasManuaisPagas
-    const saldoPrevistoCalculado =
-      saldoAtualCalculado + entradasManuaisPendentes - saidasManuaisPendentes
+  const saldoAtualCalculado = entradasPagasTotal - saidasManuaisPagas
+  const saldoPrevistoCalculado =
+    saldoAtualCalculado + entradasManuaisPendentes - saidasManuaisPendentes
 
-    setFaturamento(faturamentoAtual)
-    setRecebido(recebidoAtual)
-    setLucro(lucroAtual)
-    setEmAberto(emAbertoAtual)
+  setFaturamento(faturamentoAtual)
+  setRecebido(recebidoAtual)
+  setLucro(lucroAtual)
+  setEmAberto(emAbertoAtual)
 
-    setSaldoAtual(saldoAtualCalculado)
-    setSaldoPrevisto(saldoPrevistoCalculado)
-    setDespesasPendentes(saidasManuaisPendentes)
-    setEntradasPendentes(entradasManuaisPendentes)
+  setSaldoAtual(saldoAtualCalculado)
+  setSaldoPrevisto(saldoPrevistoCalculado)
+  setDespesasPendentes(saidasManuaisPendentes)
+  setEntradasPendentes(entradasManuaisPendentes)
 
-    setFaturamentoComparacao(faturamentoAnterior)
-    setRecebidoComparacao(recebidoAnterior)
-    setLucroComparacao(lucroAnterior)
+  setFaturamentoComparacao(faturamentoAnterior)
+  setRecebidoComparacao(recebidoAnterior)
+  setLucroComparacao(lucroAnterior)
 
-    gerarGraficoVendas(vendasPeriodoAtual, inicioAtual, quantidadeDias)
-    gerarGraficoRecebido(pagamentosAtual, inicioAtual, quantidadeDias)
-    gerarUltimasVendas(vendasPeriodoAtual, pagamentosLista, produtosLista, clientesLista)
-    gerarProdutoMaisVendido(vendasPeriodoAtual, produtosLista)
-    gerarEstoqueBaixo(produtosLista)
-  }
+  gerarGraficoVendas(vendasPeriodoAtual, inicioAtual, quantidadeDias)
+  gerarGraficoRecebido(pagamentosAtual, inicioAtual, quantidadeDias)
+  gerarUltimasVendas(vendasPeriodoAtual, pagamentosLista, produtosLista, clientesLista)
+  gerarProdutoMaisVendido(vendasPeriodoAtual, produtosLista)
+  gerarEstoqueBaixo(produtosLista)
+}
 
   function gerarGraficoVendas(
     vendasPeriodo: Venda[],
