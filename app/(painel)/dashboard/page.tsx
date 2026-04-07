@@ -27,6 +27,13 @@ import {
   Boxes,
 } from "lucide-react"
 
+type Pagamento = {
+  id: number
+  sale_id: number
+  valor: number
+  created_at: string
+}
+
 type Venda = {
   id: number
   product_id: number
@@ -35,13 +42,6 @@ type Venda = {
   valor_total: number
   created_at: string
   status?: string
-}
-
-type Pagamento = {
-  id: number
-  sale_id: number
-  valor: number
-  created_at: string
 }
 
 type FinancialTransaction = {
@@ -112,11 +112,9 @@ export default function Dashboard() {
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
-  const [movimentacoesFinanceiras, setMovimentacoesFinanceiras] = useState<
-    FinancialTransaction[]
-  >([])
+  const [movimentacoesFinanceiras, setMovimentacoesFinanceiras] = useState<FinancialTransaction[]>([])
 
-  const [periodo, setPeriodo] = useState<Periodo>("7dias")
+  const [periodo, setPeriodo] = useState<Periodo>("30dias")
 
   const [faturamento, setFaturamento] = useState(0)
   const [recebido, setRecebido] = useState(0)
@@ -136,8 +134,7 @@ export default function Dashboard() {
   const [graficoRecebido, setGraficoRecebido] = useState<GraficoDia[]>([])
 
   const [ultimasVendas, setUltimasVendas] = useState<UltimaVenda[]>([])
-  const [produtoMaisVendido, setProdutoMaisVendido] =
-    useState<ProdutoRanking | null>(null)
+  const [produtoMaisVendido, setProdutoMaisVendido] = useState<ProdutoRanking | null>(null)
   const [estoqueBaixo, setEstoqueBaixo] = useState<Produto[]>([])
 
   useEffect(() => {
@@ -149,15 +146,10 @@ export default function Dashboard() {
       vendas.length ||
       pagamentos.length ||
       produtos.length ||
+      clientes.length ||
       movimentacoesFinanceiras.length
     ) {
-      calcular(
-        vendas,
-        pagamentos,
-        produtos,
-        clientes,
-        movimentacoesFinanceiras
-      )
+      calcular(vendas, pagamentos, produtos, clientes, movimentacoesFinanceiras)
     }
   }, [periodo])
 
@@ -197,8 +189,7 @@ export default function Dashboard() {
     const pagamentosLista = (pagamentosData || []) as Pagamento[]
     const produtosLista = (produtosData || []) as Produto[]
     const clientesLista = (clientesData || []) as Cliente[]
-    const movimentacoesLista =
-      (movimentacoesData || []) as FinancialTransaction[]
+    const movimentacoesLista = (movimentacoesData || []) as FinancialTransaction[]
 
     setVendas(vendasLista)
     setPagamentos(pagamentosLista)
@@ -206,13 +197,7 @@ export default function Dashboard() {
     setClientes(clientesLista)
     setMovimentacoesFinanceiras(movimentacoesLista)
 
-    calcular(
-      vendasLista,
-      pagamentosLista,
-      produtosLista,
-      clientesLista,
-      movimentacoesLista
-    )
+    calcular(vendasLista, pagamentosLista, produtosLista, clientesLista, movimentacoesLista)
   }
 
   function obterIntervalos() {
@@ -285,21 +270,16 @@ export default function Dashboard() {
 
     if (periodo === "tudo") {
       const datasVendas = vendas.map((v) => new Date(v.created_at).getTime())
-      const datasPagamentos = pagamentos.map((p) =>
-        new Date(p.created_at).getTime()
-      )
+      const datasPagamentos = pagamentos.map((p) => new Date(p.created_at).getTime())
       const datasMovimentacoes = movimentacoesFinanceiras.map((m) =>
         new Date((m.paid_at || m.created_at) as string).getTime()
       )
 
-      const todasDatas = [
-        ...datasVendas,
-        ...datasPagamentos,
-        ...datasMovimentacoes,
-      ].filter((item) => !Number.isNaN(item))
+      const todasDatas = [...datasVendas, ...datasPagamentos, ...datasMovimentacoes].filter(
+        (item) => !Number.isNaN(item)
+      )
 
-      const menorData =
-        todasDatas.length > 0 ? Math.min(...todasDatas) : agora.getTime()
+      const menorData = todasDatas.length > 0 ? Math.min(...todasDatas) : agora.getTime()
 
       const inicioAtual = new Date(menorData)
       inicioAtual.setHours(0, 0, 0, 0)
@@ -310,13 +290,8 @@ export default function Dashboard() {
       const fimAnterior = new Date(inicioAtual)
       fimAnterior.setMilliseconds(-1)
 
-      const quantidadeDias = Math.max(
-        1,
-        Math.ceil(
-          (fimAtual.getTime() - inicioAtual.getTime()) /
-            (1000 * 60 * 60 * 24)
-        ) + 1
-      )
+      const quantidadeDias =
+        Math.ceil((fimAtual.getTime() - inicioAtual.getTime()) / (1000 * 60 * 60 * 24)) + 1
 
       return {
         inicioAtual,
@@ -330,27 +305,11 @@ export default function Dashboard() {
     const inicioAtual = new Date(agora.getFullYear(), agora.getMonth(), 1)
     const fimAtual = new Date()
 
-    const inicioAnterior = new Date(
-      agora.getFullYear(),
-      agora.getMonth() - 1,
-      1
-    )
-    const fimAnterior = new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      0,
-      23,
-      59,
-      59,
-      999
-    )
+    const inicioAnterior = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
+    const fimAnterior = new Date(agora.getFullYear(), agora.getMonth(), 0, 23, 59, 59, 999)
 
-    const quantidadeDias = Math.max(
-      1,
-      Math.ceil(
-        (fimAtual.getTime() - inicioAtual.getTime()) / (1000 * 60 * 60 * 24)
-      ) + 1
-    )
+    const quantidadeDias =
+      Math.ceil((fimAtual.getTime() - inicioAtual.getTime()) / (1000 * 60 * 60 * 24)) + 1
 
     return {
       inicioAtual,
@@ -398,9 +357,7 @@ export default function Dashboard() {
 
     const pagamentosAnterior = pagamentosLista.filter((p) => {
       const data = new Date(p.created_at)
-      return (
-        data >= inicioAnterior && data <= fimAnterior && idsAnterior.has(p.sale_id)
-      )
+      return data >= inicioAnterior && data <= fimAnterior && idsAnterior.has(p.sale_id)
     })
 
     const faturamentoAtual = vendasPeriodoAtual.reduce(
@@ -485,8 +442,7 @@ export default function Dashboard() {
       .reduce((soma, m) => soma + Number(m.amount), 0)
 
     const entradasPagasTotal =
-      pagamentosLista.reduce((soma, p) => soma + Number(p.valor), 0) +
-      entradasManuaisPagas
+      pagamentosLista.reduce((soma, p) => soma + Number(p.valor), 0) + entradasManuaisPagas
 
     const saldoAtualCalculado = entradasPagasTotal - saidasManuaisPagas
     const saldoPrevistoCalculado =
@@ -508,12 +464,7 @@ export default function Dashboard() {
 
     gerarGraficoVendas(vendasPeriodoAtual, inicioAtual, quantidadeDias)
     gerarGraficoRecebido(pagamentosAtual, inicioAtual, quantidadeDias)
-    gerarUltimasVendas(
-      vendasPeriodoAtual,
-      pagamentosLista,
-      produtosLista,
-      clientesLista
-    )
+    gerarUltimasVendas(vendasPeriodoAtual, pagamentosLista, produtosLista, clientesLista)
     gerarProdutoMaisVendido(vendasPeriodoAtual, produtosLista)
     gerarEstoqueBaixo(produtosLista)
   }
@@ -597,21 +548,14 @@ export default function Dashboard() {
     clientesLista: Cliente[]
   ) {
     const lista = [...vendasPeriodo]
-      .sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5)
       .map((venda) => {
         const produto = produtosLista.find((p) => p.id === venda.product_id)
         const cliente = clientesLista.find((c) => c.id === venda.customer_id)
 
-        const pagamentosDaVenda = pagamentosLista.filter(
-          (p) => p.sale_id === venda.id
-        )
-        const valorRecebido = pagamentosDaVenda.reduce(
-          (soma, p) => soma + Number(p.valor),
-          0
-        )
+        const pagamentosDaVenda = pagamentosLista.filter((p) => p.sale_id === venda.id)
+        const valorRecebido = pagamentosDaVenda.reduce((soma, p) => soma + Number(p.valor), 0)
 
         return {
           id: venda.id,
@@ -627,10 +571,7 @@ export default function Dashboard() {
     setUltimasVendas(lista)
   }
 
-  function gerarProdutoMaisVendido(
-    vendasPeriodo: Venda[],
-    produtosLista: Produto[]
-  ) {
+  function gerarProdutoMaisVendido(vendasPeriodo: Venda[], produtosLista: Produto[]) {
     const mapa = new Map<number, ProdutoRanking>()
 
     vendasPeriodo.forEach((venda) => {
@@ -648,9 +589,7 @@ export default function Dashboard() {
       mapa.get(venda.product_id)!.quantidade += Number(venda.quantidade)
     })
 
-    const ranking = Array.from(mapa.values()).sort(
-      (a, b) => b.quantidade - a.quantidade
-    )
+    const ranking = Array.from(mapa.values()).sort((a, b) => b.quantidade - a.quantidade)
     setProdutoMaisVendido(ranking[0] || null)
   }
 
@@ -771,32 +710,103 @@ export default function Dashboard() {
     }
   }, [faturamento, recebido, lucro])
 
+  const alertas = useMemo(() => {
+    const lista: { texto: string; tipo: "warning" | "danger" | "info" }[] = []
+
+    if (emAberto > 0) {
+      lista.push({
+        texto: `Você ainda tem R$ ${emAberto.toFixed(2)} em aberto para receber.`,
+        tipo: "info",
+      })
+    }
+
+    if (despesasPendentes > 0) {
+      lista.push({
+        texto: `Existem R$ ${despesasPendentes.toFixed(2)} em despesas pendentes.`,
+        tipo: "warning",
+      })
+    }
+
+    if (saldoPrevisto < 0) {
+      lista.push({
+        texto: `Seu saldo previsto ficará negativo em R$ ${Math.abs(saldoPrevisto).toFixed(2)}.`,
+        tipo: "danger",
+      })
+    }
+
+    if (estoqueBaixo.length > 0) {
+      lista.push({
+        texto: `${estoqueBaixo.length} produto(s) estão com estoque baixo.`,
+        tipo: "warning",
+      })
+    }
+
+    return lista
+  }, [emAberto, despesasPendentes, saldoPrevisto, estoqueBaixo])
+
+  const resumoExecutivo = useMemo(() => {
+    const linhas: string[] = []
+
+    if (faturamento > faturamentoComparacao) {
+      linhas.push("Seu faturamento cresceu em relação ao período anterior.")
+    } else if (faturamento < faturamentoComparacao) {
+      linhas.push("Seu faturamento caiu em relação ao período anterior.")
+    }
+
+    if (recebido < faturamento && faturamento > 0) {
+      linhas.push("Nem tudo que foi vendido já entrou no caixa.")
+    }
+
+    if (lucro > 0) {
+      linhas.push("Sua operação está gerando resultado positivo no período.")
+    } else if (lucro < 0) {
+      linhas.push("Seu lucro recebido está negativo e merece atenção.")
+    }
+
+    if (estoqueBaixo.length > 0) {
+      linhas.push("Há produtos com estoque baixo que podem afetar futuras vendas.")
+    }
+
+    if (linhas.length === 0) {
+      linhas.push("Seus indicadores estão estáveis no período selecionado.")
+    }
+
+    return linhas
+  }, [faturamento, faturamentoComparacao, recebido, lucro, estoqueBaixo])
+
   return (
     <div style={{ padding: 24 }}>
-      <div style={headerWrap}>
-        <div>
+      <div style={heroWrap}>
+        <div style={heroLeft}>
           <p style={eyebrow}>Dashboard</p>
-          <h1 style={pageTitle}>Visão geral da sua operação</h1>
-          <p style={pageSubtitle}>
-            Acompanhe faturamento, recebimentos, valores em aberto e lucro conforme o período selecionado.
+          <h1 style={heroTitle}>Visão geral da sua operação</h1>
+          <p style={heroSubtitle}>
+            Acompanhe faturamento, recebimentos, caixa, valores em aberto e lucro conforme o período selecionado.
           </p>
-        </div>
-      </div>
 
-      <div style={periodWrap}>
-        {periodos.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => setPeriodo(item.value)}
-            style={{
-              ...periodButton,
-              ...(periodo === item.value ? periodButtonActive : {}),
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
+          <div style={periodWrap}>
+            {periodos.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setPeriodo(item.value)}
+                style={{
+                  ...periodButton,
+                  ...(periodo === item.value ? periodButtonActive : {}),
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={heroRight}>
+          <div style={heroBadge}>
+            <span style={heroBadgeLabel}>Resultado do período</span>
+            <strong style={heroBadgeValue}>R$ {lucro.toFixed(2)}</strong>
+          </div>
+        </div>
       </div>
 
       <div
@@ -811,19 +821,38 @@ export default function Dashboard() {
           <AlertTriangle size={18} />
           <strong>{leituraRapida.titulo}</strong>
         </div>
-        <p style={{ margin: "8px 0 0 0", fontSize: 14 }}>
-          {leituraRapida.texto}
-        </p>
+        <p style={{ margin: "8px 0 0 0", fontSize: 14 }}>{leituraRapida.texto}</p>
       </div>
 
+      {alertas.length > 0 && (
+        <div style={alertasGrid}>
+          {alertas.map((alerta, index) => (
+            <div
+              key={`${alerta.texto}-${index}`}
+              style={{
+                ...alertaItem,
+                ...(alerta.tipo === "danger"
+                  ? alertaDanger
+                  : alerta.tipo === "warning"
+                  ? alertaWarning
+                  : alertaInfo),
+              }}
+            >
+              <AlertTriangle size={16} />
+              <span>{alerta.texto}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={grid}>
-        <div style={card}>
+        <div style={cardDestaque}>
           <div style={cardTop}>
             <div>
-              <p style={cardLabel}>Total vendido</p>
-              <h3 style={cardValue}>R$ {faturamento.toFixed(2)}</h3>
+              <p style={cardLabelLight}>Total vendido</p>
+              <h3 style={cardValueLight}>R$ {faturamento.toFixed(2)}</h3>
             </div>
-            <div style={iconBox}>
+            <div style={iconBoxHero}>
               <DollarSign size={20} />
             </div>
           </div>
@@ -842,7 +871,65 @@ export default function Dashboard() {
               {tendenciaFaturamento.icon}
               {tendenciaFaturamento.label}
             </span>
-            <span style={helperText}>{textoComparacao}</span>
+            <span style={helperTextLight}>{textoComparacao}</span>
+          </div>
+        </div>
+
+        <div style={cardDestaque}>
+          <div style={cardTop}>
+            <div>
+              <p style={cardLabelLight}>Total recebido</p>
+              <h3 style={cardValueLight}>R$ {recebido.toFixed(2)}</h3>
+            </div>
+            <div style={{ ...iconBoxHero, background: "rgba(16,185,129,0.18)" }}>
+              <Wallet size={20} />
+            </div>
+          </div>
+
+          <div style={trendRow}>
+            <span
+              style={{
+                ...trendBadge,
+                ...(tendenciaRecebido.variant === "up"
+                  ? trendUp
+                  : tendenciaRecebido.variant === "down"
+                  ? trendDown
+                  : trendNeutral),
+              }}
+            >
+              {tendenciaRecebido.icon}
+              {tendenciaRecebido.label}
+            </span>
+            <span style={helperTextLight}>{textoComparacao}</span>
+          </div>
+        </div>
+
+        <div style={cardDestaque}>
+          <div style={cardTop}>
+            <div>
+              <p style={cardLabelLight}>Lucro recebido</p>
+              <h3 style={cardValueLight}>R$ {lucro.toFixed(2)}</h3>
+            </div>
+            <div style={{ ...iconBoxHero, background: "rgba(59,130,246,0.18)" }}>
+              <BarChart3 size={20} />
+            </div>
+          </div>
+
+          <div style={trendRow}>
+            <span
+              style={{
+                ...trendBadge,
+                ...(tendenciaLucro.variant === "up"
+                  ? trendUp
+                  : tendenciaLucro.variant === "down"
+                  ? trendDown
+                  : trendNeutral),
+              }}
+            >
+              {tendenciaLucro.icon}
+              {tendenciaLucro.label}
+            </span>
+            <span style={helperTextLight}>{textoComparacao}</span>
           </div>
         </div>
 
@@ -888,35 +975,6 @@ export default function Dashboard() {
         <div style={card}>
           <div style={cardTop}>
             <div>
-              <p style={cardLabel}>Total recebido</p>
-              <h3 style={cardValue}>R$ {recebido.toFixed(2)}</h3>
-            </div>
-            <div style={{ ...iconBox, background: "#ecfdf5", color: "#065f46" }}>
-              <Wallet size={20} />
-            </div>
-          </div>
-
-          <div style={trendRow}>
-            <span
-              style={{
-                ...trendBadge,
-                ...(tendenciaRecebido.variant === "up"
-                  ? trendUp
-                  : tendenciaRecebido.variant === "down"
-                  ? trendDown
-                  : trendNeutral),
-              }}
-            >
-              {tendenciaRecebido.icon}
-              {tendenciaRecebido.label}
-            </span>
-            <span style={helperText}>{textoComparacao}</span>
-          </div>
-        </div>
-
-        <div style={card}>
-          <div style={cardTop}>
-            <div>
               <p style={cardLabel}>Em aberto</p>
               <h3 style={cardValue}>R$ {emAberto.toFixed(2)}</h3>
             </div>
@@ -925,35 +983,6 @@ export default function Dashboard() {
             </div>
           </div>
           <p style={helperText}>Valor ainda pendente das vendas do período.</p>
-        </div>
-
-        <div style={card}>
-          <div style={cardTop}>
-            <div>
-              <p style={cardLabel}>Lucro recebido</p>
-              <h3 style={cardValue}>R$ {lucro.toFixed(2)}</h3>
-            </div>
-            <div style={{ ...iconBox, background: "#eff6ff", color: "#1d4ed8" }}>
-              <BarChart3 size={20} />
-            </div>
-          </div>
-
-          <div style={trendRow}>
-            <span
-              style={{
-                ...trendBadge,
-                ...(tendenciaLucro.variant === "up"
-                  ? trendUp
-                  : tendenciaLucro.variant === "down"
-                  ? trendDown
-                  : trendNeutral),
-              }}
-            >
-              {tendenciaLucro.icon}
-              {tendenciaLucro.label}
-            </span>
-            <span style={helperText}>{textoComparacao}</span>
-          </div>
         </div>
       </div>
 
@@ -995,6 +1024,18 @@ export default function Dashboard() {
           <p style={miniCardText}>
             Valores que ainda devem entrar no caixa e ainda não foram marcados como pagos.
           </p>
+        </div>
+      </div>
+
+      <div style={resumoBox}>
+        <h2 style={chartTitle}>Resumo executivo automático</h2>
+        <div style={resumoLista}>
+          {resumoExecutivo.map((linha, index) => (
+            <div key={`${linha}-${index}`} style={resumoItem}>
+              <span style={resumoPonto}>•</span>
+              <span>{linha}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -1135,8 +1176,43 @@ function formatarData(dataIso: string) {
   return new Date(dataIso).toLocaleString("pt-BR")
 }
 
-const headerWrap: React.CSSProperties = {
+const heroWrap: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 20,
+  flexWrap: "wrap",
   marginBottom: 24,
+}
+
+const heroLeft: React.CSSProperties = {
+  flex: 1,
+  minWidth: 280,
+}
+
+const heroRight: React.CSSProperties = {
+  minWidth: 220,
+}
+
+const heroBadge: React.CSSProperties = {
+  background: "linear-gradient(135deg, #0f172a, #1d4ed8)",
+  color: "#fff",
+  borderRadius: 20,
+  padding: 20,
+  minWidth: 220,
+  boxShadow: "0 14px 30px rgba(37,99,235,0.18)",
+}
+
+const heroBadgeLabel: React.CSSProperties = {
+  display: "block",
+  fontSize: 13,
+  opacity: 0.85,
+  marginBottom: 8,
+}
+
+const heroBadgeValue: React.CSSProperties = {
+  fontSize: 30,
+  fontWeight: 800,
 }
 
 const eyebrow: React.CSSProperties = {
@@ -1148,14 +1224,15 @@ const eyebrow: React.CSSProperties = {
   letterSpacing: 0.6,
 }
 
-const pageTitle: React.CSSProperties = {
+const heroTitle: React.CSSProperties = {
   margin: "8px 0 6px 0",
-  fontSize: 30,
+  fontSize: 34,
   fontWeight: 800,
   color: "#0f172a",
+  lineHeight: 1.1,
 }
 
-const pageSubtitle: React.CSSProperties = {
+const heroSubtitle: React.CSSProperties = {
   margin: 0,
   fontSize: 15,
   color: "#64748b",
@@ -1165,7 +1242,7 @@ const periodWrap: React.CSSProperties = {
   display: "flex",
   gap: 10,
   flexWrap: "wrap",
-  marginBottom: 20,
+  marginTop: 18,
 }
 
 const periodButton: React.CSSProperties = {
@@ -1192,9 +1269,44 @@ const leituraCard: React.CSSProperties = {
   marginBottom: 20,
 }
 
+const alertasGrid: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  marginBottom: 20,
+}
+
+const alertaItem: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "14px 16px",
+  borderRadius: 14,
+  border: "1px solid",
+  fontSize: 14,
+  fontWeight: 600,
+}
+
+const alertaDanger: React.CSSProperties = {
+  background: "#fef2f2",
+  borderColor: "#fecaca",
+  color: "#991b1b",
+}
+
+const alertaWarning: React.CSSProperties = {
+  background: "#fffbeb",
+  borderColor: "#fde68a",
+  color: "#92400e",
+}
+
+const alertaInfo: React.CSSProperties = {
+  background: "#eff6ff",
+  borderColor: "#bfdbfe",
+  color: "#1d4ed8",
+}
+
 const grid: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
   gap: 16,
   marginTop: 20,
   marginBottom: 24,
@@ -1220,6 +1332,15 @@ const card: React.CSSProperties = {
   borderRadius: 18,
   padding: 18,
   boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
+}
+
+const cardDestaque: React.CSSProperties = {
+  background: "linear-gradient(135deg, #0f172a, #1e3a8a)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 20,
+  padding: 20,
+  boxShadow: "0 14px 30px rgba(15,23,42,0.15)",
+  color: "#fff",
 }
 
 const miniCard: React.CSSProperties = {
@@ -1266,11 +1387,25 @@ const cardLabel: React.CSSProperties = {
   color: "#64748b",
 }
 
+const cardLabelLight: React.CSSProperties = {
+  margin: 0,
+  fontSize: 13,
+  fontWeight: 600,
+  color: "rgba(255,255,255,0.8)",
+}
+
 const cardValue: React.CSSProperties = {
   margin: "8px 0 0 0",
   fontSize: 28,
   fontWeight: 800,
   color: "#0f172a",
+}
+
+const cardValueLight: React.CSSProperties = {
+  margin: "8px 0 0 0",
+  fontSize: 30,
+  fontWeight: 800,
+  color: "#ffffff",
 }
 
 const iconBox: React.CSSProperties = {
@@ -1282,6 +1417,18 @@ const iconBox: React.CSSProperties = {
   justifyContent: "center",
   background: "#eff6ff",
   color: "#1d4ed8",
+  flexShrink: 0,
+}
+
+const iconBoxHero: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: 12,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "rgba(255,255,255,0.14)",
+  color: "#ffffff",
   flexShrink: 0,
 }
 
@@ -1324,6 +1471,45 @@ const helperText: React.CSSProperties = {
   margin: 0,
   fontSize: 13,
   color: "#64748b",
+}
+
+const helperTextLight: React.CSSProperties = {
+  margin: 0,
+  fontSize: 13,
+  color: "rgba(255,255,255,0.72)",
+}
+
+const resumoBox: React.CSSProperties = {
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 20,
+  padding: 20,
+  marginBottom: 24,
+  boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
+}
+
+const resumoLista: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  marginTop: 14,
+}
+
+const resumoItem: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 10,
+  padding: "12px 14px",
+  borderRadius: 14,
+  background: "#f8fafc",
+  color: "#334155",
+  border: "1px solid #e2e8f0",
+  fontSize: 14,
+}
+
+const resumoPonto: React.CSSProperties = {
+  color: "#2563eb",
+  fontWeight: 800,
+  lineHeight: 1.2,
 }
 
 const chartCard: React.CSSProperties = {
