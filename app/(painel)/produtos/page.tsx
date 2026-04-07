@@ -362,11 +362,12 @@ async function salvarEntradaRapida() {
   setSalvandoEntrada(true)
 
   const resultado = await addStockQuick({
-    productId: produtoSelecionado.id,
-    userId: user.id,
-    quantidade,
-    custo,
-  })
+  productId: produtoSelecionado.id,
+  userId: user.id,
+  quantidade: Number(quantidade),
+  custo: Number(custo || 0),
+  motivo: "Entrada rápida pelo cadastro de produtos",
+})
 
   setSalvandoEntrada(false)
 
