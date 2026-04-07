@@ -1,11 +1,12 @@
 import { supabase } from "@/lib/supabase"
+import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 
-type Params = {
+type AddStockQuickParams = {
   productId: number
   userId: string
   quantidade: number
-  custo: number | null
-  observacao?: string | null
+  custo?: number
+  motivo?: string
 }
 
 export async function addStockQuick({
@@ -13,65 +14,62 @@ export async function addStockQuick({
   userId,
   quantidade,
   custo,
-  observacao,
-}: Params) {
-  try {
-    const { data: produto, error } = await supabase
-      .from("products")
-      .select("id, estoque, custo")
-      .eq("id", productId)
-      .eq("user_id", userId)
-      .single()
-
-    if (error || !produto) {
-      return { success: false, message: "Produto não encontrado." }
-    }
-
-    const estoqueAtual = Number(produto.estoque || 0)
-    const custoAtual = Number(produto.custo || 0)
-
-    const quantidadeEntrada = Number(quantidade)
-    const custoEntrada = Number(custo || 0)
-
-    const novoEstoque = estoqueAtual + quantidadeEntrada
-
-    // 🔥 CÁLCULO DE CUSTO MÉDIO
-    let novoCusto = custoAtual
-
-    if (custoEntrada > 0 && quantidadeEntrada > 0) {
-      const valorAtual = estoqueAtual * custoAtual
-      const valorEntrada = quantidadeEntrada * custoEntrada
-
-      const total = valorAtual + valorEntrada
-
-      novoCusto = total / novoEstoque
-    }
-
-    const { error: erroUpdate } = await supabase
-      .from("products")
-      .update({
-        estoque: novoEstoque,
-        custo: novoCusto,
-      })
-      .eq("id", productId)
-      .eq("user_id", userId)
-
-    if (erroUpdate) {
-      return { success: false, message: "Erro ao atualizar produto." }
-    }
-
-    await supabase.from("stock_movements").insert({
-      product_id: productId,
-      user_id: userId,
-      tipo: "entrada",
-      quantidade: quantidadeEntrada,
-      custo: custoEntrada,
-      observacao: observacao || "Entrada rápida",
-      created_at: new Date().toISOString(),
-    })
-
-    return { success: true }
-  } catch {
-    return { success: false, message: "Erro inesperado." }
+  motivo,
+}: AddStockQuickParams) {
+  if (quantidade <= 0) {
+    return { success: false, message: "Quantidade inválida." }
   }
+
+  const { data: produto, error: erroProduto } = await supabase
+    .from("products")
+    .select("id, estoque, custo")
+    .eq("id", productId)
+    .eq("user_id", userId)
+    .single()
+
+  if (erroProduto || !produto) {
+    return { success: false, message: "Produto não encontrado." }
+  }
+
+  const estoqueAtual = Number(produto.estoque || 0)
+  const custoAtual = Number(produto.custo || 0)
+  const quantidadeEntrada = Number(quantidade)
+  const custoEntrada = Number(custo || 0)
+
+  const novoEstoque = estoqueAtual + quantidadeEntrada
+
+  let novoCusto = custoAtual
+
+  if (custoEntrada > 0) {
+    const custoTotalAtual = estoqueAtual * custoAtual
+    const custoTotalEntrada = quantidadeEntrada * custoEntrada
+    novoCusto = (custoTotalAtual + custoTotalEntrada) / novoEstoque
+  }
+
+  const { error: erroUpdate } = await supabase
+    .from("products")
+    .update({
+      estoque: novoEstoque,
+      custo: novoCusto,
+    })
+    .eq("id", productId)
+    .eq("user_id", userId)
+
+  if (erroUpdate) {
+    return { success: false, message: "Erro ao atualizar estoque." }
+  }
+
+  await registrarMovimentoEstoque({
+    productId,
+    userId,
+    tipo: "entrada",
+    quantidade: quantidadeEntrada,
+    motivo:
+      motivo ||
+      (custoEntrada > 0
+        ? `Entrada com custo R$ ${custoEntrada.toFixed(2)}`
+        : "Entrada rápida de estoque"),
+  })
+
+  return { success: true }
 }
