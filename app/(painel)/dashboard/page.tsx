@@ -19,8 +19,11 @@ import {
   Wallet,
   BadgeDollarSign,
   BarChart3,
-  ShoppingBag,
+  Landmark,
+  CircleDollarSign,
+  Receipt,
   AlertTriangle,
+  ShoppingBag,
   Boxes,
 } from "lucide-react"
 
@@ -38,6 +41,19 @@ type Pagamento = {
   id: number
   sale_id: number
   valor: number
+  created_at: string
+}
+
+type FinancialTransaction = {
+  id: number
+  user_id: string
+  type: "entrada" | "saida"
+  description: string
+  category: string | null
+  amount: number
+  status: "pago" | "pendente"
+  due_date: string | null
+  paid_at: string | null
   created_at: string
 }
 
@@ -65,7 +81,7 @@ type TrendInfo = {
   icon: React.ReactNode
 }
 
-type Periodo = "hoje" | "7dias" | "30dias" | "mes"
+type Periodo = "hoje" | "7dias" | "30dias" | "mes" | "tudo"
 
 type UltimaVenda = {
   id: number
@@ -88,6 +104,7 @@ const periodos: { value: Periodo; label: string }[] = [
   { value: "7dias", label: "7 dias" },
   { value: "30dias", label: "30 dias" },
   { value: "mes", label: "Mês atual" },
+  { value: "tudo", label: "Todo o período" },
 ]
 
 export default function Dashboard() {
@@ -95,6 +112,9 @@ export default function Dashboard() {
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const [movimentacoesFinanceiras, setMovimentacoesFinanceiras] = useState<
+    FinancialTransaction[]
+  >([])
 
   const [periodo, setPeriodo] = useState<Periodo>("7dias")
 
@@ -102,6 +122,11 @@ export default function Dashboard() {
   const [recebido, setRecebido] = useState(0)
   const [lucro, setLucro] = useState(0)
   const [emAberto, setEmAberto] = useState(0)
+
+  const [saldoAtual, setSaldoAtual] = useState(0)
+  const [saldoPrevisto, setSaldoPrevisto] = useState(0)
+  const [despesasPendentes, setDespesasPendentes] = useState(0)
+  const [entradasPendentes, setEntradasPendentes] = useState(0)
 
   const [faturamentoComparacao, setFaturamentoComparacao] = useState(0)
   const [recebidoComparacao, setRecebidoComparacao] = useState(0)
@@ -111,7 +136,8 @@ export default function Dashboard() {
   const [graficoRecebido, setGraficoRecebido] = useState<GraficoDia[]>([])
 
   const [ultimasVendas, setUltimasVendas] = useState<UltimaVenda[]>([])
-  const [produtoMaisVendido, setProdutoMaisVendido] = useState<ProdutoRanking | null>(null)
+  const [produtoMaisVendido, setProdutoMaisVendido] =
+    useState<ProdutoRanking | null>(null)
   const [estoqueBaixo, setEstoqueBaixo] = useState<Produto[]>([])
 
   useEffect(() => {
@@ -119,8 +145,19 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    if (vendas.length || pagamentos.length || produtos.length) {
-      calcular(vendas, pagamentos, produtos, clientes)
+    if (
+      vendas.length ||
+      pagamentos.length ||
+      produtos.length ||
+      movimentacoesFinanceiras.length
+    ) {
+      calcular(
+        vendas,
+        pagamentos,
+        produtos,
+        clientes,
+        movimentacoesFinanceiras
+      )
     }
   }, [periodo])
 
@@ -146,6 +183,11 @@ export default function Dashboard() {
       .select("*")
       .eq("user_id", user.id)
 
+    const { data: movimentacoesData } = await supabase
+      .from("financial_transactions")
+      .select("*")
+      .eq("user_id", user.id)
+
     const { data: clientesData } = await supabase
       .from("customers")
       .select("id, nome")
@@ -155,13 +197,22 @@ export default function Dashboard() {
     const pagamentosLista = (pagamentosData || []) as Pagamento[]
     const produtosLista = (produtosData || []) as Produto[]
     const clientesLista = (clientesData || []) as Cliente[]
+    const movimentacoesLista =
+      (movimentacoesData || []) as FinancialTransaction[]
 
     setVendas(vendasLista)
     setPagamentos(pagamentosLista)
     setProdutos(produtosLista)
     setClientes(clientesLista)
+    setMovimentacoesFinanceiras(movimentacoesLista)
 
-    calcular(vendasLista, pagamentosLista, produtosLista, clientesLista)
+    calcular(
+      vendasLista,
+      pagamentosLista,
+      produtosLista,
+      clientesLista,
+      movimentacoesLista
+    )
   }
 
   function obterIntervalos() {
@@ -232,14 +283,74 @@ export default function Dashboard() {
       }
     }
 
+    if (periodo === "tudo") {
+      const datasVendas = vendas.map((v) => new Date(v.created_at).getTime())
+      const datasPagamentos = pagamentos.map((p) =>
+        new Date(p.created_at).getTime()
+      )
+      const datasMovimentacoes = movimentacoesFinanceiras.map((m) =>
+        new Date((m.paid_at || m.created_at) as string).getTime()
+      )
+
+      const todasDatas = [
+        ...datasVendas,
+        ...datasPagamentos,
+        ...datasMovimentacoes,
+      ].filter((item) => !Number.isNaN(item))
+
+      const menorData =
+        todasDatas.length > 0 ? Math.min(...todasDatas) : agora.getTime()
+
+      const inicioAtual = new Date(menorData)
+      inicioAtual.setHours(0, 0, 0, 0)
+
+      const fimAtual = new Date()
+
+      const inicioAnterior = new Date(inicioAtual)
+      const fimAnterior = new Date(inicioAtual)
+      fimAnterior.setMilliseconds(-1)
+
+      const quantidadeDias = Math.max(
+        1,
+        Math.ceil(
+          (fimAtual.getTime() - inicioAtual.getTime()) /
+            (1000 * 60 * 60 * 24)
+        ) + 1
+      )
+
+      return {
+        inicioAtual,
+        fimAtual,
+        inicioAnterior,
+        fimAnterior,
+        quantidadeDias,
+      }
+    }
+
     const inicioAtual = new Date(agora.getFullYear(), agora.getMonth(), 1)
     const fimAtual = new Date()
 
-    const inicioAnterior = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
-    const fimAnterior = new Date(agora.getFullYear(), agora.getMonth(), 0, 23, 59, 59, 999)
+    const inicioAnterior = new Date(
+      agora.getFullYear(),
+      agora.getMonth() - 1,
+      1
+    )
+    const fimAnterior = new Date(
+      agora.getFullYear(),
+      agora.getMonth(),
+      0,
+      23,
+      59,
+      59,
+      999
+    )
 
-    const quantidadeDias =
-      Math.ceil((fimAtual.getTime() - inicioAtual.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    const quantidadeDias = Math.max(
+      1,
+      Math.ceil(
+        (fimAtual.getTime() - inicioAtual.getTime()) / (1000 * 60 * 60 * 24)
+      ) + 1
+    )
 
     return {
       inicioAtual,
@@ -254,7 +365,8 @@ export default function Dashboard() {
     vendasLista: Venda[],
     pagamentosLista: Pagamento[],
     produtosLista: Produto[],
-    clientesLista: Cliente[]
+    clientesLista: Cliente[],
+    movimentacoesLista: FinancialTransaction[]
   ) {
     const vendasAtivas = vendasLista.filter((v) => v.status !== "Cancelada")
 
@@ -286,7 +398,9 @@ export default function Dashboard() {
 
     const pagamentosAnterior = pagamentosLista.filter((p) => {
       const data = new Date(p.created_at)
-      return data >= inicioAnterior && data <= fimAnterior && idsAnterior.has(p.sale_id)
+      return (
+        data >= inicioAnterior && data <= fimAnterior && idsAnterior.has(p.sale_id)
+      )
     })
 
     const faturamentoAtual = vendasPeriodoAtual.reduce(
@@ -354,10 +468,39 @@ export default function Dashboard() {
       lucroAnterior += Number(pagamento.valor) - custoProporcional
     })
 
+    const entradasManuaisPagas = movimentacoesLista
+      .filter((m) => m.type === "entrada" && m.status === "pago")
+      .reduce((soma, m) => soma + Number(m.amount), 0)
+
+    const saidasManuaisPagas = movimentacoesLista
+      .filter((m) => m.type === "saida" && m.status === "pago")
+      .reduce((soma, m) => soma + Number(m.amount), 0)
+
+    const entradasManuaisPendentes = movimentacoesLista
+      .filter((m) => m.type === "entrada" && m.status === "pendente")
+      .reduce((soma, m) => soma + Number(m.amount), 0)
+
+    const saidasManuaisPendentes = movimentacoesLista
+      .filter((m) => m.type === "saida" && m.status === "pendente")
+      .reduce((soma, m) => soma + Number(m.amount), 0)
+
+    const entradasPagasTotal =
+      pagamentosLista.reduce((soma, p) => soma + Number(p.valor), 0) +
+      entradasManuaisPagas
+
+    const saldoAtualCalculado = entradasPagasTotal - saidasManuaisPagas
+    const saldoPrevistoCalculado =
+      saldoAtualCalculado + entradasManuaisPendentes - saidasManuaisPendentes
+
     setFaturamento(faturamentoAtual)
     setRecebido(recebidoAtual)
     setLucro(lucroAtual)
     setEmAberto(emAbertoAtual)
+
+    setSaldoAtual(saldoAtualCalculado)
+    setSaldoPrevisto(saldoPrevistoCalculado)
+    setDespesasPendentes(saidasManuaisPendentes)
+    setEntradasPendentes(entradasManuaisPendentes)
 
     setFaturamentoComparacao(faturamentoAnterior)
     setRecebidoComparacao(recebidoAnterior)
@@ -365,7 +508,12 @@ export default function Dashboard() {
 
     gerarGraficoVendas(vendasPeriodoAtual, inicioAtual, quantidadeDias)
     gerarGraficoRecebido(pagamentosAtual, inicioAtual, quantidadeDias)
-    gerarUltimasVendas(vendasPeriodoAtual, pagamentosLista, produtosLista, clientesLista)
+    gerarUltimasVendas(
+      vendasPeriodoAtual,
+      pagamentosLista,
+      produtosLista,
+      clientesLista
+    )
     gerarProdutoMaisVendido(vendasPeriodoAtual, produtosLista)
     gerarEstoqueBaixo(produtosLista)
   }
@@ -449,14 +597,21 @@ export default function Dashboard() {
     clientesLista: Cliente[]
   ) {
     const lista = [...vendasPeriodo]
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
       .slice(0, 5)
       .map((venda) => {
         const produto = produtosLista.find((p) => p.id === venda.product_id)
         const cliente = clientesLista.find((c) => c.id === venda.customer_id)
 
-        const pagamentosDaVenda = pagamentosLista.filter((p) => p.sale_id === venda.id)
-        const valorRecebido = pagamentosDaVenda.reduce((soma, p) => soma + Number(p.valor), 0)
+        const pagamentosDaVenda = pagamentosLista.filter(
+          (p) => p.sale_id === venda.id
+        )
+        const valorRecebido = pagamentosDaVenda.reduce(
+          (soma, p) => soma + Number(p.valor),
+          0
+        )
 
         return {
           id: venda.id,
@@ -472,7 +627,10 @@ export default function Dashboard() {
     setUltimasVendas(lista)
   }
 
-  function gerarProdutoMaisVendido(vendasPeriodo: Venda[], produtosLista: Produto[]) {
+  function gerarProdutoMaisVendido(
+    vendasPeriodo: Venda[],
+    produtosLista: Produto[]
+  ) {
     const mapa = new Map<number, ProdutoRanking>()
 
     vendasPeriodo.forEach((venda) => {
@@ -490,7 +648,9 @@ export default function Dashboard() {
       mapa.get(venda.product_id)!.quantidade += Number(venda.quantidade)
     })
 
-    const ranking = Array.from(mapa.values()).sort((a, b) => b.quantidade - a.quantidade)
+    const ranking = Array.from(mapa.values()).sort(
+      (a, b) => b.quantidade - a.quantidade
+    )
     setProdutoMaisVendido(ranking[0] || null)
   }
 
@@ -567,6 +727,8 @@ export default function Dashboard() {
       ? "vs ontem"
       : periodo === "mes"
       ? "vs mês anterior"
+      : periodo === "tudo"
+      ? "vs início da operação"
       : "vs período anterior"
 
   const leituraRapida = useMemo(() => {
@@ -649,7 +811,9 @@ export default function Dashboard() {
           <AlertTriangle size={18} />
           <strong>{leituraRapida.titulo}</strong>
         </div>
-        <p style={{ margin: "8px 0 0 0", fontSize: 14 }}>{leituraRapida.texto}</p>
+        <p style={{ margin: "8px 0 0 0", fontSize: 14 }}>
+          {leituraRapida.texto}
+        </p>
       </div>
 
       <div style={grid}>
@@ -680,6 +844,45 @@ export default function Dashboard() {
             </span>
             <span style={helperText}>{textoComparacao}</span>
           </div>
+        </div>
+
+        <div style={card}>
+          <div style={cardTop}>
+            <div>
+              <p style={cardLabel}>Saldo atual</p>
+              <h3 style={cardValue}>R$ {saldoAtual.toFixed(2)}</h3>
+            </div>
+            <div style={{ ...iconBox, background: "#f3e8ff", color: "#6b21a8" }}>
+              <Landmark size={20} />
+            </div>
+          </div>
+          <p style={helperText}>Entradas pagas menos saídas pagas.</p>
+        </div>
+
+        <div style={card}>
+          <div style={cardTop}>
+            <div>
+              <p style={cardLabel}>Saldo previsto</p>
+              <h3 style={cardValue}>R$ {saldoPrevisto.toFixed(2)}</h3>
+            </div>
+            <div style={{ ...iconBox, background: "#ede9fe", color: "#5b21b6" }}>
+              <CircleDollarSign size={20} />
+            </div>
+          </div>
+          <p style={helperText}>Considerando entradas e saídas pendentes.</p>
+        </div>
+
+        <div style={card}>
+          <div style={cardTop}>
+            <div>
+              <p style={cardLabel}>Despesas pendentes</p>
+              <h3 style={cardValue}>R$ {despesasPendentes.toFixed(2)}</h3>
+            </div>
+            <div style={{ ...iconBox, background: "#fff7ed", color: "#9a3412" }}>
+              <Receipt size={20} />
+            </div>
+          </div>
+          <p style={helperText}>Saídas ainda não pagas no financeiro.</p>
         </div>
 
         <div style={card}>
@@ -780,6 +983,17 @@ export default function Dashboard() {
             {estoqueBaixo.length > 0
               ? "Existem produtos no limite mínimo de estoque."
               : "Nenhum produto com estoque baixo no momento."}
+          </p>
+        </div>
+
+        <div style={miniCard}>
+          <div style={miniCardTop}>
+            <Wallet size={18} />
+            <strong>Entradas pendentes</strong>
+          </div>
+          <p style={miniCardTitle}>R$ {entradasPendentes.toFixed(2)}</p>
+          <p style={miniCardText}>
+            Valores que ainda devem entrar no caixa e ainda não foram marcados como pagos.
           </p>
         </div>
       </div>
