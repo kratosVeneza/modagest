@@ -6,6 +6,7 @@ import AnimatedModal from "../../components/AnimatedModal"
 import TableSkeleton from "../../components/TableSkeleton"
 import HelpTooltip from "../../components/HelpTooltip"
 import HelpBanner from "../../components/InfoBanner"
+import { addStockQuick } from "@/lib/services/products/addStockQuick"
 
 type Produto = {
   id: number
@@ -62,6 +63,12 @@ export default function Produtos() {
   const [mensagem, setMensagem] = useState("")
   const [carregando, setCarregando] = useState(true)
   const [erros, setErros] = useState<ErrosFormulario>({})
+  // 🔥 ENTRADA RÁPIDA
+const [modalEntradaAberto, setModalEntradaAberto] = useState(false)
+const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null)
+const [quantidadeEntrada, setQuantidadeEntrada] = useState("")
+const [custoEntrada, setCustoEntrada] = useState("")
+const [salvandoEntrada, setSalvandoEntrada] = useState(false)
 
 
   useEffect(() => {
@@ -320,6 +327,57 @@ const unidadesSugestao = useMemo(() => {
   const lucroPreview = precoPreview - custoPreview
   const margemPreview = precoPreview > 0 ? (lucroPreview / precoPreview) * 100 : 0
   const markupPreview = custoPreview > 0 ? (lucroPreview / custoPreview) * 100 : 0
+  // 🔥 ENTRADA RÁPIDA
+function abrirModalEntrada(produto: Produto) {
+  setProdutoSelecionado(produto)
+  setQuantidadeEntrada("")
+  setCustoEntrada(produto.custo ? String(produto.custo) : "")
+  setModalEntradaAberto(true)
+}
+
+function fecharModalEntrada() {
+  setProdutoSelecionado(null)
+  setQuantidadeEntrada("")
+  setCustoEntrada("")
+  setModalEntradaAberto(false)
+}
+
+async function salvarEntradaRapida() {
+  if (!produtoSelecionado) return
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return
+
+  const quantidade = Number(quantidadeEntrada)
+  const custo = custoEntrada ? Number(custoEntrada) : null
+
+  if (quantidade <= 0) {
+    alert("Informe uma quantidade válida.")
+    return
+  }
+
+  setSalvandoEntrada(true)
+
+  const resultado = await addStockQuick({
+    productId: produtoSelecionado.id,
+    userId: user.id,
+    quantidade,
+    custo,
+  })
+
+  setSalvandoEntrada(false)
+
+  if (!resultado.success) {
+    alert(resultado.message)
+    return
+  }
+
+  fecharModalEntrada()
+  await carregarProdutos()
+}
 
   return (
     <div>
@@ -458,19 +516,28 @@ const unidadesSugestao = useMemo(() => {
                     <td style={td}>{markup.toFixed(1)}%</td>
                     <td style={td}>
                       <div style={acoesTabela}>
-                        <button
-                          onClick={() => editarProduto(p)}
-                          className="btn btn-success btn-sm"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => excluirProduto(p.id)}
-                          className="btn btn-danger btn-sm"
-                        >
-                          Excluir
-                        </button>
-                      </div>
+  <button
+    onClick={() => editarProduto(p)}
+    className="btn btn-success btn-sm"
+  >
+    Editar
+  </button>
+
+  <button
+    onClick={() => excluirProduto(p.id)}
+    className="btn btn-danger btn-sm"
+  >
+    Excluir
+  </button>
+
+  {/* 🔥 NOVO BOTÃO */}
+  <button
+    onClick={() => abrirModalEntrada(p)}
+    className="btn btn-primary btn-sm"
+  >
+    + Entrada
+  </button>
+</div>
                     </td>
                   </tr>
                 )
@@ -745,6 +812,60 @@ const unidadesSugestao = useMemo(() => {
           </div>
         </>
       </AnimatedModal>
+      {/* 🔥 MODAL ENTRADA RÁPIDA */}
+<AnimatedModal
+  open={modalEntradaAberto}
+  onClose={fecharModalEntrada}
+  title="Entrada rápida de estoque"
+  footer={
+    <>
+      <button onClick={fecharModalEntrada} className="btn btn-secondary">
+        Cancelar
+      </button>
+      <button
+        onClick={salvarEntradaRapida}
+        className="btn btn-primary"
+        disabled={salvandoEntrada}
+      >
+        {salvandoEntrada ? "Salvando..." : "Adicionar ao estoque"}
+      </button>
+    </>
+  }
+>
+  <>
+    {produtoSelecionado && (
+      <div style={{ marginBottom: 16 }}>
+        <strong>{produtoSelecionado.nome}</strong>
+        <div style={{ fontSize: 13, color: "#6b7280" }}>
+          Estoque atual: {produtoSelecionado.estoque}
+        </div>
+      </div>
+    )}
+
+    <div className="grid-2">
+      <div>
+        <label>Quantidade</label>
+        <input
+          type="number"
+          placeholder="Ex: 10"
+          value={quantidadeEntrada}
+          onChange={(e) => setQuantidadeEntrada(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label>Custo (opcional)</label>
+        <input
+          type="number"
+          step="0.01"
+          placeholder="Ex: 50.00"
+          value={custoEntrada}
+          onChange={(e) => setCustoEntrada(e.target.value)}
+        />
+      </div>
+    </div>
+  </>
+</AnimatedModal>
     </div>
   )
 }
