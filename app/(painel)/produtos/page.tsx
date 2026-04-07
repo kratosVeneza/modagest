@@ -515,30 +515,29 @@ async function salvarEntradaRapida() {
                     <td style={td}>{margem.toFixed(1)}%</td>
                     <td style={td}>{markup.toFixed(1)}%</td>
                     <td style={td}>
-                      <div style={acoesTabela}>
-  <button
-    onClick={() => editarProduto(p)}
-    className="btn btn-success btn-sm"
-  >
-    Editar
-  </button>
+  <div style={acoesTabela}>
+    <button
+      onClick={() => editarProduto(p)}
+      className="btn btn-success btn-sm"
+    >
+      Editar
+    </button>
 
-  <button
-    onClick={() => excluirProduto(p.id)}
-    className="btn btn-danger btn-sm"
-  >
-    Excluir
-  </button>
+    <button
+      onClick={() => excluirProduto(p.id)}
+      className="btn btn-danger btn-sm"
+    >
+      Excluir
+    </button>
 
-  {/* 🔥 NOVO BOTÃO */}
-  <button
-    onClick={() => abrirModalEntrada(p)}
-    className="btn btn-primary btn-sm"
-  >
-    + Entrada
-  </button>
-</div>
-                    </td>
+    <button
+      onClick={() => abrirModalEntrada(p)}
+      className="btn btn-primary btn-sm"
+    >
+      + Entrada
+    </button>
+  </div>
+</td>
                   </tr>
                 )
               })
@@ -873,6 +872,7 @@ async function salvarEntradaRapida() {
 const acoesTabela = {
   display: "flex",
   gap: "8px",
+  flexWrap: "wrap" as const,
 }
 
 const tabela = {

@@ -18,7 +18,7 @@ export async function addStockQuick({
   try {
     const { data: produto, error: erroProduto } = await supabase
       .from("products")
-      .select("*")
+      .select("id, estoque, custo")
       .eq("id", productId)
       .eq("user_id", userId)
       .single()
@@ -28,7 +28,7 @@ export async function addStockQuick({
     }
 
     const estoqueAtual = Number(produto.estoque || 0)
-    const novoEstoque = estoqueAtual + quantidade
+    const novoEstoque = estoqueAtual + Number(quantidade)
 
     const { error: erroUpdate } = await supabase
       .from("products")
@@ -47,14 +47,14 @@ export async function addStockQuick({
       product_id: productId,
       user_id: userId,
       tipo: "entrada",
-      quantidade,
-      custo,
+      quantidade: Number(quantidade),
+      custo: custo,
       observacao: observacao || "Entrada rápida",
+      created_at: new Date().toISOString(),
     })
 
     return { success: true }
   } catch {
-    return { success: false, message: "Erro inesperado." }
+    return { success: false, message: "Erro inesperado ao lançar entrada." }
   }
-} 
-
+}
