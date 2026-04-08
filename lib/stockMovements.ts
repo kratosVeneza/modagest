@@ -11,14 +11,14 @@ export async function registrarMovimentoEstoque({
   userId: string
   tipo: "entrada" | "saida" | "cancelamento" | "ajuste"
   quantidade: number
-  motivo: string
+  motivo?: string
 }) {
   const { data, error } = await supabase.from("stock_movements").insert({
     product_id: productId,
     user_id: userId,
     tipo,
     quantidade,
-    motivo,
+    motivo: motivo || null,
   })
 
   if (error) {
