@@ -7,6 +7,9 @@ export type VendaBanco = {
   quantidade: number
   valor_unitario: number
   valor_total: number
+  valor_original: number | null
+  desconto_percentual: number | null
+  desconto_valor: number | null
   created_at: string
   user_id: string
   status: string
@@ -48,6 +51,9 @@ export type VendaExibicao = {
   quantidade: number
   valor_unitario: number
   valor_total: number
+  valor_original: number
+  desconto_percentual: number
+  desconto_valor: number
   valor_recebido: number
   valor_em_aberto: number
   payment_status: "Pendente" | "Parcial" | "Recebida"
@@ -174,7 +180,16 @@ export async function getSalesHistory(userId: string): Promise<GetSalesHistoryRe
       0
     )
 
-    const valorEmAberto = Math.max(Number(venda.valor_total) - valorRecebido, 0)
+    const valorTotal = Number(venda.valor_total)
+    const valorOriginal =
+      Number(venda.valor_original || 0) > 0
+        ? Number(venda.valor_original)
+        : Number(venda.valor_total)
+
+    const descontoPercentual = Number(venda.desconto_percentual || 0)
+    const descontoValor = Number(venda.desconto_valor || 0)
+
+    const valorEmAberto = Math.max(valorTotal - valorRecebido, 0)
 
     return {
       id: venda.id,
@@ -182,10 +197,13 @@ export async function getSalesHistory(userId: string): Promise<GetSalesHistoryRe
       customer_id: venda.customer_id,
       quantidade: venda.quantidade,
       valor_unitario: Number(venda.valor_unitario),
-      valor_total: Number(venda.valor_total),
+      valor_total: valorTotal,
+      valor_original: valorOriginal,
+      desconto_percentual: descontoPercentual,
+      desconto_valor: descontoValor,
       valor_recebido: valorRecebido,
       valor_em_aberto: valorEmAberto,
-      payment_status: calcularStatusPagamento(Number(venda.valor_total), valorRecebido),
+      payment_status: calcularStatusPagamento(valorTotal, valorRecebido),
       created_at: venda.created_at,
       status: venda.status || "Ativa",
       estoque_devolvido: Boolean(venda.estoque_devolvido),

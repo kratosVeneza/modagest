@@ -77,6 +77,7 @@ export default function HistoricoVendas() {
   const [formaPagamento, setFormaPagamento] = useState("Pix")
   const [observacaoPagamento, setObservacaoPagamento] = useState("")
   const [dataPagamento, setDataPagamento] = useState(hojeInputDate())
+  const [descontoPercentual, setDescontoPercentual] = useState("")
   const [salvandoPagamento, setSalvandoPagamento] = useState(false)
   const [editandoPagamentoId, setEditandoPagamentoId] = useState<number | null>(null)
   const [modalEditarPagamentoAberto, setModalEditarPagamentoAberto] = useState(false)
@@ -195,6 +196,7 @@ export default function HistoricoVendas() {
     setFormaPagamento("Pix")
     setObservacaoPagamento("")
     setDataPagamento(formatarDataInput(venda.created_at))
+    setDescontoPercentual("")
     setModalPagamentoAberto(true)
   }
 
@@ -205,6 +207,7 @@ export default function HistoricoVendas() {
     setFormaPagamento("Pix")
     setObservacaoPagamento("")
     setDataPagamento(hojeInputDate())
+    setDescontoPercentual("")
     setModalPagamentoAberto(false)
   }
 
@@ -239,11 +242,14 @@ if (valor <= 0) {
   return
 }
 
-if (vendaSelecionada && valor > Number(vendaSelecionada.valor_em_aberto)) {
+if (Number(descontoPercentual || 0) < 0 || Number(descontoPercentual || 0) > 100) {
+  setMensagem("Informe um desconto válido entre 0% e 100%.")
+  return
+}
+
+if (vendaSelecionada && valor > saldoComDesconto) {
   setMensagem(
-    `O valor informado é maior que o saldo em aberto da venda (R$ ${Number(
-      vendaSelecionada.valor_em_aberto
-    ).toFixed(2)}).`
+    `O valor informado é maior que o saldo disponível da venda após o desconto (R$ ${saldoComDesconto.toFixed(2)}).`
   )
   return
 }
@@ -256,13 +262,16 @@ if (vendaSelecionada && valor > Number(vendaSelecionada.valor_em_aberto)) {
   setSalvandoPagamento(true)
 
   const resultado = await addSalePayment({
-    saleId: vendaSelecionada.id,
-    userId: user.id,
-    valor,
-    formaPagamento,
-    observacao: observacaoPagamento || null,
-    dataPagamentoIso: montarDataISO(dataPagamento),
-  })
+  saleId: vendaSelecionada.id,
+  userId: user.id,
+  valor,
+  formaPagamento,
+  observacao: observacaoPagamento || null,
+  dataPagamentoIso: montarDataISO(dataPagamento),
+  descontoPercentual: Number(descontoPercentual || 0),
+  descontoValor: descontoCalculado,
+  valorTotalComDesconto: totalComDesconto,
+})
 
   setSalvandoPagamento(false)
 
@@ -464,6 +473,33 @@ const passouFiltroStatus =
       .filter((venda) => venda.status !== "Cancelada")
       .reduce((soma, venda) => soma + Number(venda.valor_em_aberto), 0)
   }, [vendasFiltradas])
+
+  const descontoCalculado = useMemo(() => {
+  if (!vendaSelecionada) return 0
+
+  const percentual = Number(descontoPercentual || 0)
+
+  if (percentual <= 0) return 0
+  if (percentual > 100) return Number(vendaSelecionada.valor_total)
+
+  return Number(vendaSelecionada.valor_total) * (percentual / 100)
+}, [descontoPercentual, vendaSelecionada])
+
+const totalComDesconto = useMemo(() => {
+  if (!vendaSelecionada) return 0
+
+  const total = Number(vendaSelecionada.valor_total) - descontoCalculado
+  return total < 0 ? 0 : total
+}, [vendaSelecionada, descontoCalculado])
+
+const saldoComDesconto = useMemo(() => {
+  if (!vendaSelecionada) return 0
+
+  const saldo =
+    totalComDesconto - Number(vendaSelecionada.valor_recebido)
+
+  return saldo < 0 ? 0 : saldo
+}, [vendaSelecionada, totalComDesconto])
 
   function exportarCSV() {
     if (vendasFiltradas.length === 0) {
@@ -755,7 +791,29 @@ const passouFiltroStatus =
                       </td>
                 <td style={td}>{venda.skuProduto}</td>
                 <td style={td}>{venda.quantidade}</td>
-                <td style={td}>R$ {venda.valor_total.toFixed(2)}</td>
+                <td style={td}>
+  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <strong>R$ {venda.valor_total.toFixed(2)}</strong>
+
+    {venda.desconto_percentual > 0 && (
+      <span style={{ fontSize: 12, color: "#6b7280" }}>
+        Original: R$ {venda.valor_original.toFixed(2)} •
+        Desconto: {venda.desconto_percentual.toFixed(2)}% (R$ {venda.desconto_valor.toFixed(2)})
+      </span>
+    )}
+  </div>
+</td><td style={td}>
+  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <strong>R$ {venda.valor_total.toFixed(2)}</strong>
+
+    {venda.desconto_percentual > 0 && (
+      <span style={{ fontSize: 12, color: "#6b7280" }}>
+        Original: R$ {venda.valor_original.toFixed(2)} •
+        Desconto: {venda.desconto_percentual.toFixed(2)}% (R$ {venda.desconto_valor.toFixed(2)})
+      </span>
+    )}
+  </div>
+</td>
                 <td style={td}>R$ {venda.valor_recebido.toFixed(2)}</td>
                 <td style={td}>R$ {venda.valor_em_aberto.toFixed(2)}</td>
                 <td style={td}>
@@ -891,7 +949,7 @@ const passouFiltroStatus =
       <AnimatedModal
   open={modalPagamentoAberto}
   onClose={fecharModalPagamento}
-  title="Adicionar pagamento"
+ title="Registrar recebimento"
   footer={
     <>
       <button onClick={fecharModalPagamento} className="btn btn-secondary">
@@ -946,6 +1004,37 @@ const passouFiltroStatus =
   Você também pode informar a data real em que o cliente pagou.
 </div>
 
+{vendaSelecionada && (
+  <div
+    style={{
+      marginBottom: 16,
+      padding: "12px 14px",
+      background: "#f8fafc",
+      border: "1px solid #e2e8f0",
+      borderRadius: 10,
+      fontSize: 14,
+      color: "#334155",
+      lineHeight: 1.7,
+    }}
+  >
+    <div>
+      <strong>Total original:</strong> R$ {Number(vendaSelecionada.valor_total).toFixed(2)}
+    </div>
+    <div>
+      <strong>Desconto:</strong> R$ {descontoCalculado.toFixed(2)} ({Number(descontoPercentual || 0).toFixed(2)}%)
+    </div>
+    <div>
+      <strong>Total com desconto:</strong> R$ {totalComDesconto.toFixed(2)}
+    </div>
+    <div>
+      <strong>Já recebido:</strong> R$ {Number(vendaSelecionada.valor_recebido).toFixed(2)}
+    </div>
+    <div>
+      <strong>Saldo restante após desconto:</strong> R$ {saldoComDesconto.toFixed(2)}
+    </div>
+  </div>
+)}
+
     <div className="grid-2">
       <div>
         <label style={labelAjuda}>
@@ -960,6 +1049,22 @@ const passouFiltroStatus =
   onChange={(e) => setValorPagamento(e.target.value)}
 />
       </div>
+
+      <div>
+  <label style={labelAjuda}>
+    Desconto (%)
+    <HelpTooltip text="Informe a porcentagem de desconto concedida nesta venda antes de registrar o pagamento." />
+  </label>
+  <input
+    type="number"
+    step="0.01"
+    min="0"
+    max="100"
+    placeholder="Ex: 10"
+    value={descontoPercentual}
+    onChange={(e) => setDescontoPercentual(e.target.value)}
+  />
+</div>
 
       <div>
         <label style={labelAjuda}>
@@ -1028,14 +1133,14 @@ const passouFiltroStatus =
           <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
         </div>
         <div>
-          <strong>Total:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}
-        </div>
-        <div>
-          <strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}
-        </div>
-        <div>
-          <strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}
-        </div>
+  <strong>Total atual da venda:</strong> R$ {Number(vendaSelecionada.valor_total).toFixed(2)}
+</div>
+<div>
+  <strong>Recebido:</strong> R$ {Number(vendaSelecionada.valor_recebido).toFixed(2)}
+</div>
+<div>
+  <strong>Em aberto atual:</strong> R$ {Number(vendaSelecionada.valor_em_aberto).toFixed(2)}
+</div>
       </div>
     )}
 
