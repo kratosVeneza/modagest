@@ -28,6 +28,8 @@ const [resultadoImportacao, setResultadoImportacao] = useState<{
   revisaoPendente: number
   erros: string[]
 } | null>(null)
+const [markup, setMarkup] = useState(100)
+
 
   async function lerPlanilha() {
     setMensagem("")
@@ -117,9 +119,10 @@ setAvisoQuantidade(semQuantidade)
     }
 
     const resultado = await applySpreadsheetImports({
-      userId: user.id,
-      itens,
-    })
+  userId: user.id,
+  itens,
+  markup,
+})
 
     setResultadoImportacao({
       criados: resultado.criados,
@@ -188,6 +191,14 @@ setAvisoQuantidade(semQuantidade)
     onChange={(e) => setArquivo(e.target.files?.[0] || null)}
   />
 
+  <input
+  type="number"
+  placeholder="Markup (%)"
+  value={markup}
+  onChange={(e) => setMarkup(Number(e.target.value))}
+  style={{ width: 120 }}
+/>
+
   <button
     onClick={lerPlanilha}
     className="btn btn-primary"
@@ -225,6 +236,8 @@ setAvisoQuantidade(semQuantidade)
     <div style={{ fontWeight: 700, marginBottom: 8 }}>
       Resumo da importação aplicada
     </div>
+
+    
 
     <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 14 }}>
       <span><strong>Criados:</strong> {resultadoImportacao.criados}</span>

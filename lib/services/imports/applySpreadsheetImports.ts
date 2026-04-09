@@ -5,6 +5,7 @@ import { ItemComMatch } from "./matchImportedProducts"
 type ApplySpreadsheetImportsParams = {
   userId: string
   itens: ItemComMatch[]
+  markup?: number
 }
 
 type ApplySpreadsheetImportsResult = {
@@ -16,7 +17,12 @@ type ApplySpreadsheetImportsResult = {
   erros: string[]
 }
 
-function gerarSkuBase(nome: string, categoria?: string | null, tipo?: string | null, index = 1) {
+function gerarSkuBase(
+  nome: string,
+  categoria?: string | null,
+  tipo?: string | null,
+  index = 1
+) {
   const nomeParte = (nome || "PRO").trim().slice(0, 3).toUpperCase() || "PRO"
   const categoriaParte = (categoria || "CT").trim().slice(0, 2).toUpperCase() || "CT"
   const tipoParte = (tipo || "TP").trim().slice(0, 2).toUpperCase() || "TP"
@@ -54,6 +60,7 @@ async function gerarSkuUnico(
 export async function applySpreadsheetImports({
   userId,
   itens,
+  markup = 100,
 }: ApplySpreadsheetImportsParams): Promise<ApplySpreadsheetImportsResult> {
   let criados = 0
   let atualizados = 0
@@ -67,17 +74,36 @@ export async function applySpreadsheetImports({
         continue
       }
 
+      // preço da planilha será tratado como custo
+      const custo = Number(item.preco || 0)
+      const precoVenda = custo * (1 + markup / 100)
+
       if (item.acao === "somar_estoque" && item.produtoExistenteId) {
         const resultado = await addStockQuick({
           productId: item.produtoExistenteId,
           userId,
           quantidade: Number(item.quantidade),
-          custo: Number(item.custo || 0),
+          custo,
           motivo: "Importação por planilha",
         })
 
         if (!resultado.success) {
           erros.push(`${item.nome}: ${resultado.message}`)
+          continue
+        }
+
+        // opcionalmente, também atualiza custo/preço do produto existente
+        const { error: erroUpdateProduto } = await supabase
+          .from("products")
+          .update({
+            custo,
+            preco: precoVenda,
+          })
+          .eq("id", item.produtoExistenteId)
+          .eq("user_id", userId)
+
+        if (erroUpdateProduto) {
+          erros.push(`${item.nome}: estoque somado, mas houve erro ao atualizar custo/preço.`)
           continue
         }
 
@@ -107,8 +133,8 @@ export async function applySpreadsheetImports({
             tamanho: item.tamanho || null,
             estoque: 0,
             estoque_minimo: 0,
-            custo: Number(item.custo || 0),
-            preco: Number(item.preco || 0),
+            custo,
+            preco: precoVenda,
           })
           .select("id")
           .single()
@@ -122,7 +148,7 @@ export async function applySpreadsheetImports({
           productId: Number(novoProduto.id),
           userId,
           quantidade: Number(item.quantidade),
-          custo: Number(item.custo || 0),
+          custo,
           motivo: "Importação por planilha",
         })
 
@@ -152,3 +178,4 @@ export async function applySpreadsheetImports({
     erros,
   }
 }
+
