@@ -27,6 +27,7 @@ import {
   PanelLeftOpen,
   BarChart3,
   Bot,
+  Upload,
 } from "lucide-react"
 
 const menuGroups = [
@@ -41,6 +42,9 @@ const menuGroups = [
   title: "Operação",
   items: [
     { href: "/produtos", label: "Produtos", icon: Package },
+
+    { href: "/importar-compra", label: "Importar compras", icon: Upload },
+
     { href: "/estoque", label: "Estoque", icon: Boxes },
     { href: "/pedidos", label: "Pedidos", icon: ShoppingCart },
     { href: "/vendas", label: "Vendas", icon: Wallet },
