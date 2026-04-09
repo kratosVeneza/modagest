@@ -78,7 +78,7 @@ export async function applySpreadsheetImports({
         continue
       }
 
-      const custo = Number(item.preco || 0)
+      const custo = Number(item.custo || item.preco || 0)
       const precoVenda = custo * (1 + markup / 100)
 
       if (item.acao === "somar_estoque" && item.produtoExistenteId) {

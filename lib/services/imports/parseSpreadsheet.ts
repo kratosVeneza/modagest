@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx"
 
 export type ItemImportado = {
+  sku?: string | null
   nome: string
   marca: string | null
   fornecedor?: string | null
@@ -14,38 +15,65 @@ export type ItemImportado = {
 }
 
 const MAPEAMENTO_COLUNAS = {
+  sku: [
+    "sku",
+    "codigo",
+    "código",
+    "cod",
+    "ref",
+    "referencia",
+    "referência",
+    "codigo sku",
+    "código sku",
+  ],
   nome: [
     "nome",
     "produto",
     "item",
-    "descrição",
     "descricao",
+    "descrição",
     "nome do produto",
+    "modelo",
+    "modelo do produto",
+    "descricao do produto",
+    "descrição do produto",
   ],
   marca: [
     "marca",
     "fabricante",
+  ],
+  fornecedor: [
     "fornecedor",
+    "distribuidor",
+    "vendor",
   ],
   categoria: [
     "categoria",
     "grupo",
     "linha",
+    "secao",
+    "seção",
+    "departamento",
   ],
   tipo: [
     "tipo",
-    "modelo",
     "subcategoria",
+    "classe",
+    "estilo",
   ],
   cor: [
     "cor",
     "cor do produto",
+    "color",
   ],
   tamanho: [
     "tamanho",
     "tam",
     "numeração",
     "numeracao",
+    "numero",
+    "número",
+    "size",
   ],
   quantidade: [
     "quantidade",
@@ -53,6 +81,9 @@ const MAPEAMENTO_COLUNAS = {
     "qtde",
     "qnt",
     "quant",
+    "estoque",
+    "unidades",
+    "unidade",
   ],
   custo: [
     "custo",
@@ -64,6 +95,11 @@ const MAPEAMENTO_COLUNAS = {
     "valor unitário",
     "preco compra",
     "preço compra",
+    "valor",
+    "valor item",
+    "valor do item",
+    "preco",
+    "preço",
   ],
   preco: [
     "preco",
@@ -73,6 +109,9 @@ const MAPEAMENTO_COLUNAS = {
     "preço de venda",
     "valor unitario venda",
     "valor unitário venda",
+    "valor final",
+    "preco final",
+    "preço final",
   ],
 }
 
@@ -110,10 +149,7 @@ function normalizarNumero(valor: unknown) {
   return Number.isNaN(numero) ? 0 : numero
 }
 
-function pegarCampo(
-  linha: Record<string, unknown>,
-  aliases: string[]
-) {
+function pegarCampo(linha: Record<string, unknown>, aliases: string[]) {
   const entradas = Object.entries(linha)
 
   for (const [chave, valor] of entradas) {
@@ -151,8 +187,10 @@ export async function parseSpreadsheet(file: File): Promise<ItemImportado[]> {
 
   const itens: ItemImportado[] = linhas
     .map((linha) => {
+      const sku = normalizarTexto(detectarCampo(linha, "sku"))
       const nome = normalizarTexto(detectarCampo(linha, "nome"))
       const marca = normalizarTexto(detectarCampo(linha, "marca"))
+      const fornecedor = normalizarTexto(detectarCampo(linha, "fornecedor"))
       const categoria = normalizarTexto(detectarCampo(linha, "categoria"))
       const tipo = normalizarTexto(detectarCampo(linha, "tipo"))
       const cor = normalizarTexto(detectarCampo(linha, "cor"))
@@ -160,22 +198,28 @@ export async function parseSpreadsheet(file: File): Promise<ItemImportado[]> {
 
       let quantidade = normalizarNumero(detectarCampo(linha, "quantidade"))
 
-if (!quantidade || quantidade <= 0) {
-  quantidade = 1
-}
-      const custo = normalizarNumero(detectarCampo(linha, "custo"))
-      const preco = normalizarNumero(detectarCampo(linha, "preco"))
+      if (!quantidade || quantidade <= 0) {
+        quantidade = 1
+      }
+
+      const custoDetectado = normalizarNumero(detectarCampo(linha, "custo"))
+      const precoDetectado = normalizarNumero(detectarCampo(linha, "preco"))
+
+      const custo = custoDetectado > 0 ? custoDetectado : precoDetectado
+      const preco = precoDetectado > 0 ? precoDetectado : null
 
       return {
+        sku: sku || null,
         nome,
         marca: marca || null,
+        fornecedor: fornecedor || null,
         categoria: categoria || null,
         tipo: tipo || null,
         cor: cor || null,
         tamanho: tamanho || null,
         quantidade,
         custo,
-        preco: preco > 0 ? preco : null,
+        preco,
       }
     })
     .filter((item) => item.nome)
