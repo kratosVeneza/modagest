@@ -3,6 +3,7 @@ import * as XLSX from "xlsx"
 export type ItemImportado = {
   nome: string
   marca: string | null
+  fornecedor?: string | null
   categoria: string | null
   tipo: string | null
   cor: string | null

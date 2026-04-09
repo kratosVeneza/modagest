@@ -41,9 +41,25 @@ export default function ImportarCompra() {
   const [categoriaLote, setCategoriaLote] = useState("")
   const [tipoLote, setTipoLote] = useState("")
 
+  const [marcasExistentes, setMarcasExistentes] = useState<string[]>([])
+const [fornecedoresExistentes, setFornecedoresExistentes] = useState<string[]>([])
+const [categoriasExistentes, setCategoriasExistentes] = useState<string[]>([])
+const [tiposExistentes, setTiposExistentes] = useState<string[]>([])
+
+const [modoNovaMarca, setModoNovaMarca] = useState(false)
+const [modoNovoFornecedor, setModoNovoFornecedor] = useState(false)
+const [modoNovaCategoria, setModoNovaCategoria] = useState(false)
+const [modoNovoTipo, setModoNovoTipo] = useState(false)
+
   const todosSelecionados = useMemo(() => {
     return itens.length > 0 && itensSelecionados.length === itens.length
   }, [itens, itensSelecionados])
+
+  function extrairValoresUnicos(lista: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(lista.map((valor) => (valor || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b))
+}
 
   async function lerPlanilha() {
     setMensagem("")
@@ -70,15 +86,26 @@ export default function ImportarCompra() {
       }
 
       const { data: produtosBanco, error: erroProdutos } = await supabase
-        .from("products")
-        .select("id, nome, cor, tamanho")
-        .eq("user_id", user.id)
+  .from("products")
+  .select("id, nome, cor, tamanho, marca, fornecedor, categoria, tipo")
+  .eq("user_id", user.id)
 
       if (erroProdutos) {
         setMensagem("Erro ao carregar produtos cadastrados.")
         setProcessando(false)
         return
       }
+
+      setMarcasExistentes(extrairValoresUnicos((produtosBanco ?? []).map((p) => p.marca)))
+setFornecedoresExistentes(
+  extrairValoresUnicos((produtosBanco ?? []).map((p) => p.fornecedor))
+)
+setCategoriasExistentes(
+  extrairValoresUnicos((produtosBanco ?? []).map((p) => p.categoria))
+)
+setTiposExistentes(
+  extrairValoresUnicos((produtosBanco ?? []).map((p) => p.tipo))
+)
 
       const itensLidos: ItemImportado[] = await parseSpreadsheet(arquivo)
 
@@ -94,11 +121,16 @@ export default function ImportarCompra() {
       const itensComMatch = matchImportedProducts(
         itensLidos,
         (produtosBanco ?? []) as {
-          id: number
-          nome: string
-          cor: string | null
-          tamanho: string | null
-        }[]
+  id: number
+  nome: string
+  cor: string | null
+  tamanho: string | null
+  marca?: string | null
+  fornecedor?: string | null
+  categoria?: string | null
+  tipo?: string | null
+}[]
+
       )
 
       const itensPreparados: ItemImportacaoUI[] = itensComMatch.map((item) => ({
@@ -199,6 +231,51 @@ export default function ImportarCompra() {
       )
     )
   }
+
+  function selecionarValorLote(
+  campo: "marca" | "fornecedor" | "categoria" | "tipo",
+  valor: string
+) {
+  if (campo === "marca") {
+    if (valor === "__novo__") {
+      setModoNovaMarca(true)
+      setMarcaLote("")
+    } else {
+      setModoNovaMarca(false)
+      setMarcaLote(valor)
+    }
+  }
+
+  if (campo === "fornecedor") {
+    if (valor === "__novo__") {
+      setModoNovoFornecedor(true)
+      setFornecedorLote("")
+    } else {
+      setModoNovoFornecedor(false)
+      setFornecedorLote(valor)
+    }
+  }
+
+  if (campo === "categoria") {
+    if (valor === "__novo__") {
+      setModoNovaCategoria(true)
+      setCategoriaLote("")
+    } else {
+      setModoNovaCategoria(false)
+      setCategoriaLote(valor)
+    }
+  }
+
+  if (campo === "tipo") {
+    if (valor === "__novo__") {
+      setModoNovoTipo(true)
+      setTipoLote("")
+    } else {
+      setModoNovoTipo(false)
+      setTipoLote(valor)
+    }
+  }
+}
 
   function aplicarPreenchimentoEmLote() {
     if (itensSelecionados.length === 0) {
@@ -331,50 +408,166 @@ export default function ImportarCompra() {
           </div>
 
           <div style={gridCamposLote}>
-            <div style={campoBox}>
-              <label style={labelCampo}>Marca</label>
-              <input
-                type="text"
-                value={marcaLote}
-                onChange={(e) => setMarcaLote(e.target.value)}
-                placeholder="Ex: Moda Run"
-                style={inputPadrao}
-              />
-            </div>
+  <div style={campoBox}>
+    <label style={labelCampo}>Marca</label>
 
-            <div style={campoBox}>
-              <label style={labelCampo}>Fornecedor</label>
-              <input
-                type="text"
-                value={fornecedorLote}
-                onChange={(e) => setFornecedorLote(e.target.value)}
-                placeholder="Ex: Fornecedor X"
-                style={inputPadrao}
-              />
-            </div>
+    {!modoNovaMarca ? (
+      <select
+        value={marcaLote}
+        onChange={(e) => selecionarValorLote("marca", e.target.value)}
+        style={inputPadrao}
+      >
+        <option value="">Selecionar marca</option>
+        {marcasExistentes.map((marca) => (
+          <option key={marca} value={marca}>
+            {marca}
+          </option>
+        ))}
+        <option value="__novo__">+ Cadastrar nova marca</option>
+      </select>
+    ) : (
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="text"
+          value={marcaLote}
+          onChange={(e) => setMarcaLote(e.target.value)}
+          placeholder="Digite a nova marca"
+          style={inputPadrao}
+        />
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => {
+            setModoNovaMarca(false)
+            setMarcaLote("")
+          }}
+        >
+          Cancelar
+        </button>
+      </div>
+    )}
+  </div>
 
-            <div style={campoBox}>
-              <label style={labelCampo}>Categoria</label>
-              <input
-                type="text"
-                value={categoriaLote}
-                onChange={(e) => setCategoriaLote(e.target.value)}
-                placeholder="Ex: Roupas, Acessórios, Consumo"
-                style={inputPadrao}
-              />
-            </div>
+  <div style={campoBox}>
+    <label style={labelCampo}>Fornecedor</label>
 
-            <div style={campoBox}>
-              <label style={labelCampo}>Tipo</label>
-              <input
-                type="text"
-                value={tipoLote}
-                onChange={(e) => setTipoLote(e.target.value)}
-                placeholder="Ex: Camiseta, Conjunto, Jaqueta"
-                style={inputPadrao}
-              />
-            </div>
-          </div>
+    {!modoNovoFornecedor ? (
+      <select
+        value={fornecedorLote}
+        onChange={(e) => selecionarValorLote("fornecedor", e.target.value)}
+        style={inputPadrao}
+      >
+        <option value="">Selecionar fornecedor</option>
+        {fornecedoresExistentes.map((fornecedor) => (
+          <option key={fornecedor} value={fornecedor}>
+            {fornecedor}
+          </option>
+        ))}
+        <option value="__novo__">+ Cadastrar novo fornecedor</option>
+      </select>
+    ) : (
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="text"
+          value={fornecedorLote}
+          onChange={(e) => setFornecedorLote(e.target.value)}
+          placeholder="Digite o novo fornecedor"
+          style={inputPadrao}
+        />
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => {
+            setModoNovoFornecedor(false)
+            setFornecedorLote("")
+          }}
+        >
+          Cancelar
+        </button>
+      </div>
+    )}
+  </div>
+
+  <div style={campoBox}>
+    <label style={labelCampo}>Categoria</label>
+
+    {!modoNovaCategoria ? (
+      <select
+        value={categoriaLote}
+        onChange={(e) => selecionarValorLote("categoria", e.target.value)}
+        style={inputPadrao}
+      >
+        <option value="">Selecionar categoria</option>
+        {categoriasExistentes.map((categoria) => (
+          <option key={categoria} value={categoria}>
+            {categoria}
+          </option>
+        ))}
+        <option value="__novo__">+ Cadastrar nova categoria</option>
+      </select>
+    ) : (
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="text"
+          value={categoriaLote}
+          onChange={(e) => setCategoriaLote(e.target.value)}
+          placeholder="Digite a nova categoria"
+          style={inputPadrao}
+        />
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => {
+            setModoNovaCategoria(false)
+            setCategoriaLote("")
+          }}
+        >
+          Cancelar
+        </button>
+      </div>
+    )}
+  </div>
+
+  <div style={campoBox}>
+    <label style={labelCampo}>Tipo</label>
+
+    {!modoNovoTipo ? (
+      <select
+        value={tipoLote}
+        onChange={(e) => selecionarValorLote("tipo", e.target.value)}
+        style={inputPadrao}
+      >
+        <option value="">Selecionar tipo</option>
+        {tiposExistentes.map((tipo) => (
+          <option key={tipo} value={tipo}>
+            {tipo}
+          </option>
+        ))}
+        <option value="__novo__">+ Cadastrar novo tipo</option>
+      </select>
+    ) : (
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="text"
+          value={tipoLote}
+          onChange={(e) => setTipoLote(e.target.value)}
+          placeholder="Digite o novo tipo"
+          style={inputPadrao}
+        />
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => {
+            setModoNovoTipo(false)
+            setTipoLote("")
+          }}
+        >
+          Cancelar
+        </button>
+      </div>
+    )}
+  </div>
+</div>
 
           <div style={acoesLote}>
             <button
@@ -695,6 +888,7 @@ const inputPadrao = {
   borderRadius: 10,
   border: "1px solid #cbd5e1",
   outline: "none",
+  background: "#fff",
 }
 
 const inputTabela = {
