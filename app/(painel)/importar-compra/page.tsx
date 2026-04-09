@@ -303,7 +303,6 @@ setAvisoQuantidade(semQuantidade)
               <th style={th}>Tamanho</th>
               <th style={th}>Quantidade</th>
               <th style={th}>Custo</th>
-              <th style={th}>Custo</th>
               <th style={th}>Preço venda</th>
               <th style={th}>Produto encontrado</th>
               <th style={th}>Ação</th>
