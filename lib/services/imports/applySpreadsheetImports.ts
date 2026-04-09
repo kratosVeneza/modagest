@@ -2,9 +2,13 @@ import { supabase } from "@/lib/supabase"
 import { addStockQuick } from "@/lib/services/products/addStockQuick"
 import { ItemComMatch } from "./matchImportedProducts"
 
+type ItemComImportacao = ItemComMatch & {
+  fornecedor?: string | null
+}
+
 type ApplySpreadsheetImportsParams = {
   userId: string
-  itens: ItemComMatch[]
+  itens: ItemComImportacao[]
   markup?: number
 }
 
@@ -74,7 +78,6 @@ export async function applySpreadsheetImports({
         continue
       }
 
-      // preço da planilha será tratado como custo
       const custo = Number(item.preco || 0)
       const precoVenda = custo * (1 + markup / 100)
 
@@ -92,18 +95,23 @@ export async function applySpreadsheetImports({
           continue
         }
 
-        // opcionalmente, também atualiza custo/preço do produto existente
         const { error: erroUpdateProduto } = await supabase
           .from("products")
           .update({
             custo,
             preco: precoVenda,
+            marca: item.marca || null,
+            fornecedor: item.fornecedor || null,
+            categoria: item.categoria || null,
+            tipo: item.tipo || null,
           })
           .eq("id", item.produtoExistenteId)
           .eq("user_id", userId)
 
         if (erroUpdateProduto) {
-          erros.push(`${item.nome}: estoque somado, mas houve erro ao atualizar custo/preço.`)
+          erros.push(
+            `${item.nome}: estoque somado, mas houve erro ao atualizar os dados do produto.`
+          )
           continue
         }
 
@@ -126,6 +134,7 @@ export async function applySpreadsheetImports({
             sku,
             nome: item.nome,
             marca: item.marca || null,
+            fornecedor: item.fornecedor || null,
             categoria: item.categoria || null,
             tipo: item.tipo || null,
             unidade: "un",
@@ -178,4 +187,3 @@ export async function applySpreadsheetImports({
     erros,
   }
 }
-
