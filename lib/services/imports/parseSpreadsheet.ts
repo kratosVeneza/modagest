@@ -12,6 +12,78 @@ export type ItemImportado = {
   preco: number | null
 }
 
+const MAPEAMENTO_COLUNAS = {
+  nome: [
+    "nome",
+    "produto",
+    "item",
+    "descrição",
+    "descricao",
+    "nome do produto",
+  ],
+  marca: [
+    "marca",
+    "fabricante",
+    "fornecedor",
+  ],
+  categoria: [
+    "categoria",
+    "grupo",
+    "linha",
+  ],
+  tipo: [
+    "tipo",
+    "modelo",
+    "subcategoria",
+  ],
+  cor: [
+    "cor",
+    "cor do produto",
+  ],
+  tamanho: [
+    "tamanho",
+    "tam",
+    "numeração",
+    "numeracao",
+  ],
+  quantidade: [
+    "quantidade",
+    "qtd",
+    "qtde",
+    "qnt",
+    "quant",
+  ],
+  custo: [
+    "custo",
+    "valor compra",
+    "valor de compra",
+    "custo unitario",
+    "custo unitário",
+    "valor unitario",
+    "valor unitário",
+    "preco compra",
+    "preço compra",
+  ],
+  preco: [
+    "preco",
+    "preço",
+    "valor venda",
+    "preco de venda",
+    "preço de venda",
+    "valor unitario venda",
+    "valor unitário venda",
+  ],
+}
+
+function normalizarCabecalho(texto: string) {
+  return texto
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+}
+
 function normalizarTexto(valor: unknown) {
   if (valor === null || valor === undefined) return ""
   return String(valor).trim()
@@ -22,8 +94,14 @@ function normalizarNumero(valor: unknown) {
 
   if (typeof valor === "number") return valor
 
-  const texto = String(valor)
-    .replace(/\./g, "")
+  const textoOriginal = String(valor).trim()
+
+  if (!textoOriginal) return 0
+
+  const texto = textoOriginal
+    .replace(/\s/g, "")
+    .replace(/[R$r$\u00A0]/g, "")
+    .replace(/\.(?=\d{3}(\D|$))/g, "")
     .replace(",", ".")
     .replace(/[^\d.-]/g, "")
 
@@ -31,20 +109,32 @@ function normalizarNumero(valor: unknown) {
   return Number.isNaN(numero) ? 0 : numero
 }
 
-function pegarCampo(linha: Record<string, unknown>, opcoes: string[]) {
-  const chaves = Object.keys(linha)
+function pegarCampo(
+  linha: Record<string, unknown>,
+  aliases: string[]
+) {
+  const entradas = Object.entries(linha)
 
-  for (const opcao of opcoes) {
-    const chaveEncontrada = chaves.find(
-      (chave) => chave.trim().toLowerCase() === opcao.trim().toLowerCase()
+  for (const [chave, valor] of entradas) {
+    const chaveNormalizada = normalizarCabecalho(chave)
+
+    const encontrou = aliases.some(
+      (alias) => chaveNormalizada === normalizarCabecalho(alias)
     )
 
-    if (chaveEncontrada) {
-      return linha[chaveEncontrada]
+    if (encontrou) {
+      return valor
     }
   }
 
   return null
+}
+
+function detectarCampo(
+  linha: Record<string, unknown>,
+  tipo: keyof typeof MAPEAMENTO_COLUNAS
+) {
+  return pegarCampo(linha, MAPEAMENTO_COLUNAS[tipo])
 }
 
 export async function parseSpreadsheet(file: File): Promise<ItemImportado[]> {
@@ -60,37 +150,16 @@ export async function parseSpreadsheet(file: File): Promise<ItemImportado[]> {
 
   const itens: ItemImportado[] = linhas
     .map((linha) => {
-      const nome = normalizarTexto(
-        pegarCampo(linha, ["nome", "produto", "nome do produto", "descricao"])
-      )
+      const nome = normalizarTexto(detectarCampo(linha, "nome"))
+      const marca = normalizarTexto(detectarCampo(linha, "marca"))
+      const categoria = normalizarTexto(detectarCampo(linha, "categoria"))
+      const tipo = normalizarTexto(detectarCampo(linha, "tipo"))
+      const cor = normalizarTexto(detectarCampo(linha, "cor"))
+      const tamanho = normalizarTexto(detectarCampo(linha, "tamanho"))
 
-      const marca = normalizarTexto(pegarCampo(linha, ["marca"]))
-      const categoria = normalizarTexto(pegarCampo(linha, ["categoria"]))
-      const tipo = normalizarTexto(pegarCampo(linha, ["tipo"]))
-      const cor = normalizarTexto(pegarCampo(linha, ["cor"]))
-      const tamanho = normalizarTexto(pegarCampo(linha, ["tamanho", "tam"]))
-
-      const quantidade = normalizarNumero(
-        pegarCampo(linha, ["quantidade", "qtd"])
-      )
-
-      const custo = normalizarNumero(
-        pegarCampo(linha, [
-          "custo",
-          "valor compra",
-          "valor de compra",
-          "custo unitario",
-        ])
-      )
-
-      const preco = normalizarNumero(
-        pegarCampo(linha, [
-          "preco",
-          "preço",
-          "valor venda",
-          "preco de venda",
-        ])
-      )
+      const quantidade = normalizarNumero(detectarCampo(linha, "quantidade"))
+      const custo = normalizarNumero(detectarCampo(linha, "custo"))
+      const preco = normalizarNumero(detectarCampo(linha, "preco"))
 
       return {
         nome,
@@ -108,4 +177,3 @@ export async function parseSpreadsheet(file: File): Promise<ItemImportado[]> {
 
   return itens
 }
-
