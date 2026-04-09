@@ -271,7 +271,8 @@ setAvisoQuantidade(semQuantidade)
               <th style={th}>Tamanho</th>
               <th style={th}>Quantidade</th>
               <th style={th}>Custo</th>
-              <th style={th}>Preço</th>
+              <th style={th}>Custo</th>
+              <th style={th}>Preço venda</th>
               <th style={th}>Produto encontrado</th>
               <th style={th}>Ação</th>
             </tr>
@@ -290,8 +291,13 @@ setAvisoQuantidade(semQuantidade)
                   <td style={td}>{item.quantidade}</td>
                   <td style={td}>R$ {item.custo.toFixed(2)}</td>
                   <td style={td}>
-                    {item.preco !== null ? `R$ ${item.preco.toFixed(2)}` : "-"}
-                  </td>
+                    R$ {Number(item.preco || 0).toFixed(2)}
+                    </td>
+
+                    <td style={td}>
+                     R$ {(Number(item.preco || 0) * (1 + markup / 100)).toFixed(2)}
+                     </td>
+
                   <td style={td}>{item.produtoExistenteNome || "-"}</td>
                   <td style={td}>
                     <span
