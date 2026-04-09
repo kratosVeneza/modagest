@@ -294,69 +294,65 @@ setAvisoQuantidade(semQuantidade)
       <div className="data-table-wrap">
         <table style={tabela}>
           <thead>
-            <tr>
-              <th style={th}>Nome</th>
-              <th style={th}>Marca</th>
-              <th style={th}>Categoria</th>
-              <th style={th}>Tipo</th>
-              <th style={th}>Cor</th>
-              <th style={th}>Tamanho</th>
-              <th style={th}>Quantidade</th>
-              <th style={th}>Custo</th>
-              <th style={th}>Preço venda</th>
-              <th style={th}>Produto encontrado</th>
-              <th style={th}>Ação</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {itens.length > 0 ? (
-              itens.map((item, index) => (
-                <tr key={`${item.nome}-${index}`}>
-                  <td style={td}>{item.nome}</td>
-                  <td style={td}>{item.marca || "-"}</td>
-                  <td style={td}>{item.categoria || "-"}</td>
-                  <td style={td}>{item.tipo || "-"}</td>
-                  <td style={td}>{item.cor || "-"}</td>
-                  <td style={td}>{item.tamanho || "-"}</td>
-                  <td style={td}>{item.quantidade}</td>
-                  <td style={td}>R$ {item.custo.toFixed(2)}</td>
-                  <td style={td}>
-                    R$ {Number(item.preco || 0).toFixed(2)}
-                    </td>
-
-                    <td style={td}>
-                     R$ {(Number(item.preco || 0) * (1 + markup / 100)).toFixed(2)}
-                     </td>
-
-                  <td style={td}>{item.produtoExistenteNome || "-"}</td>
-                  <td style={td}>
-                    <span
-                      className={
-                        item.acao === "somar_estoque"
-                          ? "status-pill status-green"
-                          : item.acao === "criar_produto"
-                          ? "status-pill status-blue"
-                          : "status-pill status-yellow"
-                      }
-                    >
-                      {item.acao === "somar_estoque"
-                        ? "Somar estoque"
-                        : item.acao === "criar_produto"
-                        ? "Criar produto"
-                        : "Revisar"}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td style={tdVazio} colSpan={11}>
-                  Nenhum item carregado ainda.
-                </td>
-              </tr>
-            )}
-          </tbody>
+  <tr>
+    <th style={th}>Nome</th>
+    <th style={th}>Marca</th>
+    <th style={th}>Categoria</th>
+    <th style={th}>Tipo</th>
+    <th style={th}>Cor</th>
+    <th style={th}>Tamanho</th>
+    <th style={th}>Quantidade</th>
+    <th style={th}>Custo</th>
+    <th style={th}>Preço venda</th>
+    <th style={th}>Produto encontrado</th>
+    <th style={th}>Ação</th>
+  </tr>
+</thead>
+<tbody>
+  {itens.length > 0 ? (
+    itens.map((item, index) => (
+      <tr key={`${item.nome}-${index}`}>
+        <td style={td}>{item.nome}</td>
+        <td style={td}>{item.marca || "-"}</td>
+        <td style={td}>{item.categoria || "-"}</td>
+        <td style={td}>{item.tipo || "-"}</td>
+        <td style={td}>{item.cor || "-"}</td>
+        <td style={td}>{item.tamanho || "-"}</td>
+        <td style={td}>{item.quantidade}</td>
+        <td style={td}>
+          R$ {Number(item.preco || 0).toFixed(2)}
+        </td>
+        <td style={td}>
+          R$ {(Number(item.preco || 0) * (1 + markup / 100)).toFixed(2)}
+        </td>
+        <td style={td}>{item.produtoExistenteNome || "-"}</td>
+        <td style={td}>
+          <span
+            className={
+              item.acao === "somar_estoque"
+                ? "status-pill status-green"
+                : item.acao === "criar_produto"
+                ? "status-pill status-blue"
+                : "status-pill status-yellow"
+            }
+          >
+            {item.acao === "somar_estoque"
+              ? "Somar estoque"
+              : item.acao === "criar_produto"
+              ? "Criar produto"
+              : "Revisar"}
+          </span>
+        </td>
+      </tr>
+    ))
+  ) : (
+    <tr>
+      <td style={tdVazio} colSpan={11}>
+        Nenhum item carregado ainda.
+      </td>
+    </tr>
+  )}
+</tbody>
         </table>
       </div>
     </div>
