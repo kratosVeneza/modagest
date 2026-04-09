@@ -21,6 +21,7 @@ export default function ImportarCompra() {
   const [processando, setProcessando] = useState(false)
 
   const [aplicando, setAplicando] = useState(false)
+  const [avisoQuantidade, setAvisoQuantidade] = useState(false)
 const [resultadoImportacao, setResultadoImportacao] = useState<{
   criados: number
   atualizados: number
@@ -62,6 +63,10 @@ const [resultadoImportacao, setResultadoImportacao] = useState<{
       }
 
       const itensLidos: ItemImportado[] = await parseSpreadsheet(arquivo)
+
+// 👇 detectar se veio sem quantidade
+const semQuantidade = itensLidos.some((item) => item.quantidade === 1)
+setAvisoQuantidade(semQuantidade)
 
       if (itensLidos.length === 0) {
         setMensagem("Nenhum item válido foi encontrado na planilha.")
@@ -145,6 +150,23 @@ const [resultadoImportacao, setResultadoImportacao] = useState<{
       />
 
       {mensagem && <p style={{ marginTop: 16 }}>{mensagem}</p>}
+
+      {avisoQuantidade && (
+  <div
+    style={{
+      marginTop: 12,
+      padding: 12,
+      borderRadius: 10,
+      background: "#fef3c7",
+      border: "1px solid #fde68a",
+      color: "#92400e",
+      fontSize: 14,
+      fontWeight: 500,
+    }}
+  >
+    ⚠️ A planilha não possui coluna de quantidade. Foi considerado <strong>1 unidade</strong> para cada item.
+  </div>
+)}
 
       <div
   style={{
