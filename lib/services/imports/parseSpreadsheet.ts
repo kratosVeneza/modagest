@@ -157,7 +157,11 @@ export async function parseSpreadsheet(file: File): Promise<ItemImportado[]> {
       const cor = normalizarTexto(detectarCampo(linha, "cor"))
       const tamanho = normalizarTexto(detectarCampo(linha, "tamanho"))
 
-      const quantidade = normalizarNumero(detectarCampo(linha, "quantidade"))
+      let quantidade = normalizarNumero(detectarCampo(linha, "quantidade"))
+
+if (!quantidade || quantidade <= 0) {
+  quantidade = 1
+}
       const custo = normalizarNumero(detectarCampo(linha, "custo"))
       const preco = normalizarNumero(detectarCampo(linha, "preco"))
 
@@ -173,7 +177,7 @@ export async function parseSpreadsheet(file: File): Promise<ItemImportado[]> {
         preco: preco > 0 ? preco : null,
       }
     })
-    .filter((item) => item.nome && item.quantidade > 0)
+    .filter((item) => item.nome)
 
   return itens
 }
