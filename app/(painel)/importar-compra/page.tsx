@@ -191,13 +191,29 @@ setAvisoQuantidade(semQuantidade)
     onChange={(e) => setArquivo(e.target.files?.[0] || null)}
   />
 
+  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+  <label style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>
+    Margem de lucro (%)
+  </label>
+
   <input
-  type="number"
-  placeholder="Markup (%)"
-  value={markup}
-  onChange={(e) => setMarkup(Number(e.target.value))}
-  style={{ width: 120 }}
-/>
+    type="number"
+    value={markup}
+    onChange={(e) => setMarkup(Number(e.target.value))}
+    placeholder="Ex: 100 = dobra o preço"
+    style={{
+      width: 120,
+      padding: "6px 10px",
+      borderRadius: 8,
+      border: "1px solid #e5e7eb",
+    }}
+  />
+
+  <span style={{ fontSize: 11, color: "#64748b" }}>
+    O preço de venda será calculado automaticamente
+  </span>
+</div>
+
 
   <button
     onClick={lerPlanilha}
@@ -215,6 +231,22 @@ setAvisoQuantidade(semQuantidade)
     {aplicando ? "Aplicando importação..." : "Confirmar importação"}
   </button>
 </div>
+
+{itens.length > 0 && (
+  <div
+    style={{
+      marginTop: 10,
+      fontSize: 13,
+      color: "#334155",
+      background: "#f8fafc",
+      padding: 10,
+      borderRadius: 8,
+      border: "1px solid #e2e8f0",
+    }}
+  >
+    💡 Os preços de venda já estão sendo calculados com base na margem de {markup}%.
+  </div>
+)}
 
       {arquivo && (
         <div style={{ marginBottom: 16, fontSize: 14, color: "#475569" }}>
