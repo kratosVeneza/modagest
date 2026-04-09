@@ -206,7 +206,8 @@ export async function parseSpreadsheet(file: File): Promise<ItemImportado[]> {
       const precoDetectado = normalizarNumero(detectarCampo(linha, "preco"))
 
       const custo = custoDetectado > 0 ? custoDetectado : precoDetectado
-      const preco = precoDetectado > 0 ? precoDetectado : null
+      const preco = precoDetectado > 0 ? precoDetectado : custoDetectado
+
 
       return {
         sku: sku || null,
