@@ -21,13 +21,10 @@ type Produto = {
   tamanho?: string | null
 }
 
-
-
 type Cliente = {
   id: number
   nome: string
 }
-
 
 const formasPagamento = [
   "Dinheiro",
@@ -67,6 +64,7 @@ function montarNomeProduto(produto: Produto) {
 
 export default function Vendas() {
   const router = useRouter()
+
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [produtoId, setProdutoId] = useState("")
@@ -76,10 +74,10 @@ export default function Vendas() {
   const [mensagem, setMensagem] = useState("")
   const [mensagemSucesso, setMensagemSucesso] = useState("")
   const [salvando, setSalvando] = useState(false)
-
   const [valorRecebidoInicial, setValorRecebidoInicial] = useState("")
   const [formaPagamentoInicial, setFormaPagamentoInicial] = useState("Pix")
   const [observacaoPagamentoInicial, setObservacaoPagamentoInicial] = useState("")
+  const [buscaProduto, setBuscaProduto] = useState("")
 
   useEffect(() => {
     carregarProdutos()
@@ -97,10 +95,11 @@ export default function Vendas() {
     }
 
     const { data, error } = await supabase
-  .from("products")
-  .select("id, nome, sku, estoque, preco, user_id, unidade, marca, categoria, cor, tamanho")
-  .eq("user_id", user.id)
-  .order("nome", { ascending: true })
+      .from("products")
+      .select("id, nome, sku, estoque, preco, user_id, unidade, marca, categoria, cor, tamanho")
+      .eq("user_id", user.id)
+      .gt("estoque", 0)
+      .order("nome", { ascending: true })
 
     if (error) {
       setMensagem("Erro ao carregar produtos.")
@@ -127,6 +126,25 @@ export default function Vendas() {
       setClientes((data ?? []) as Cliente[])
     }
   }
+
+  const produtosFiltrados = useMemo(() => {
+    const termo = buscaProduto.trim().toLowerCase()
+
+    return produtos.filter((produto) => {
+      if (Number(produto.estoque) <= 0) return false
+
+      if (!termo) return true
+
+      return (
+        produto.nome.toLowerCase().includes(termo) ||
+        (produto.sku || "").toLowerCase().includes(termo) ||
+        (produto.cor || "").toLowerCase().includes(termo) ||
+        (produto.tamanho || "").toLowerCase().includes(termo) ||
+        (produto.marca || "").toLowerCase().includes(termo) ||
+        (produto.categoria || "").toLowerCase().includes(termo)
+      )
+    })
+  }, [produtos, buscaProduto])
 
   const produtoSelecionado = useMemo(() => {
     return produtos.find((p) => p.id === Number(produtoId)) || null
@@ -202,23 +220,27 @@ export default function Vendas() {
     setSalvando(true)
 
     const resultado = await createSale({
-  userId: user.id,
-  productId: produto.id,
-  customerId: clienteId ? Number(clienteId) : null,
-  quantidade: qtd,
-  valorUnitario: Number(produto.preco),
-  valorTotal: Number(produto.preco) * qtd,
-  dataVendaIso: montarDataISO(dataVenda),
-  valorRecebidoInicial: recebidoInicial,
-  formaPagamentoInicial,
-  observacaoPagamentoInicial: observacaoPagamentoInicial || null,
-})
+      userId: user.id,
+      productId: produto.id,
+      customerId: clienteId ? Number(clienteId) : null,
+      quantidade: qtd,
+      valorUnitario: Number(produto.preco),
+      valorTotal: Number(produto.preco) * qtd,
+      dataVendaIso: montarDataISO(dataVenda),
+      valorRecebidoInicial: recebidoInicial,
+      formaPagamentoInicial,
+      observacaoPagamentoInicial: observacaoPagamentoInicial || null,
+    })
 
-if (!resultado.success) {
-  setSalvando(false)
-  setMensagem(resultado.message)
-  return
-}
+    if (!resultado.success) {
+      setSalvando(false)
+      setMensagem(resultado.message)
+      return
+    }
+
+    if (resultado.warning) {
+      setMensagem(resultado.warning)
+    }
 
     setProdutoId("")
     setClienteId("")
@@ -227,6 +249,7 @@ if (!resultado.success) {
     setValorRecebidoInicial("")
     setFormaPagamentoInicial("Pix")
     setObservacaoPagamentoInicial("")
+    setBuscaProduto("")
     setSalvando(false)
     setMensagem("")
     setMensagemSucesso("Venda cadastrada")
@@ -246,13 +269,13 @@ if (!resultado.success) {
       </p>
 
       <div style={{ marginTop: 16, marginBottom: 16 }}>
-  <button
-    onClick={() => router.push("/assistente-ia")}
-    className="btn btn-secondary"
-  >
-    🤖 Usar IA para lançar operação
-  </button>
-</div>
+        <button
+          onClick={() => router.push("/assistente-ia")}
+          className="btn btn-secondary"
+        >
+          🤖 Usar IA para lançar operação
+        </button>
+      </div>
 
       <HelpBanner
         title="Como usar a página de Vendas"
@@ -302,20 +325,38 @@ if (!resultado.success) {
           </div>
 
           <div className="grid-2">
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelAjuda}>
+                Buscar produto
+                <HelpTooltip text="Digite nome, SKU, cor, tamanho, marca ou categoria para encontrar o produto com mais facilidade." />
+              </label>
+              <input
+                type="text"
+                placeholder="Digite para buscar produto..."
+                value={buscaProduto}
+                onChange={(e) => setBuscaProduto(e.target.value)}
+              />
+            </div>
+
             <div>
               <label style={labelAjuda}>
                 Produto
-                <HelpTooltip text="Selecione o produto que foi vendido. O sistema vai usar o preço cadastrado e baixar o estoque automaticamente." />
+                <HelpTooltip text="Selecione o produto vendido. Aqui aparecem apenas produtos com estoque disponível." />
               </label>
               <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
                 <option value="">Selecione um produto</option>
-                {produtos.map((produto) => (
-  <option key={produto.id} value={produto.id}>
-    {montarNomeProduto(produto)}
-  </option>
-))}
-
+                {produtosFiltrados.map((produto) => (
+                  <option key={produto.id} value={produto.id}>
+                    {montarNomeProduto(produto)} • Estoque: {produto.estoque}
+                  </option>
+                ))}
               </select>
+
+              {buscaProduto.trim() && produtosFiltrados.length === 0 && (
+                <div style={{ marginTop: 8, fontSize: 12, color: "#991b1b" }}>
+                  Nenhum produto com estoque encontrado para essa busca.
+                </div>
+              )}
             </div>
 
             <div>
@@ -422,8 +463,8 @@ if (!resultado.success) {
               <HelpTooltip text="Produto selecionado para essa venda." />
             </span>
             <strong>
-  {produtoSelecionado ? montarNomeProduto(produtoSelecionado) : "-"}
-</strong>
+              {produtoSelecionado ? montarNomeProduto(produtoSelecionado) : "-"}
+            </strong>
           </div>
 
           <div style={resumoLinha}>
