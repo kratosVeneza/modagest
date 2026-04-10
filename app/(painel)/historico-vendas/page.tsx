@@ -86,7 +86,10 @@ export default function HistoricoVendas() {
   const [vendaParaExcluir, setVendaParaExcluir] = useState<VendaExibicao | null>(null)
   const [excluindoVenda, setExcluindoVenda] = useState(false)
 
-  const [filtroStatus, setFiltroStatus] = useState<"todas" | "ativas" | "canceladas">("todas")
+  const [filtroStatus, setFiltroStatus] = useState<
+  "todas" | "ativas" | "canceladas" | "pagas" | "parciais" | "pendentes"
+>("todas")
+
 
   const [modalDescontoAberto, setModalDescontoAberto] = useState(false)
   const [vendaParaDesconto, setVendaParaDesconto] = useState<VendaExibicao | null>(null)
@@ -496,12 +499,23 @@ export default function HistoricoVendas() {
       const passouDataFim =
         !dataFim || dataVenda <= new Date(`${dataFim}T23:59:59`)
 
-      const statusNormalizado = venda.status?.toLowerCase() || ""
+      const statusVendaNormalizado = venda.status?.toLowerCase() || ""
+const statusPagamentoNormalizado = venda.payment_status?.toLowerCase() || ""
 
-      const passouFiltroStatus =
-        filtroStatus === "todas" ||
-        (filtroStatus === "ativas" && statusNormalizado !== "cancelada") ||
-        (filtroStatus === "canceladas" && statusNormalizado === "cancelada")
+const passouFiltroStatus =
+  filtroStatus === "todas" ||
+  (filtroStatus === "ativas" && statusVendaNormalizado !== "cancelada") ||
+  (filtroStatus === "canceladas" && statusVendaNormalizado === "cancelada") ||
+  (filtroStatus === "pagas" &&
+    statusVendaNormalizado !== "cancelada" &&
+    statusPagamentoNormalizado === "recebida") ||
+  (filtroStatus === "parciais" &&
+    statusVendaNormalizado !== "cancelada" &&
+    statusPagamentoNormalizado === "parcial") ||
+  (filtroStatus === "pendentes" &&
+    statusVendaNormalizado !== "cancelada" &&
+    statusPagamentoNormalizado === "pendente")
+
 
       return passouBusca && passouDataInicio && passouDataFim && passouFiltroStatus
     })
@@ -773,16 +787,28 @@ export default function HistoricoVendas() {
         />
 
         <select
-          style={inputData}
-          value={filtroStatus}
-          onChange={(e) =>
-            setFiltroStatus(e.target.value as "todas" | "ativas" | "canceladas")
-          }
-        >
-          <option value="todas">Todas</option>
-          <option value="ativas">Ativas</option>
-          <option value="canceladas">Canceladas</option>
-        </select>
+  style={inputData}
+  value={filtroStatus}
+  onChange={(e) =>
+    setFiltroStatus(
+      e.target.value as
+        | "todas"
+        | "ativas"
+        | "canceladas"
+        | "pagas"
+        | "parciais"
+        | "pendentes"
+    )
+  }
+>
+  <option value="todas">Todas</option>
+  <option value="ativas">Ativas</option>
+  <option value="canceladas">Canceladas</option>
+  <option value="pagas">Pagas</option>
+  <option value="parciais">Parciais</option>
+  <option value="pendentes">Pendentes</option>
+</select>
+
 
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button onClick={exportarCSV} className="btn btn-secondary">
