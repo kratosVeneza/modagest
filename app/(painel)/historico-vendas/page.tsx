@@ -6,7 +6,6 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { montarCabecalhoPDF } from "@/lib/pdfHeader"
 import { imageUrlToDataUrl } from "@/lib/imageToDataUrl"
-import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 import AnimatedModal from "../../components/AnimatedModal"
 import HelpTooltip from "../../components/HelpTooltip"
 import HelpBanner from "../../components/InfoBanner"
@@ -18,9 +17,9 @@ import { addSalePayment } from "@/lib/services/sales/addSalePayment"
 import { updateSalePayment } from "@/lib/services/sales/updateSalePayment"
 import { deleteSalePayment } from "@/lib/services/sales/deleteSalePayment"
 import { deleteCanceledSale } from "@/lib/services/sales/deleteCanceledSale"
+import { applySaleDiscount } from "@/lib/services/sales/applySalesDiscount"
 import {
   getSalesHistory,
-  type Loja,
   type PagamentoBanco,
   type VendaExibicao,
 } from "@/lib/services/sales/getSalesHistory"
@@ -79,12 +78,20 @@ export default function HistoricoVendas() {
   const [dataPagamento, setDataPagamento] = useState(hojeInputDate())
   const [descontoPercentual, setDescontoPercentual] = useState("")
   const [salvandoPagamento, setSalvandoPagamento] = useState(false)
+
   const [editandoPagamentoId, setEditandoPagamentoId] = useState<number | null>(null)
   const [modalEditarPagamentoAberto, setModalEditarPagamentoAberto] = useState(false)
+
   const [modalExcluirVendaAberto, setModalExcluirVendaAberto] = useState(false)
   const [vendaParaExcluir, setVendaParaExcluir] = useState<VendaExibicao | null>(null)
   const [excluindoVenda, setExcluindoVenda] = useState(false)
+
   const [filtroStatus, setFiltroStatus] = useState<"todas" | "ativas" | "canceladas">("todas")
+
+  const [modalDescontoAberto, setModalDescontoAberto] = useState(false)
+  const [vendaParaDesconto, setVendaParaDesconto] = useState<VendaExibicao | null>(null)
+  const [descontoVendaPercentual, setDescontoVendaPercentual] = useState("")
+  const [salvandoDesconto, setSalvandoDesconto] = useState(false)
 
   useEffect(() => {
     validarAcesso()
@@ -102,93 +109,84 @@ export default function HistoricoVendas() {
     setLoadingAccess(false)
   }
 
-  function calcularStatusPagamento(
-    valorTotal: number,
-    valorRecebido: number
-  ): "Pendente" | "Parcial" | "Recebida" {
-    if (valorRecebido <= 0) return "Pendente"
-    if (valorRecebido >= valorTotal) return "Recebida"
-    return "Parcial"
-  }
-
   async function carregarVendas() {
-  setMensagem("")
+    setMensagem("")
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) {
-    setMensagem("Você precisa estar logado.")
-    return
-  }
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
 
-  const resultado = await getSalesHistory(user.id)
+    const resultado = await getSalesHistory(user.id)
 
-  if (!resultado.success) {
-    setMensagem(resultado.message)
+    if (!resultado.success) {
+      setMensagem(resultado.message)
+      setVendas(resultado.vendas)
+      return
+    }
+
+    if (resultado.loja?.nome_loja) {
+      setNomeLoja(resultado.loja.nome_loja)
+    }
+
+    if (resultado.loja?.logo_url) {
+      setLogoUrl(resultado.loja.logo_url)
+    }
+
     setVendas(resultado.vendas)
-    return
   }
-
-  if (resultado.loja?.nome_loja) {
-    setNomeLoja(resultado.loja.nome_loja)
-  }
-
-  if (resultado.loja?.logo_url) {
-    setLogoUrl(resultado.loja.logo_url)
-  }
-
-  setVendas(resultado.vendas)
-}
 
   async function cancelarVenda(venda: VendaExibicao) {
-  setMensagem("")
+    setMensagem("")
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) {
-    setMensagem("Você precisa estar logado.")
-    return
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const resultado = await cancelSale({
+      saleId: venda.id,
+      userId: user.id,
+    })
+
+    setMensagem(resultado.message)
+
+    if (resultado.success) {
+      await carregarVendas()
+    }
   }
-
-  const resultado = await cancelSale({
-    saleId: venda.id,
-    userId: user.id,
-  })
-
-  setMensagem(resultado.message)
-
-  if (resultado.success) {
-    await carregarVendas()
-  }
-}
 
   async function restaurarVenda(venda: VendaExibicao) {
-  setMensagem("")
+    setMensagem("")
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) {
-    setMensagem("Você precisa estar logado.")
-    return
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const resultado = await restoreSale({
+      saleId: venda.id,
+      userId: user.id,
+    })
+
+    setMensagem(resultado.message)
+
+    if (resultado.success) {
+      await carregarVendas()
+    }
   }
-
-  const resultado = await restoreSale({
-    saleId: venda.id,
-    userId: user.id,
-  })
-
-  setMensagem(resultado.message)
-
-  if (resultado.success) {
-    await carregarVendas()
-  }
-}
 
   function abrirModalPagamento(venda: VendaExibicao) {
     setVendaSelecionada(venda)
@@ -211,216 +209,269 @@ export default function HistoricoVendas() {
     setModalPagamentoAberto(false)
   }
 
-  function abrirModalExcluirVenda(venda: VendaExibicao) {
-  setVendaParaExcluir(venda)
-  setModalExcluirVendaAberto(true)
-}
+  function abrirModalEditarPagamento(venda: VendaExibicao, pagamento: PagamentoBanco) {
+    setVendaSelecionada(venda)
+    setEditandoPagamentoId(pagamento.id)
+    setValorPagamento(String(pagamento.valor))
+    setFormaPagamento(pagamento.forma_pagamento || "Pix")
+    setObservacaoPagamento(pagamento.observacao || "")
+    setDataPagamento(formatarDataInput(pagamento.created_at))
+    setModalEditarPagamentoAberto(true)
+  }
 
-function fecharModalExcluirVenda() {
-  setVendaParaExcluir(null)
-  setModalExcluirVendaAberto(false)
-}
+  function fecharModalEditarPagamento() {
+    setVendaSelecionada(null)
+    setEditandoPagamentoId(null)
+    setValorPagamento("")
+    setFormaPagamento("Pix")
+    setObservacaoPagamento("")
+    setDataPagamento(hojeInputDate())
+    setModalEditarPagamentoAberto(false)
+  }
+
+  function abrirModalExcluirVenda(venda: VendaExibicao) {
+    setVendaParaExcluir(venda)
+    setModalExcluirVendaAberto(true)
+  }
+
+  function fecharModalExcluirVenda() {
+    setVendaParaExcluir(null)
+    setModalExcluirVendaAberto(false)
+  }
+
+  function abrirModalDesconto(venda: VendaExibicao) {
+    setVendaParaDesconto(venda)
+    setDescontoVendaPercentual(
+      Number(venda.desconto_percentual || 0) > 0
+        ? String(venda.desconto_percentual)
+        : ""
+    )
+    setModalDescontoAberto(true)
+  }
+
+  function fecharModalDesconto() {
+    setVendaParaDesconto(null)
+    setDescontoVendaPercentual("")
+    setModalDescontoAberto(false)
+  }
 
   async function salvarPagamento() {
-  if (!vendaSelecionada) return
+    if (!vendaSelecionada) return
 
-  setMensagem("")
+    setMensagem("")
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) {
-    setMensagem("Você precisa estar logado.")
-    return
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const valor = Number(valorPagamento || 0)
+
+    if (valor <= 0) {
+      setMensagem("Informe um valor de recebimento válido.")
+      return
+    }
+
+    if (Number(descontoPercentual || 0) < 0 || Number(descontoPercentual || 0) > 100) {
+      setMensagem("Informe um desconto válido entre 0% e 100%.")
+      return
+    }
+
+    if (valor > saldoComDesconto) {
+      setMensagem(
+        `O valor informado é maior que o saldo disponível da venda após o desconto (R$ ${saldoComDesconto.toFixed(2)}).`
+      )
+      return
+    }
+
+    if (!dataPagamento) {
+      setMensagem("Informe a data do pagamento.")
+      return
+    }
+
+    setSalvandoPagamento(true)
+
+    const resultado = await addSalePayment({
+      saleId: vendaSelecionada.id,
+      userId: user.id,
+      valor,
+      formaPagamento,
+      observacao: observacaoPagamento || null,
+      dataPagamentoIso: montarDataISO(dataPagamento),
+      descontoPercentual: Number(descontoPercentual || 0),
+      descontoValor: descontoCalculado,
+      valorTotalComDesconto: totalComDesconto,
+    })
+
+    setSalvandoPagamento(false)
+
+    if (!resultado.success) {
+      setMensagem(resultado.message)
+      return
+    }
+
+    fecharModalPagamento()
+
+    if (resultado.warning) {
+      setMensagem(resultado.warning)
+    } else {
+      setMensagem("Pagamento adicionado com sucesso.")
+    }
+
+    await carregarVendas()
   }
-
-  const valor = Number(valorPagamento || 0)
-
-if (valor <= 0) {
-  setMensagem("Informe um valor de recebimento válido.")
-  return
-}
-
-if (Number(descontoPercentual || 0) < 0 || Number(descontoPercentual || 0) > 100) {
-  setMensagem("Informe um desconto válido entre 0% e 100%.")
-  return
-}
-
-if (vendaSelecionada && valor > saldoComDesconto) {
-  setMensagem(
-    `O valor informado é maior que o saldo disponível da venda após o desconto (R$ ${saldoComDesconto.toFixed(2)}).`
-  )
-  return
-}
-
-  if (!dataPagamento) {
-    setMensagem("Informe a data do pagamento.")
-    return
-  }
-
-  setSalvandoPagamento(true)
-
-  const resultado = await addSalePayment({
-  saleId: vendaSelecionada.id,
-  userId: user.id,
-  valor,
-  formaPagamento,
-  observacao: observacaoPagamento || null,
-  dataPagamentoIso: montarDataISO(dataPagamento),
-  descontoPercentual: Number(descontoPercentual || 0),
-  descontoValor: descontoCalculado,
-  valorTotalComDesconto: totalComDesconto,
-})
-
-  setSalvandoPagamento(false)
-
-  if (!resultado.success) {
-  setMensagem(resultado.message)
-  return
-}
-
-fecharModalPagamento()
-
-if (resultado.warning) {
-  setMensagem(resultado.warning)
-} else {
-  setMensagem("Pagamento adicionado com sucesso.")
-}
-
-await carregarVendas()
-
-} 
-
-  function abrirModalEditarPagamento(venda: VendaExibicao, pagamento: PagamentoBanco) {
-  setVendaSelecionada(venda)
-  setEditandoPagamentoId(pagamento.id)
-  setValorPagamento(String(pagamento.valor))
-  setFormaPagamento(pagamento.forma_pagamento || "Pix")
-  setObservacaoPagamento(pagamento.observacao || "")
-  setDataPagamento(formatarDataInput(pagamento.created_at))
-  setModalEditarPagamentoAberto(true)
-}
-
-function fecharModalEditarPagamento() {
-  setVendaSelecionada(null)
-  setEditandoPagamentoId(null)
-  setValorPagamento("")
-  setFormaPagamento("Pix")
-  setObservacaoPagamento("")
-  setDataPagamento(hojeInputDate())
-  setModalEditarPagamentoAberto(false)
-}
 
   async function salvarEdicaoPagamento() {
-  if (!vendaSelecionada || !editandoPagamentoId) return
+    if (!vendaSelecionada || !editandoPagamentoId) return
 
-  setMensagem("")
+    setMensagem("")
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) {
-    setMensagem("Você precisa estar logado.")
-    return
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const valorNovo = Number(valorPagamento || 0)
+
+    if (valorNovo <= 0) {
+      setMensagem("Informe um valor de pagamento válido.")
+      return
+    }
+
+    if (!dataPagamento) {
+      setMensagem("Informe a data do pagamento.")
+      return
+    }
+
+    setSalvandoPagamento(true)
+
+    const resultado = await updateSalePayment({
+      paymentId: editandoPagamentoId,
+      saleId: vendaSelecionada.id,
+      userId: user.id,
+      valor: valorNovo,
+      formaPagamento,
+      observacao: observacaoPagamento || null,
+      dataPagamentoIso: montarDataISO(dataPagamento),
+    })
+
+    setSalvandoPagamento(false)
+
+    if (!resultado.success) {
+      setMensagem(resultado.message)
+      return
+    }
+
+    fecharModalEditarPagamento()
+    setMensagem("Pagamento atualizado com sucesso.")
+    await carregarVendas()
   }
 
-  const valorNovo = Number(valorPagamento || 0)
+  async function excluirPagamento(venda: VendaExibicao, pagamentoId: number) {
+    const confirmado = window.confirm("Deseja excluir este pagamento?")
+    if (!confirmado) return
 
-  if (valorNovo <= 0) {
-    setMensagem("Informe um valor de pagamento válido.")
-    return
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const resultado = await deleteSalePayment({
+      paymentId: pagamentoId,
+      saleId: venda.id,
+      userId: user.id,
+    })
+
+    if (!resultado.success) {
+      setMensagem(resultado.message)
+      return
+    }
+
+    setMensagem("Pagamento excluído com sucesso.")
+    await carregarVendas()
   }
 
-  if (!dataPagamento) {
-    setMensagem("Informe a data do pagamento.")
-    return
-  }
+  async function excluirVendaCancelada(venda: VendaExibicao) {
+    setMensagem("")
 
-  setSalvandoPagamento(true)
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  const resultado = await updateSalePayment({
-    paymentId: editandoPagamentoId,
-    saleId: vendaSelecionada.id,
-    userId: user.id,
-    valor: valorNovo,
-    formaPagamento,
-    observacao: observacaoPagamento || null,
-    dataPagamentoIso: montarDataISO(dataPagamento),
-  })
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
 
-  setSalvandoPagamento(false)
+    setExcluindoVenda(true)
 
-  if (!resultado.success) {
+    const resultado = await deleteCanceledSale({
+      saleId: venda.id,
+      userId: user.id,
+    })
+
+    setExcluindoVenda(false)
     setMensagem(resultado.message)
-    return
+
+    if (!resultado.success) {
+      return
+    }
+
+    fecharModalExcluirVenda()
+    await carregarVendas()
   }
 
-  fecharModalEditarPagamento()
-  setMensagem("Pagamento atualizado com sucesso.")
-  await carregarVendas()
-}
+  async function salvarDescontoVenda() {
+    if (!vendaParaDesconto) return
 
-async function excluirPagamento(venda: VendaExibicao, pagamentoId: number) {
-  const confirmado = window.confirm("Deseja excluir este pagamento?")
-  if (!confirmado) return
+    setMensagem("")
 
-  setMensagem("")
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
 
-  if (!user) {
-    setMensagem("Você precisa estar logado.")
-    return
-  }
+    const percentual = Number(descontoVendaPercentual || 0)
 
-  const resultado = await deleteSalePayment({
-    paymentId: pagamentoId,
-    saleId: venda.id,
-    userId: user.id,
-  })
+    if (percentual < 0 || percentual > 100) {
+      setMensagem("Informe um desconto válido entre 0% e 100%.")
+      return
+    }
 
-  if (!resultado.success) {
+    setSalvandoDesconto(true)
+
+    const resultado = await applySaleDiscount({
+      saleId: vendaParaDesconto.id,
+      userId: user.id,
+      descontoPercentual: percentual,
+    })
+
+    setSalvandoDesconto(false)
     setMensagem(resultado.message)
-    return
+
+    if (!resultado.success) return
+
+    fecharModalDesconto()
+    await carregarVendas()
   }
-
-  setMensagem("Pagamento excluído com sucesso.")
-  await carregarVendas()
-}
-
-async function excluirVendaCancelada(venda: VendaExibicao) {
-  setMensagem("")
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    setMensagem("Você precisa estar logado.")
-    return
-  }
-
-  setExcluindoVenda(true)
-
-  const resultado = await deleteCanceledSale({
-    saleId: venda.id,
-    userId: user.id,
-  })
-
-  setExcluindoVenda(false)
-  setMensagem(resultado.message)
-
-  if (!resultado.success) {
-    return
-  }
-
-  fecharModalExcluirVenda()
-  await carregarVendas()
-}
 
   function formatarData(dataIso: string) {
     const data = new Date(dataIso)
@@ -444,17 +495,17 @@ async function excluirVendaCancelada(venda: VendaExibicao) {
 
       const passouDataFim =
         !dataFim || dataVenda <= new Date(`${dataFim}T23:59:59`)
-      
-        const statusNormalizado = venda.status?.toLowerCase() || ""
 
-const passouFiltroStatus =
-  filtroStatus === "todas" ||
-  (filtroStatus === "ativas" && statusNormalizado !== "cancelada") ||
-  (filtroStatus === "canceladas" && statusNormalizado === "cancelada")
+      const statusNormalizado = venda.status?.toLowerCase() || ""
+
+      const passouFiltroStatus =
+        filtroStatus === "todas" ||
+        (filtroStatus === "ativas" && statusNormalizado !== "cancelada") ||
+        (filtroStatus === "canceladas" && statusNormalizado === "cancelada")
 
       return passouBusca && passouDataInicio && passouDataFim && passouFiltroStatus
     })
-  }, [vendas, busca, dataInicio, dataFim])
+  }, [vendas, busca, dataInicio, dataFim, filtroStatus])
 
   const totalFiltrado = useMemo(() => {
     return vendasFiltradas
@@ -474,32 +525,71 @@ const passouFiltroStatus =
       .reduce((soma, venda) => soma + Number(venda.valor_em_aberto), 0)
   }, [vendasFiltradas])
 
+  const totalDescontoFiltrado = useMemo(() => {
+    return vendasFiltradas
+      .filter((venda) => venda.status !== "Cancelada")
+      .reduce((soma, venda) => soma + Number(venda.desconto_valor || 0), 0)
+  }, [vendasFiltradas])
+
   const descontoCalculado = useMemo(() => {
-  if (!vendaSelecionada) return 0
+    if (!vendaSelecionada) return 0
 
-  const percentual = Number(descontoPercentual || 0)
+    const percentual = Number(descontoPercentual || 0)
 
-  if (percentual <= 0) return 0
-  if (percentual > 100) return Number(vendaSelecionada.valor_total)
+    if (percentual <= 0) return 0
+    if (percentual > 100) return Number(vendaSelecionada.valor_total)
 
-  return Number(vendaSelecionada.valor_total) * (percentual / 100)
-}, [descontoPercentual, vendaSelecionada])
+    return Number(vendaSelecionada.valor_total) * (percentual / 100)
+  }, [descontoPercentual, vendaSelecionada])
 
-const totalComDesconto = useMemo(() => {
-  if (!vendaSelecionada) return 0
+  const totalComDesconto = useMemo(() => {
+    if (!vendaSelecionada) return 0
 
-  const total = Number(vendaSelecionada.valor_total) - descontoCalculado
-  return total < 0 ? 0 : total
-}, [vendaSelecionada, descontoCalculado])
+    const total = Number(vendaSelecionada.valor_total) - descontoCalculado
+    return total < 0 ? 0 : total
+  }, [vendaSelecionada, descontoCalculado])
 
-const saldoComDesconto = useMemo(() => {
-  if (!vendaSelecionada) return 0
+  const saldoComDesconto = useMemo(() => {
+    if (!vendaSelecionada) return 0
 
-  const saldo =
-    totalComDesconto - Number(vendaSelecionada.valor_recebido)
+    const saldo = totalComDesconto - Number(vendaSelecionada.valor_recebido)
+    return saldo < 0 ? 0 : saldo
+  }, [vendaSelecionada, totalComDesconto])
 
-  return saldo < 0 ? 0 : saldo
-}, [vendaSelecionada, totalComDesconto])
+  const descontoVendaCalculado = useMemo(() => {
+    if (!vendaParaDesconto) return 0
+
+    const percentual = Number(descontoVendaPercentual || 0)
+    const valorOriginal =
+      Number(vendaParaDesconto.valor_original || 0) > 0
+        ? Number(vendaParaDesconto.valor_original)
+        : Number(vendaParaDesconto.valor_total)
+
+    if (percentual <= 0) return 0
+    if (percentual > 100) return valorOriginal
+
+    return valorOriginal * (percentual / 100)
+  }, [descontoVendaPercentual, vendaParaDesconto])
+
+  const totalVendaComDesconto = useMemo(() => {
+    if (!vendaParaDesconto) return 0
+
+    const valorOriginal =
+      Number(vendaParaDesconto.valor_original || 0) > 0
+        ? Number(vendaParaDesconto.valor_original)
+        : Number(vendaParaDesconto.valor_total)
+
+    return Math.max(valorOriginal - descontoVendaCalculado, 0)
+  }, [vendaParaDesconto, descontoVendaCalculado])
+
+  const saldoVendaComDesconto = useMemo(() => {
+    if (!vendaParaDesconto) return 0
+
+    return Math.max(
+      totalVendaComDesconto - Number(vendaParaDesconto.valor_recebido),
+      0
+    )
+  }, [vendaParaDesconto, totalVendaComDesconto])
 
   function exportarCSV() {
     if (vendasFiltradas.length === 0) {
@@ -508,36 +598,42 @@ const saldoComDesconto = useMemo(() => {
     }
 
     const cabecalho = [
-  "Cliente",
-  "Produto",
-  "Cor",
-  "Tamanho",
-  "SKU",
-  "Quantidade",
-  "Valor Unitario",
-  "Valor Total",
-  "Recebido",
-  "Em Aberto",
-  "Situação Pagamento",
-  "Status Venda",
-  "Data",
-]
+      "Cliente",
+      "Produto",
+      "Cor",
+      "Tamanho",
+      "SKU",
+      "Quantidade",
+      "Valor Unitario",
+      "Valor Original",
+      "Desconto %",
+      "Desconto Valor",
+      "Valor Total",
+      "Recebido",
+      "Em Aberto",
+      "Situação Pagamento",
+      "Status Venda",
+      "Data",
+    ]
 
     const linhas = vendasFiltradas.map((venda) => [
-  venda.nomeCliente,
-  venda.nomeProduto,
-  venda.corProduto,
-  venda.tamanhoProduto,
-  venda.skuProduto,
-  String(venda.quantidade),
-  venda.valor_unitario.toFixed(2),
-  venda.valor_total.toFixed(2),
-  venda.valor_recebido.toFixed(2),
-  venda.valor_em_aberto.toFixed(2),
-  venda.payment_status,
-  venda.status,
-  formatarData(venda.created_at),
-])
+      venda.nomeCliente,
+      venda.nomeProduto,
+      venda.corProduto,
+      venda.tamanhoProduto,
+      venda.skuProduto,
+      String(venda.quantidade),
+      venda.valor_unitario.toFixed(2),
+      venda.valor_original.toFixed(2),
+      venda.desconto_percentual.toFixed(2),
+      venda.desconto_valor.toFixed(2),
+      venda.valor_total.toFixed(2),
+      venda.valor_recebido.toFixed(2),
+      venda.valor_em_aberto.toFixed(2),
+      venda.payment_status,
+      venda.status,
+      formatarData(venda.created_at),
+    ])
 
     const conteudo = [cabecalho, ...linhas]
       .map((linha) =>
@@ -578,37 +674,44 @@ const saldoComDesconto = useMemo(() => {
     doc.text(`Total vendido: R$ ${totalFiltrado.toFixed(2)}`, 14, startY)
     doc.text(`Total recebido: R$ ${totalRecebidoFiltrado.toFixed(2)}`, 14, startY + 6)
     doc.text(`Total em aberto: R$ ${totalEmAbertoFiltrado.toFixed(2)}`, 14, startY + 12)
+    doc.text(`Total de descontos: R$ ${totalDescontoFiltrado.toFixed(2)}`, 14, startY + 18)
 
     autoTable(doc, {
-      startY: startY + 20,
+      startY: startY + 26,
       head: [[
-      "Cliente",
-      "Produto",
-      "Cor",
-      "Tam.",
-      "SKU",
-      "Quantidade",
-      "Valor Total",
-      "Recebido",
-      "Em Aberto",
-      "Situação",
-      "Status",
-      "Data",
-    ]],
+        "Cliente",
+        "Produto",
+        "Cor",
+        "Tam.",
+        "SKU",
+        "Qtd.",
+        "Original",
+        "Desc.",
+        "Total",
+        "Recebido",
+        "Em Aberto",
+        "Situação",
+        "Status",
+        "Data",
+      ]],
       body: vendasFiltradas.map((venda) => [
-  venda.nomeCliente,
-  venda.nomeProduto,
-  venda.corProduto,
-  venda.tamanhoProduto,
-  venda.skuProduto,
-  String(venda.quantidade),
-  `R$ ${venda.valor_total.toFixed(2)}`,
-  `R$ ${venda.valor_recebido.toFixed(2)}`,
-  `R$ ${venda.valor_em_aberto.toFixed(2)}`,
-  venda.payment_status,
-  venda.status,
-  formatarData(venda.created_at),
-]),
+        venda.nomeCliente,
+        venda.nomeProduto,
+        venda.corProduto,
+        venda.tamanhoProduto,
+        venda.skuProduto,
+        String(venda.quantidade),
+        `R$ ${venda.valor_original.toFixed(2)}`,
+        venda.desconto_percentual > 0
+          ? `${venda.desconto_percentual.toFixed(2)}% / R$ ${venda.desconto_valor.toFixed(2)}`
+          : "-",
+        `R$ ${venda.valor_total.toFixed(2)}`,
+        `R$ ${venda.valor_recebido.toFixed(2)}`,
+        `R$ ${venda.valor_em_aberto.toFixed(2)}`,
+        venda.payment_status,
+        venda.status,
+        formatarData(venda.created_at),
+      ]),
       styles: {
         fontSize: 8.5,
       },
@@ -670,16 +773,16 @@ const saldoComDesconto = useMemo(() => {
         />
 
         <select
-  style={inputData}
-  value={filtroStatus}
-  onChange={(e) =>
-    setFiltroStatus(e.target.value as "todas" | "ativas" | "canceladas")
-  }
->
-  <option value="todas">Todas</option>
-  <option value="ativas">Ativas</option>
-  <option value="canceladas">Canceladas</option>
-</select>
+          style={inputData}
+          value={filtroStatus}
+          onChange={(e) =>
+            setFiltroStatus(e.target.value as "todas" | "ativas" | "canceladas")
+          }
+        >
+          <option value="todas">Todas</option>
+          <option value="ativas">Ativas</option>
+          <option value="canceladas">Canceladas</option>
+        </select>
 
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button onClick={exportarCSV} className="btn btn-secondary">
@@ -717,6 +820,14 @@ const saldoComDesconto = useMemo(() => {
             <HelpTooltip text="Valor que ainda falta receber dessas vendas." />
           </span>{" "}
           <strong>R$ {totalEmAbertoFiltrado.toFixed(2)}</strong>
+        </span>
+
+        <span style={totalResumo}>
+          <span style={tituloComAjuda}>
+            Descontos
+            <HelpTooltip text="Soma total dos descontos concedidos nas vendas ativas mostradas na tela." />
+          </span>{" "}
+          <strong>R$ {totalDescontoFiltrado.toFixed(2)}</strong>
         </span>
       </div>
 
@@ -777,45 +888,40 @@ const saldoComDesconto = useMemo(() => {
             {vendasFiltradas.map((venda) => (
               <tr key={venda.id}>
                 <td style={td}>{venda.nomeCliente}</td>
+
                 <td style={td}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <strong>{venda.nomeProduto}</strong>
-                {(venda.corProduto !== "-" || venda.tamanhoProduto !== "-") && (
-                 <span style={{ fontSize: 12, color: "#6b7280" }}>
-                   {[venda.corProduto !== "-" ? venda.corProduto : null, venda.tamanhoProduto !== "-" ? venda.tamanhoProduto : null]
-                  .filter(Boolean)
-                   .join(" • ")}
-                   </span>
-                     )}
-                    </div>
-                      </td>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <strong>{venda.nomeProduto}</strong>
+                    {(venda.corProduto !== "-" || venda.tamanhoProduto !== "-") && (
+                      <span style={{ fontSize: 12, color: "#6b7280" }}>
+                        {[venda.corProduto !== "-" ? venda.corProduto : null, venda.tamanhoProduto !== "-" ? venda.tamanhoProduto : null]
+                          .filter(Boolean)
+                          .join(" • ")}
+                      </span>
+                    )}
+                  </div>
+                </td>
+
                 <td style={td}>{venda.skuProduto}</td>
                 <td style={td}>{venda.quantidade}</td>
+
                 <td style={td}>
-  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-    <strong>R$ {venda.valor_total.toFixed(2)}</strong>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <strong>R$ {venda.valor_total.toFixed(2)}</strong>
 
-    {venda.desconto_percentual > 0 && (
-      <span style={{ fontSize: 12, color: "#6b7280" }}>
-        Original: R$ {venda.valor_original.toFixed(2)} •
-        Desconto: {venda.desconto_percentual.toFixed(2)}% (R$ {venda.desconto_valor.toFixed(2)})
-      </span>
-    )}
-  </div>
-</td><td style={td}>
-  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-    <strong>R$ {venda.valor_total.toFixed(2)}</strong>
+                    {venda.desconto_percentual > 0 && (
+                      <span style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.4 }}>
+                        Original: R$ {venda.valor_original.toFixed(2)}
+                        <br />
+                        Desconto: {venda.desconto_percentual.toFixed(2)}% (R$ {venda.desconto_valor.toFixed(2)})
+                      </span>
+                    )}
+                  </div>
+                </td>
 
-    {venda.desconto_percentual > 0 && (
-      <span style={{ fontSize: 12, color: "#6b7280" }}>
-        Original: R$ {venda.valor_original.toFixed(2)} •
-        Desconto: {venda.desconto_percentual.toFixed(2)}% (R$ {venda.desconto_valor.toFixed(2)})
-      </span>
-    )}
-  </div>
-</td>
                 <td style={td}>R$ {venda.valor_recebido.toFixed(2)}</td>
                 <td style={td}>R$ {venda.valor_em_aberto.toFixed(2)}</td>
+
                 <td style={td}>
                   <span
                     className={
@@ -829,6 +935,7 @@ const saldoComDesconto = useMemo(() => {
                     {venda.payment_status}
                   </span>
                 </td>
+
                 <td style={td}>
                   <span
                     className={
@@ -840,97 +947,107 @@ const saldoComDesconto = useMemo(() => {
                     {venda.status}
                   </span>
                 </td>
+
                 <td style={td}>{formatarData(venda.created_at)}</td>
+
                 <td style={td}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-  <div style={acoesTabela}>
-    {venda.status !== "Cancelada" && venda.valor_em_aberto > 0 && (
-  <button
-    onClick={() => abrirModalPagamento(venda)}
-    className="btn btn-primary btn-sm"
-  >
-    Registrar recebimento
-  </button>
-)}
+                    <div style={acoesTabela}>
+                      {venda.status !== "Cancelada" && venda.valor_em_aberto > 0 && (
+                        <button
+                          onClick={() => abrirModalPagamento(venda)}
+                          className="btn btn-primary btn-sm"
+                        >
+                          Registrar recebimento
+                        </button>
+                      )}
 
-    {venda.status !== "Cancelada" ? (
-  <button
-    onClick={() => cancelarVenda(venda)}
-    className="btn btn-danger btn-sm"
-  >
-    Cancelar venda
-  </button>
-) : (
-  <>
-  <button
-    onClick={() => restaurarVenda(venda)}
-    className="btn btn-success btn-sm"
-  >
-    Restaurar venda
-  </button>
+                      {venda.status !== "Cancelada" && (
+                        <button
+                          onClick={() => abrirModalDesconto(venda)}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          Aplicar desconto
+                        </button>
+                      )}
 
-  <button
-    onClick={() => abrirModalExcluirVenda(venda)}
-    className="btn btn-danger btn-sm"
-  >
-    Excluir venda
-  </button>
-</>
+                      {venda.status !== "Cancelada" ? (
+                        <button
+                          onClick={() => cancelarVenda(venda)}
+                          className="btn btn-danger btn-sm"
+                        >
+                          Cancelar venda
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => restaurarVenda(venda)}
+                            className="btn btn-success btn-sm"
+                          >
+                            Restaurar venda
+                          </button>
 
-)}
-  </div>
+                          <button
+                            onClick={() => abrirModalExcluirVenda(venda)}
+                            className="btn btn-danger btn-sm"
+                          >
+                            Excluir venda
+                          </button>
+                        </>
+                      )}
+                    </div>
 
-  {venda.pagamentos.length > 0 && (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {venda.pagamentos.map((pagamento) => (
-        <div
-          key={pagamento.id}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-            padding: "8px 10px",
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-            background: "#f8fafc",
-          }}
-        >
-          <div style={{ fontSize: 12, color: "#374151" }}>
-  <div>
-    <strong>R$ {Number(pagamento.valor).toFixed(2)}</strong>{" "}
-    • {pagamento.forma_pagamento} • {formatarData(pagamento.created_at)}
-  </div>
+                    {venda.pagamentos.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {venda.pagamentos.map((pagamento) => (
+                          <div
+                            key={pagamento.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 8,
+                              padding: "8px 10px",
+                              border: "1px solid #e5e7eb",
+                              borderRadius: 8,
+                              background: "#f8fafc",
+                            }}
+                          >
+                            <div style={{ fontSize: 12, color: "#374151" }}>
+                              <div>
+                                <strong>R$ {Number(pagamento.valor).toFixed(2)}</strong>{" "}
+                                • {pagamento.forma_pagamento} • {formatarData(pagamento.created_at)}
+                              </div>
 
-  {pagamento.observacao && (
-    <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
-      {pagamento.observacao}
-    </div>
-  )}
-</div>
+                              {pagamento.observacao && (
+                                <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+                                  {pagamento.observacao}
+                                </div>
+                              )}
+                            </div>
 
-          {venda.status !== "Cancelada" && (
-  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-    <button
-      onClick={() => abrirModalEditarPagamento(venda, pagamento)}
-      className="btn btn-secondary btn-sm"
-    >
-      Editar pagamento
-    </button>
+                            {venda.status !== "Cancelada" && (
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                <button
+                                  onClick={() => abrirModalEditarPagamento(venda, pagamento)}
+                                  className="btn btn-secondary btn-sm"
+                                >
+                                  Editar pagamento
+                                </button>
 
-    <button
-      onClick={() => excluirPagamento(venda, pagamento.id)}
-      className="btn btn-danger btn-sm"
-    >
-      Excluir pagamento
-    </button>
-  </div>
-)}
-        </div>
-      ))}
-    </div>
-  )}
-</div>
+                                <button
+                                  onClick={() => excluirPagamento(venda, pagamento.id)}
+                                  className="btn btn-danger btn-sm"
+                                >
+                                  Excluir pagamento
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -947,306 +1064,430 @@ const saldoComDesconto = useMemo(() => {
       </div>
 
       <AnimatedModal
-  open={modalPagamentoAberto}
-  onClose={fecharModalPagamento}
- title="Registrar recebimento"
-  footer={
-    <>
-      <button onClick={fecharModalPagamento} className="btn btn-secondary">
-        Cancelar
-      </button>
-      <button
-        onClick={salvarPagamento}
-        className="btn btn-primary"
-        disabled={salvandoPagamento}
+        open={modalPagamentoAberto}
+        onClose={fecharModalPagamento}
+        title="Registrar recebimento"
+        footer={
+          <>
+            <button onClick={fecharModalPagamento} className="btn btn-secondary">
+              Cancelar
+            </button>
+            <button
+              onClick={salvarPagamento}
+              className="btn btn-primary"
+              disabled={salvandoPagamento}
+            >
+              {salvandoPagamento ? "Salvando..." : "Salvar pagamento"}
+            </button>
+          </>
+        }
       >
-        {salvandoPagamento ? "Salvando..." : "Salvar pagamento"}
-      </button>
-    </>
-  }
->
-  <>
-    {vendaSelecionada && (
-  <div style={{ marginBottom: 16 }}>
-    <div>
-      <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
-    </div>
-    <div>
-      <strong>Total:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}
-    </div>
-    <div>
-      <strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}
-    </div>
-    <div>
-      <strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}
-    </div>
+        <>
+          {vendaSelecionada && (
+            <div style={{ marginBottom: 16 }}>
+              <div>
+                <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
+              </div>
 
-    <div
-      style={{
-        marginTop: 12,
-        padding: "10px 12px",
-        background: "#eff6ff",
-        border: "1px solid #bfdbfe",
-        borderRadius: 10,
-        color: "#1d4ed8",
-        fontSize: 14,
-        fontWeight: 600,
-      }}
-    >
-      Saldo restante disponível para receber: R${" "}
-      {vendaSelecionada.valor_em_aberto.toFixed(2)}
-    </div>
-  </div>
-)}
+              <div>
+                <strong>Total atual da venda:</strong> R$ {Number(vendaSelecionada.valor_total).toFixed(2)}
+              </div>
 
-    <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280", lineHeight: 1.5 }}>
-  Use este formulário para registrar um recebimento total ou parcial desta venda.
-  Você também pode informar a data real em que o cliente pagou.
-</div>
+              {Number(vendaSelecionada.desconto_percentual || 0) > 0 && (
+                <>
+                  <div>
+                    <strong>Valor original:</strong> R$ {Number(vendaSelecionada.valor_original).toFixed(2)}
+                  </div>
+                  <div>
+                    <strong>Desconto já aplicado:</strong> {Number(vendaSelecionada.desconto_percentual).toFixed(2)}% (R$ {Number(vendaSelecionada.desconto_valor).toFixed(2)})
+                  </div>
+                </>
+              )}
 
-{vendaSelecionada && (
-  <div
-    style={{
-      marginBottom: 16,
-      padding: "12px 14px",
-      background: "#f8fafc",
-      border: "1px solid #e2e8f0",
-      borderRadius: 10,
-      fontSize: 14,
-      color: "#334155",
-      lineHeight: 1.7,
-    }}
-  >
-    <div>
-      <strong>Total original:</strong> R$ {Number(vendaSelecionada.valor_total).toFixed(2)}
-    </div>
-    <div>
-      <strong>Desconto:</strong> R$ {descontoCalculado.toFixed(2)} ({Number(descontoPercentual || 0).toFixed(2)}%)
-    </div>
-    <div>
-      <strong>Total com desconto:</strong> R$ {totalComDesconto.toFixed(2)}
-    </div>
-    <div>
-      <strong>Já recebido:</strong> R$ {Number(vendaSelecionada.valor_recebido).toFixed(2)}
-    </div>
-    <div>
-      <strong>Saldo restante após desconto:</strong> R$ {saldoComDesconto.toFixed(2)}
-    </div>
-  </div>
-)}
+              <div>
+                <strong>Recebido:</strong> R$ {Number(vendaSelecionada.valor_recebido).toFixed(2)}
+              </div>
 
-    <div className="grid-2">
-      <div>
-        <label style={labelAjuda}>
-          Valor do pagamento
-          <HelpTooltip text="Informe o valor recebido neste pagamento." />
-        </label>
-        <input
-  type="number"
-  step="0.01"
-  placeholder="Digite o valor recebido"
-  value={valorPagamento}
-  onChange={(e) => setValorPagamento(e.target.value)}
-/>
-      </div>
+              <div>
+                <strong>Em aberto atual:</strong> R$ {Number(vendaSelecionada.valor_em_aberto).toFixed(2)}
+              </div>
 
-      <div>
-  <label style={labelAjuda}>
-    Desconto (%)
-    <HelpTooltip text="Informe a porcentagem de desconto concedida nesta venda antes de registrar o pagamento." />
-  </label>
-  <input
-    type="number"
-    step="0.01"
-    min="0"
-    max="100"
-    placeholder="Ex: 10"
-    value={descontoPercentual}
-    onChange={(e) => setDescontoPercentual(e.target.value)}
-  />
-</div>
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: "10px 12px",
+                  background: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: 10,
+                  color: "#1d4ed8",
+                  fontSize: 14,
+                  fontWeight: 600,
+                }}
+              >
+                Saldo restante disponível para receber: R$ {saldoComDesconto.toFixed(2)}
+              </div>
+            </div>
+          )}
 
-      <div>
-        <label style={labelAjuda}>
-          Forma de pagamento
-          <HelpTooltip text="Selecione a forma usada pelo cliente." />
-        </label>
-        <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
-          {formasPagamento.map((forma) => (
-            <option key={forma} value={forma}>
-              {forma}
-            </option>
-          ))}
-        </select>
-      </div>
+          <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280", lineHeight: 1.5 }}>
+            Use este formulário para registrar um recebimento total ou parcial desta venda.
+            Você também pode informar a data real em que o cliente pagou.
+          </div>
 
-      <div>
-        <label style={labelAjuda}>
-          Data do pagamento
-          <HelpTooltip text="Informe a data real em que o pagamento ocorreu." />
-        </label>
-        <input
-          type="date"
-          value={dataPagamento}
-          onChange={(e) => setDataPagamento(e.target.value)}
-        />
-      </div>
+          {vendaSelecionada && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: "12px 14px",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: 10,
+                fontSize: 14,
+                color: "#334155",
+                lineHeight: 1.7,
+              }}
+            >
+              <div>
+                <strong>Total original:</strong> R$ {Number(vendaSelecionada.valor_total).toFixed(2)}
+              </div>
+              <div>
+                <strong>Desconto:</strong> R$ {descontoCalculado.toFixed(2)} ({Number(descontoPercentual || 0).toFixed(2)}%)
+              </div>
+              <div>
+                <strong>Total com desconto:</strong> R$ {totalComDesconto.toFixed(2)}
+              </div>
+              <div>
+                <strong>Já recebido:</strong> R$ {Number(vendaSelecionada.valor_recebido).toFixed(2)}
+              </div>
+              <div>
+                <strong>Saldo restante após desconto:</strong> R$ {saldoComDesconto.toFixed(2)}
+              </div>
+            </div>
+          )}
 
-      <div>
-        <label style={labelAjuda}>
-          Observação
-          <HelpTooltip text="Adicione uma observação, se necessário." />
-        </label>
-        <input
-          placeholder="Observação (opcional)"
-          value={observacaoPagamento}
-          onChange={(e) => setObservacaoPagamento(e.target.value)}
-        />
-      </div>
-    </div>
-  </>
-</AnimatedModal>
+          <div className="grid-2">
+            <div>
+              <label style={labelAjuda}>
+                Valor do pagamento
+                <HelpTooltip text="Informe o valor recebido neste pagamento." />
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Digite o valor recebido"
+                value={valorPagamento}
+                onChange={(e) => setValorPagamento(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={labelAjuda}>
+                Desconto (%)
+                <HelpTooltip text="Informe a porcentagem de desconto concedida nesta venda antes de registrar o pagamento." />
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                placeholder="Ex: 10"
+                value={descontoPercentual}
+                onChange={(e) => setDescontoPercentual(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={labelAjuda}>
+                Forma de pagamento
+                <HelpTooltip text="Selecione a forma usada pelo cliente." />
+              </label>
+              <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
+                {formasPagamento.map((forma) => (
+                  <option key={forma} value={forma}>
+                    {forma}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelAjuda}>
+                Data do pagamento
+                <HelpTooltip text="Informe a data real em que o pagamento ocorreu." />
+              </label>
+              <input
+                type="date"
+                value={dataPagamento}
+                onChange={(e) => setDataPagamento(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={labelAjuda}>
+                Observação
+                <HelpTooltip text="Adicione uma observação, se necessário." />
+              </label>
+              <input
+                placeholder="Observação (opcional)"
+                value={observacaoPagamento}
+                onChange={(e) => setObservacaoPagamento(e.target.value)}
+              />
+            </div>
+          </div>
+        </>
+      </AnimatedModal>
 
       <AnimatedModal
-  open={modalEditarPagamentoAberto}
-  onClose={fecharModalEditarPagamento}
-  title="Editar pagamento"
-  footer={
-    <>
-      <button onClick={fecharModalEditarPagamento} className="btn btn-secondary">
-        Cancelar
-      </button>
-      <button
-        onClick={salvarEdicaoPagamento}
-        className="btn btn-primary"
-        disabled={salvandoPagamento}
+        open={modalEditarPagamentoAberto}
+        onClose={fecharModalEditarPagamento}
+        title="Editar pagamento"
+        footer={
+          <>
+            <button onClick={fecharModalEditarPagamento} className="btn btn-secondary">
+              Cancelar
+            </button>
+            <button
+              onClick={salvarEdicaoPagamento}
+              className="btn btn-primary"
+              disabled={salvandoPagamento}
+            >
+              {salvandoPagamento ? "Salvando..." : "Salvar alteração"}
+            </button>
+          </>
+        }
       >
-        {salvandoPagamento ? "Salvando..." : "Salvar alteração"}
-      </button>
-    </>
-  }
->
-  <>
-    {vendaSelecionada && (
-      <div style={{ marginBottom: 16 }}>
-        <div>
-          <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
-        </div>
-        <div>
-  <strong>Total atual da venda:</strong> R$ {Number(vendaSelecionada.valor_total).toFixed(2)}
-</div>
-<div>
-  <strong>Recebido:</strong> R$ {Number(vendaSelecionada.valor_recebido).toFixed(2)}
-</div>
-<div>
-  <strong>Em aberto atual:</strong> R$ {Number(vendaSelecionada.valor_em_aberto).toFixed(2)}
-</div>
-      </div>
-    )}
+        <>
+          {vendaSelecionada && (
+            <div style={{ marginBottom: 16 }}>
+              <div>
+                <strong>Venda:</strong> {vendaSelecionada.nomeProduto}
+              </div>
+              <div>
+                <strong>Total atual:</strong> R$ {vendaSelecionada.valor_total.toFixed(2)}
+              </div>
 
-    <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280" }}>
-      Atualize os dados do pagamento. O histórico e os relatórios serão recalculados automaticamente.
-    </div>
+              {vendaSelecionada.desconto_percentual > 0 && (
+                <>
+                  <div>
+                    <strong>Valor original:</strong> R$ {vendaSelecionada.valor_original.toFixed(2)}
+                  </div>
+                  <div>
+                    <strong>Desconto aplicado:</strong> {vendaSelecionada.desconto_percentual.toFixed(2)}% (R$ {vendaSelecionada.desconto_valor.toFixed(2)})
+                  </div>
+                </>
+              )}
 
-    <div className="grid-2">
-      <div>
-        <label style={labelAjuda}>
-          Valor do pagamento
-          <HelpTooltip text="Atualize o valor correto desse pagamento." />
-        </label>
-        <input
-          type="number"
-          step="0.01"
-          placeholder="Valor do pagamento"
-          value={valorPagamento}
-          onChange={(e) => setValorPagamento(e.target.value)}
-        />
-      </div>
+              <div>
+                <strong>Recebido:</strong> R$ {vendaSelecionada.valor_recebido.toFixed(2)}
+              </div>
+              <div>
+                <strong>Em aberto:</strong> R$ {vendaSelecionada.valor_em_aberto.toFixed(2)}
+              </div>
+            </div>
+          )}
 
-      <div>
-        <label style={labelAjuda}>
-          Forma de pagamento
-          <HelpTooltip text="Atualize a forma usada nesse pagamento." />
-        </label>
-        <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
-          {formasPagamento.map((forma) => (
-            <option key={forma} value={forma}>
-              {forma}
-            </option>
-          ))}
-        </select>
-      </div>
+          <div style={{ marginBottom: 14, fontSize: 14, color: "#6b7280" }}>
+            Atualize os dados do pagamento. O histórico e os relatórios serão recalculados automaticamente.
+          </div>
 
-      <div>
-        <label style={labelAjuda}>
-          Data do pagamento
-          <HelpTooltip text="Atualize a data real em que o pagamento ocorreu." />
-        </label>
-        <input
-          type="date"
-          value={dataPagamento}
-          onChange={(e) => setDataPagamento(e.target.value)}
-        />
-      </div>
+          <div className="grid-2">
+            <div>
+              <label style={labelAjuda}>
+                Valor do pagamento
+                <HelpTooltip text="Atualize o valor correto desse pagamento." />
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Valor do pagamento"
+                value={valorPagamento}
+                onChange={(e) => setValorPagamento(e.target.value)}
+              />
+            </div>
 
-      <div>
-        <label style={labelAjuda}>
-          Observação
-          <HelpTooltip text="Atualize a observação desse pagamento, se necessário." />
-        </label>
-        <input
-          placeholder="Observação (opcional)"
-          value={observacaoPagamento}
-          onChange={(e) => setObservacaoPagamento(e.target.value)}
-        />
-      </div>
-    </div>
-  </>
-</AnimatedModal>
+            <div>
+              <label style={labelAjuda}>
+                Forma de pagamento
+                <HelpTooltip text="Atualize a forma usada nesse pagamento." />
+              </label>
+              <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
+                {formasPagamento.map((forma) => (
+                  <option key={forma} value={forma}>
+                    {forma}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-<AnimatedModal
-  open={modalExcluirVendaAberto}
-  onClose={fecharModalExcluirVenda}
-  title="Excluir venda cancelada"
-  footer={
-    <>
-      <button onClick={fecharModalExcluirVenda} className="btn btn-secondary">
-        Fechar
-      </button>
-      <button
-        onClick={() => vendaParaExcluir && excluirVendaCancelada(vendaParaExcluir)}
-        className="btn btn-danger"
-        disabled={excluindoVenda}
+            <div>
+              <label style={labelAjuda}>
+                Data do pagamento
+                <HelpTooltip text="Atualize a data real em que o pagamento ocorreu." />
+              </label>
+              <input
+                type="date"
+                value={dataPagamento}
+                onChange={(e) => setDataPagamento(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={labelAjuda}>
+                Observação
+                <HelpTooltip text="Atualize a observação desse pagamento, se necessário." />
+              </label>
+              <input
+                placeholder="Observação (opcional)"
+                value={observacaoPagamento}
+                onChange={(e) => setObservacaoPagamento(e.target.value)}
+              />
+            </div>
+          </div>
+        </>
+      </AnimatedModal>
+
+      <AnimatedModal
+        open={modalExcluirVendaAberto}
+        onClose={fecharModalExcluirVenda}
+        title="Excluir venda cancelada"
+        footer={
+          <>
+            <button onClick={fecharModalExcluirVenda} className="btn btn-secondary">
+              Fechar
+            </button>
+            <button
+              onClick={() => vendaParaExcluir && excluirVendaCancelada(vendaParaExcluir)}
+              className="btn btn-danger"
+              disabled={excluindoVenda}
+            >
+              {excluindoVenda ? "Excluindo..." : "Excluir definitivamente"}
+            </button>
+          </>
+        }
       >
-        {excluindoVenda ? "Excluindo..." : "Excluir definitivamente"}
-      </button>
-    </>
-  }
->
-  <>
-    {vendaParaExcluir && (
-      <div style={{ marginBottom: 16 }}>
-        <div>
-          <strong>Produto:</strong> {vendaParaExcluir.nomeProduto}
-        </div>
-        <div>
-          <strong>Cliente:</strong> {vendaParaExcluir.nomeCliente}
-        </div>
-        <div>
-          <strong>Valor total:</strong> R$ {vendaParaExcluir.valor_total.toFixed(2)}
-        </div>
-        <div>
-          <strong>Data:</strong> {formatarData(vendaParaExcluir.created_at)}
-        </div>
-      </div>
-    )}
+        <>
+          {vendaParaExcluir && (
+            <div style={{ marginBottom: 16 }}>
+              <div>
+                <strong>Produto:</strong> {vendaParaExcluir.nomeProduto}
+              </div>
+              <div>
+                <strong>Cliente:</strong> {vendaParaExcluir.nomeCliente}
+              </div>
+              <div>
+                <strong>Valor total:</strong> R$ {vendaParaExcluir.valor_total.toFixed(2)}
+              </div>
+              <div>
+                <strong>Data:</strong> {formatarData(vendaParaExcluir.created_at)}
+              </div>
+            </div>
+          )}
 
-    <div style={{ fontSize: 14, color: "#6b7280" }}>
-      Esta ação remove a venda cancelada do histórico e também exclui os pagamentos
-      vinculados a ela. Use apenas quando quiser limpar definitivamente o registro.
-    </div>
-  </>
-</AnimatedModal>
+          <div style={{ fontSize: 14, color: "#6b7280" }}>
+            Esta ação remove a venda cancelada do histórico e também exclui os pagamentos
+            vinculados a ela. Use apenas quando quiser limpar definitivamente o registro.
+          </div>
+        </>
+      </AnimatedModal>
+
+      <AnimatedModal
+        open={modalDescontoAberto}
+        onClose={fecharModalDesconto}
+        title="Aplicar desconto na venda"
+        footer={
+          <>
+            <button onClick={fecharModalDesconto} className="btn btn-secondary">
+              Cancelar
+            </button>
+            <button
+              onClick={salvarDescontoVenda}
+              className="btn btn-primary"
+              disabled={salvandoDesconto}
+            >
+              {salvandoDesconto ? "Salvando..." : "Salvar desconto"}
+            </button>
+          </>
+        }
+      >
+        <>
+          {vendaParaDesconto && (
+            <>
+              <div style={{ marginBottom: 16 }}>
+                <div>
+                  <strong>Venda:</strong> {vendaParaDesconto.nomeProduto}
+                </div>
+                <div>
+                  <strong>Cliente:</strong> {vendaParaDesconto.nomeCliente}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginBottom: 16,
+                  padding: "12px 14px",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  color: "#334155",
+                  lineHeight: 1.7,
+                }}
+              >
+                <div>
+                  <strong>Valor original:</strong> R${" "}
+                  {(
+                    Number(vendaParaDesconto.valor_original || 0) > 0
+                      ? Number(vendaParaDesconto.valor_original)
+                      : Number(vendaParaDesconto.valor_total)
+                  ).toFixed(2)}
+                </div>
+                <div>
+                  <strong>Já recebido:</strong> R$ {Number(vendaParaDesconto.valor_recebido).toFixed(2)}
+                </div>
+                <div>
+                  <strong>Desconto calculado:</strong> R$ {descontoVendaCalculado.toFixed(2)}
+                </div>
+                <div>
+                  <strong>Novo total da venda:</strong> R$ {totalVendaComDesconto.toFixed(2)}
+                </div>
+                <div>
+                  <strong>Saldo em aberto após desconto:</strong> R$ {saldoVendaComDesconto.toFixed(2)}
+                </div>
+              </div>
+
+              <div className="grid-2">
+                <div>
+                  <label style={labelAjuda}>
+                    Desconto (%)
+                    <HelpTooltip text="Informe a porcentagem de desconto que deseja aplicar sobre o valor original da venda." />
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder="Ex: 10"
+                    value={descontoVendaPercentual}
+                    onChange={(e) => setDescontoVendaPercentual(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 14,
+                  fontSize: 13,
+                  color: "#64748b",
+                  lineHeight: 1.5,
+                }}
+              >
+                Esse desconto altera o total da venda e o saldo em aberto, sem registrar
+                nenhum recebimento.
+              </div>
+            </>
+          )}
+        </>
+      </AnimatedModal>
     </div>
   )
 }
