@@ -1,9 +1,6 @@
 "use client"
-
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
-import { registrarMovimentoEstoque } from "@/lib/stockMovements"
-import AnimatedModal from "../../components/AnimatedModal"
 
 type Produto = {
   id: number
@@ -16,18 +13,10 @@ type Produto = {
   estoque: number
 }
 
-type MovimentoBruto = {
-  id: number
-  product_id: number
-  tipo: string
-  quantidade: number
-  motivo: string | null
-  created_at: string
-}
-
 type Movimento = {
   id: number
   tipo: string
+  origem: string | null
   quantidade: number
   motivo: string
   created_at: string
@@ -37,267 +26,139 @@ type Movimento = {
   categoria: string
   tipoProduto: string
   unidade: string
+  estoqueApos: number
 }
 
 export default function Estoque() {
   const [movimentos, setMovimentos] = useState<Movimento[]>([])
-  const [produtos, setProdutos] = useState<Produto[]>([])
-  const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
   const [filtroTipo, setFiltroTipo] = useState("Todos")
-
-  const [modalAberto, setModalAberto] = useState(false)
-  const [productId, setProductId] = useState("")
-  const [tipoAjuste, setTipoAjuste] = useState("entrada")
-  const [quantidade, setQuantidade] = useState("")
-  const [motivo, setMotivo] = useState("")
-  const [salvando, setSalvando] = useState(false)
+  const [filtroOrigem, setFiltroOrigem] = useState("Todos")
 
   useEffect(() => {
     carregarMovimentos()
-    carregarProdutos()
   }, [])
 
-  async function carregarProdutos() {
+  async function carregarMovimentos() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) return
 
-    const { data, error } = await supabase
-      .from("products")
-      .select("id, nome, sku, marca, categoria, tipo, unidade, estoque")
+    const { data: movimentosData } = await supabase
+      .from("stock_movements")
+      .select("*")
       .eq("user_id", user.id)
-      .order("nome", { ascending: true })
+      .order("created_at", { ascending: false })
 
-    if (!error) {
-      setProdutos((data ?? []) as Produto[])
-    }
-  }
+    const { data: produtosData } = await supabase
+      .from("products")
+      .select("*")
+      .eq("user_id", user.id)
 
-  async function carregarMovimentos() {
-  setMensagem("")
+    const mapa = new Map<number, Produto>()
+    ;(produtosData || []).forEach((p) => mapa.set(p.id, p))
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    setMensagem("Você precisa estar logado.")
-    return
-  }
-
-  const { data: movimentosData, error: errorMovimentos } = await supabase
-    .from("stock_movements")
-    .select("id, product_id, tipo, quantidade, motivo, created_at")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-
-  if (errorMovimentos) {
-    console.log("ERRO AO CARREGAR MOVIMENTOS:", errorMovimentos)
-    setMensagem("Erro ao carregar movimentações de estoque.")
-    return
-  }
-
-  const { data: produtosData, error: errorProdutos } = await supabase
-    .from("products")
-    .select("id, nome, sku, marca, categoria, tipo, unidade, estoque")
-    .eq("user_id", user.id)
-
-  if (errorProdutos) {
-    console.log("ERRO AO CARREGAR PRODUTOS DOS MOVIMENTOS:", errorProdutos)
-    setMensagem("Erro ao carregar os produtos relacionados ao estoque.")
-    return
-  }
-
-  const mapaProdutos = new Map<number, Produto>()
-  ;((produtosData ?? []) as Produto[]).forEach((produto) => {
-    mapaProdutos.set(produto.id, produto)
-  })
-
-  const listaFormatada: Movimento[] = ((movimentosData ?? []) as MovimentoBruto[]).map(
-    (item) => {
-      const produto = mapaProdutos.get(item.product_id)
+    const lista = (movimentosData || []).map((m: any) => {
+      const p = mapa.get(m.product_id)
 
       return {
-        id: item.id,
-        tipo: item.tipo,
-        quantidade: item.quantidade,
-        motivo: item.motivo || "-",
-        created_at: item.created_at,
-        nomeProduto: produto?.nome || "Produto removido",
-        skuProduto: produto?.sku || "-",
-        marca: produto?.marca || "-",
-        categoria: produto?.categoria || "-",
-        tipoProduto: produto?.tipo || "-",
-        unidade: produto?.unidade || "un",
+        id: m.id,
+        tipo: m.tipo,
+        origem: m.origem,
+        quantidade: m.quantidade,
+        motivo: m.motivo || "-",
+        created_at: m.created_at,
+        nomeProduto: p?.nome || "Produto removido",
+        skuProduto: p?.sku || "-",
+        marca: p?.marca || "-",
+        categoria: p?.categoria || "-",
+        tipoProduto: p?.tipo || "-",
+        unidade: p?.unidade || "un",
+        estoqueApos: m.estoque_apos ?? 0,
       }
-    }
-  )
+    })
 
-  setMovimentos(listaFormatada)
-}
-
-  function abrirModalAjuste() {
-    setProductId("")
-    setTipoAjuste("entrada")
-    setQuantidade("")
-    setMotivo("")
-    setMensagem("")
-    setModalAberto(true)
-  }
-
-  function fecharModalAjuste() {
-    setProductId("")
-    setTipoAjuste("entrada")
-    setQuantidade("")
-    setMotivo("")
-    setModalAberto(false)
-  }
-
-  async function salvarAjuste() {
-    setMensagem("")
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
-
-    if (!productId || !quantidade || !motivo.trim()) {
-      setMensagem("Selecione o produto, informe a quantidade e o motivo.")
-      return
-    }
-
-    const qtd = Number(quantidade)
-
-    if (qtd <= 0) {
-      setMensagem("Informe uma quantidade válida.")
-      return
-    }
-
-    const produto = produtos.find((p) => p.id === Number(productId))
-
-    if (!produto) {
-      setMensagem("Produto não encontrado.")
-      return
-    }
-
-    const novoEstoque =
-      tipoAjuste === "entrada"
-        ? Number(produto.estoque) + qtd
-        : Number(produto.estoque) - qtd
-
-    if (novoEstoque < 0) {
-      setMensagem("O ajuste deixaria o estoque negativo.")
-      return
-    }
-
-    setSalvando(true)
-
-    const { error: erroEstoque } = await supabase
-      .from("products")
-      .update({ estoque: novoEstoque })
-      .eq("id", produto.id)
-      .eq("user_id", user.id)
-
-    if (erroEstoque) {
-      setSalvando(false)
-      setMensagem("Erro ao atualizar o estoque.")
-      return
-    }
-
-    await registrarMovimentoEstoque({
-  productId: produto.id,
-  userId: user.id,
-  tipo: tipoAjuste === "entrada" ? "entrada" : "saida",
-  quantidade: qtd,
-  motivo: `${tipoAjuste === "entrada" ? "Ajuste de entrada" : "Ajuste de saída"} - ${motivo.trim()}`,
-})
-
-    setSalvando(false)
-    fecharModalAjuste()
-    await carregarProdutos()
-    await carregarMovimentos()
-    setMensagem("Ajuste de estoque realizado com sucesso.")
-  }
-
-  function formatarData(data: string) {
-    return new Date(data).toLocaleString("pt-BR")
+    setMovimentos(lista)
   }
 
   function formatarTipo(tipo: string) {
     if (tipo === "entrada") return "Entrada"
     if (tipo === "saida") return "Saída"
-    if (tipo === "cancelamento") return "Cancelamento"
     if (tipo === "ajuste") return "Ajuste"
+    if (tipo === "cancelamento") return "Cancelamento"
     return tipo
   }
 
-  const movimentosFiltrados = useMemo(() => {
-    const termo = busca.trim().toLowerCase()
+  function formatarOrigem(origem: string | null) {
+    if (!origem) return "-"
+    if (origem === "venda") return "Venda"
+    if (origem === "importacao") return "Importação"
+    if (origem === "ia") return "IA 🤖"
+    if (origem === "manual") return "Manual"
+    return origem
+  }
 
-    return movimentos.filter((item) => {
+  function corTipo(tipo: string) {
+    if (tipo === "entrada") return "status-green"
+    if (tipo === "saida") return "status-red"
+    if (tipo === "ajuste") return "status-yellow"
+    if (tipo === "cancelamento") return "status-blue"
+    return "status-gray"
+  }
+
+  const filtrados = useMemo(() => {
+    const termo = busca.toLowerCase()
+
+    return movimentos.filter((m) => {
       const texto = [
-        item.nomeProduto,
-        item.skuProduto,
-        item.marca,
-        item.categoria,
-        item.tipoProduto,
-        item.motivo,
+        m.nomeProduto,
+        m.skuProduto,
+        m.marca,
+        m.categoria,
+        m.tipoProduto,
+        m.motivo,
       ]
         .join(" ")
         .toLowerCase()
 
-      const passouBusca = !termo || texto.includes(termo)
-      const passouTipo = filtroTipo === "Todos" || item.tipo === filtroTipo
+      const okBusca = !termo || texto.includes(termo)
+      const okTipo = filtroTipo === "Todos" || m.tipo === filtroTipo
+      const okOrigem = filtroOrigem === "Todos" || m.origem === filtroOrigem
 
-      return passouBusca && passouTipo
+      return okBusca && okTipo && okOrigem
     })
-  }, [movimentos, busca, filtroTipo])
-
-  const produtoSelecionado = produtos.find((p) => p.id === Number(productId)) || null
+  }, [movimentos, busca, filtroTipo, filtroOrigem])
 
   return (
     <div>
       <h2 className="page-title">Movimentação de Estoque</h2>
-      <p className="page-subtitle">
-        Histórico de entradas, saídas, cancelamentos e ajustes.
-      </p>
-
-      {mensagem && !modalAberto && <p>{mensagem}</p>}
-
-      <div className="page-actions">
-        <button onClick={abrirModalAjuste} className="btn btn-primary">
-          + Ajuste manual
-        </button>
-      </div>
 
       <div className="table-toolbar" style={{ marginTop: 20 }}>
         <input
-          placeholder="Buscar por produto, SKU, marca, categoria, tipo ou motivo"
+          placeholder="Buscar produto, SKU, marca, motivo..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          style={{ maxWidth: "420px" }}
         />
 
-        <select
-          value={filtroTipo}
-          onChange={(e) => setFiltroTipo(e.target.value)}
-          style={{ maxWidth: "220px" }}
-        >
+        <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
           <option value="Todos">Todos os tipos</option>
           <option value="entrada">Entrada</option>
           <option value="saida">Saída</option>
-          <option value="cancelamento">Cancelamento</option>
           <option value="ajuste">Ajuste</option>
+          <option value="cancelamento">Cancelamento</option>
         </select>
 
-        <span className="info-muted">{movimentosFiltrados.length} movimentação(ões)</span>
+        <select value={filtroOrigem} onChange={(e) => setFiltroOrigem(e.target.value)}>
+          <option value="Todos">Todas origens</option>
+          <option value="venda">Venda</option>
+          <option value="importacao">Importação</option>
+          <option value="ia">IA</option>
+          <option value="manual">Manual</option>
+        </select>
+
+        <span>{filtrados.length} movimentações</span>
       </div>
 
       <div className="data-table-wrap">
@@ -305,130 +166,48 @@ export default function Estoque() {
           <thead>
             <tr>
               <th style={th}>Produto</th>
-              <th style={th}>Detalhes</th>
               <th style={th}>Tipo</th>
-              <th style={th}>Quantidade</th>
+              <th style={th}>Origem</th>
+              <th style={th}>Qtd</th>
+              <th style={th}>Estoque após</th>
               <th style={th}>Motivo</th>
               <th style={th}>Data</th>
             </tr>
           </thead>
 
           <tbody>
-            {movimentosFiltrados.map((m) => (
+            {filtrados.map((m) => (
               <tr key={m.id}>
                 <td style={td}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <strong>{m.nomeProduto}</strong>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>{m.skuProduto}</span>
-                  </div>
+                  <strong>{m.nomeProduto}</strong>
+                  <div style={{ fontSize: 12 }}>{m.skuProduto}</div>
                 </td>
+
                 <td style={td}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <span>{m.marca}</span>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>
-                      {[m.categoria, m.tipoProduto, m.unidade].filter(Boolean).join(" • ")}
-                    </span>
-                  </div>
-                </td>
-                <td style={td}>
-                  <span
-                    className={
-                      m.tipo === "entrada"
-                        ? "status-pill status-green"
-                        : m.tipo === "saida"
-                        ? "status-pill status-red"
-                        : m.tipo === "cancelamento"
-                        ? "status-pill status-blue"
-                        : "status-pill status-yellow"
-                    }
-                  >
+                  <span className={`status-pill ${corTipo(m.tipo)}`}>
                     {formatarTipo(m.tipo)}
                   </span>
                 </td>
+
+                <td style={td}>{formatarOrigem(m.origem)}</td>
+
                 <td style={td}>
-                  {m.quantidade} {m.unidade}
+                  {m.tipo === "saida" ? "-" : "+"}
+                  {m.quantidade}
                 </td>
+
+                <td style={td}>{m.estoqueApos}</td>
+
                 <td style={td}>{m.motivo}</td>
-                <td style={td}>{formatarData(m.created_at)}</td>
+
+                <td style={td}>
+                  {new Date(m.created_at).toLocaleString("pt-BR")}
+                </td>
               </tr>
             ))}
-
-            {movimentosFiltrados.length === 0 && (
-              <tr>
-                <td style={tdVazio} colSpan={6}>
-                  Nenhuma movimentação encontrada.
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
-
-      <AnimatedModal
-        open={modalAberto}
-        onClose={fecharModalAjuste}
-        title="Ajuste manual de estoque"
-        footer={
-          <>
-            <button onClick={fecharModalAjuste} className="btn btn-secondary">
-              Cancelar
-            </button>
-            <button onClick={salvarAjuste} className="btn btn-primary" disabled={salvando}>
-              {salvando ? "Salvando..." : "Salvar ajuste"}
-            </button>
-          </>
-        }
-      >
-        <>
-          {mensagem && <p style={{ marginTop: 0 }}>{mensagem}</p>}
-
-          <div className="grid-2">
-            <select value={productId} onChange={(e) => setProductId(e.target.value)}>
-              <option value="">Selecione um produto</option>
-              {produtos.map((produto) => (
-                <option key={produto.id} value={produto.id}>
-                  {produto.nome} - {produto.sku}
-                </option>
-              ))}
-            </select>
-
-            <select value={tipoAjuste} onChange={(e) => setTipoAjuste(e.target.value)}>
-              <option value="entrada">Ajuste de entrada</option>
-              <option value="saida">Ajuste de saída</option>
-            </select>
-
-            <input
-              type="number"
-              placeholder="Quantidade"
-              value={quantidade}
-              onChange={(e) => setQuantidade(e.target.value)}
-            />
-
-            <input
-              placeholder="Motivo do ajuste"
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-            />
-          </div>
-
-          {produtoSelecionado && (
-            <div
-              style={{
-                marginTop: 16,
-                padding: "12px",
-                borderRadius: 10,
-                background: "#f8fafc",
-                fontSize: 14,
-              }}
-            >
-              <strong>{produtoSelecionado.nome}</strong>
-              <div style={{ marginTop: 6, color: "#6b7280" }}>
-                Estoque atual: {produtoSelecionado.estoque} {produtoSelecionado.unidade || "un"}
-              </div>
-            </div>
-          )}
-        </>
-      </AnimatedModal>
     </div>
   )
 }
@@ -448,12 +227,4 @@ const th = {
 const td = {
   borderBottom: "1px solid #eee",
   padding: "10px",
-  verticalAlign: "top" as const,
-}
-
-const tdVazio = {
-  borderBottom: "1px solid #eee",
-  padding: "20px",
-  textAlign: "center" as const,
-  color: "#6b7280",
 }
