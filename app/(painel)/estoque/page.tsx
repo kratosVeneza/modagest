@@ -54,7 +54,7 @@ type Movimento = {
   cor: string
   tamanho: string
   unidade: string
-  estoqueApos: number
+  estoqueApos: number | null
 }
 
 export default function Estoque() {
@@ -207,7 +207,9 @@ export default function Estoque() {
             "un",
 
           estoqueApos:
-            Number(item.estoque_apos ?? produtoAtual?.estoque ?? 0),
+  item.estoque_apos !== null && item.estoque_apos !== undefined
+    ? Number(item.estoque_apos)
+    : null,
         }
       }
     )
@@ -288,24 +290,24 @@ export default function Estoque() {
     }
 
     await registrarMovimentoEstoque({
-      productId: produto.id,
-      userId: user.id,
-      tipo: "ajuste",
-      quantidade: qtd,
-      motivo: `Ajuste manual (${tipoAjuste}) - ${motivo.trim()}`,
-      origem: "manual",
-      estoqueApos: novoEstoque,
-      productSnapshot: {
-        nome: produto.nome,
-        sku: produto.sku,
-        marca: produto.marca,
-        categoria: produto.categoria,
-        tipo: produto.tipo,
-        cor: produto.cor,
-        tamanho: produto.tamanho,
-        unidade: produto.unidade,
-      },
-    } as any)
+  productId: produto.id,
+  userId: user.id,
+  tipo: "ajuste",
+  quantidade: qtd,
+  motivo: `Ajuste manual (${tipoAjuste}) - ${motivo.trim()}`,
+  origem: "manual",
+  estoqueApos: novoEstoque,
+  productSnapshot: {
+    nome: produto.nome,
+    sku: produto.sku,
+    marca: produto.marca,
+    categoria: produto.categoria,
+    tipo: produto.tipo,
+    cor: produto.cor,
+    tamanho: produto.tamanho,
+    unidade: produto.unidade,
+  },
+})
 
     setSalvando(false)
     fecharModalAjuste()
@@ -475,8 +477,8 @@ export default function Estoque() {
                 </td>
 
                 <td style={td}>
-                  {m.estoqueApos} {m.unidade}
-                </td>
+  {m.estoqueApos !== null ? `${m.estoqueApos} ${m.unidade}` : "Não registrado"}
+</td>
 
                 <td style={td}>{m.motivo}</td>
 
