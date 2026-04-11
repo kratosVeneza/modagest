@@ -156,6 +156,12 @@ export default function Vendas() {
   const valorUnitarioBase = produtoSelecionado ? Number(produtoSelecionado.preco) : 0
   const valorUnitario = Number(precoUnitarioEditavel || 0)
 
+  const precoFoiAlterado =
+  produtoSelecionado !== null &&
+  Number(valorUnitarioBase.toFixed(2)) !== Number(valorUnitario.toFixed(2))
+
+const temDesconto = Number(descontoPercentual || 0) > 0
+
   const subtotalVenda = valorUnitario * (quantidadeNumero > 0 ? quantidadeNumero : 0)
 
   const descontoCalculado = useMemo(() => {
@@ -610,31 +616,54 @@ export default function Vendas() {
           </div>
 
           <div style={resumoLinha}>
-            <span className="info-muted">Preço cadastrado</span>
-            <strong>R$ {valorUnitarioBase.toFixed(2)}</strong>
-          </div>
+  <span className="info-muted">Preço cadastrado</span>
+  <strong>R$ {valorUnitarioBase.toFixed(2)}</strong>
+</div>
 
-          <div style={resumoLinha}>
-            <span className="info-muted">Preço unitário usado</span>
-            <strong>R$ {valorUnitario.toFixed(2)}</strong>
-          </div>
+<div style={resumoLinha}>
+  <span className="info-muted" style={tituloComAjuda}>
+    Preço usado na venda
+    <HelpTooltip text="Esse é o valor unitário efetivamente usado nesta venda. Pode ser diferente do preço cadastrado." />
+  </span>
+  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+    <strong>R$ {valorUnitario.toFixed(2)}</strong>
+    {precoFoiAlterado && (
+      <span style={pillInfo}>
+        Preço alterado
+      </span>
+    )}
+  </div>
+</div>
 
-          <div style={resumoLinha}>
-            <span className="info-muted">Quantidade</span>
-            <strong>{quantidadeNumero > 0 ? quantidadeNumero : 0}</strong>
-          </div>
+<div style={resumoLinha}>
+  <span className="info-muted">Quantidade</span>
+  <strong>{quantidadeNumero > 0 ? quantidadeNumero : 0}</strong>
+</div>
 
-          <div style={resumoLinha}>
-            <span className="info-muted">Subtotal</span>
-            <strong>R$ {subtotalVenda.toFixed(2)}</strong>
-          </div>
+<div style={resumoLinha}>
+  <span className="info-muted" style={tituloComAjuda}>
+    Subtotal
+    <HelpTooltip text="Preço unitário usado multiplicado pela quantidade." />
+  </span>
+  <strong>R$ {subtotalVenda.toFixed(2)}</strong>
+</div>
 
-          <div style={resumoLinha}>
-            <span className="info-muted">Desconto</span>
-            <strong>
-              {Number(descontoPercentual || 0).toFixed(2)}% • R$ {descontoCalculado.toFixed(2)}
-            </strong>
-          </div>
+<div style={resumoLinha}>
+  <span className="info-muted" style={tituloComAjuda}>
+    Desconto
+    <HelpTooltip text="Desconto aplicado sobre o subtotal desta venda." />
+  </span>
+  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+    <strong>
+      {Number(descontoPercentual || 0).toFixed(2)}% • R$ {descontoCalculado.toFixed(2)}
+    </strong>
+    {temDesconto && (
+      <span style={pillSuccess}>
+        Cliente economizou R$ {descontoCalculado.toFixed(2)}
+      </span>
+    )}
+  </div>
+</div>
 
           <div style={resumoLinha}>
             <span className="info-muted" style={tituloComAjuda}>
@@ -676,14 +705,24 @@ export default function Vendas() {
           </div>
 
           <div className="summary-box" style={totalBox}>
-            <span style={tituloComAjuda}>
-              Total final da venda
-              <HelpTooltip text="Subtotal menos desconto, considerando o preço unitário usado nesta venda." />
-            </span>
-            <strong style={{ fontSize: "22px" }}>
-              R$ {valorTotal.toFixed(2)}
-            </strong>
-          </div>
+  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <span style={tituloComAjuda}>
+      Total final da venda
+      <HelpTooltip text="Subtotal menos desconto, considerando o preço unitário usado nesta venda." />
+    </span>
+
+    {(precoFoiAlterado || temDesconto) && (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {precoFoiAlterado && <span style={pillInfo}>Preço ajustado</span>}
+        {temDesconto && <span style={pillSuccess}>Desconto aplicado</span>}
+      </div>
+    )}
+  </div>
+
+  <strong style={{ fontSize: "22px" }}>
+    R$ {valorTotal.toFixed(2)}
+  </strong>
+</div>
         </div>
       </div>
     </div>
@@ -763,4 +802,26 @@ const cardProduto = {
 const cardProdutoSelecionado = {
   border: "1px solid #3b82f6",
   background: "#eff6ff",
+}
+
+const pillInfo = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "4px 8px",
+  borderRadius: 999,
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const pillSuccess = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "4px 8px",
+  borderRadius: 999,
+  background: "#ecfdf5",
+  color: "#047857",
+  fontSize: 12,
+  fontWeight: 700,
 }
