@@ -7,7 +7,23 @@ type AddStockQuickParams = {
   quantidade: number
   custo?: number
   motivo?: string
+  origem?: "manual" | "importacao" | "ia" | "venda" | null
+  referenciaId?: number | null
 }
+
+type AddStockQuickResult =
+  | {
+      success: true
+      message: string
+      estoqueAnterior: number
+      estoqueAtual: number
+      custoAnterior: number
+      custoAtualizado: number
+    }
+  | {
+      success: false
+      message: string
+    }
 
 export async function addStockQuick({
   productId,
@@ -15,14 +31,16 @@ export async function addStockQuick({
   quantidade,
   custo,
   motivo,
-}: AddStockQuickParams) {
+  origem = "manual",
+  referenciaId = null,
+}: AddStockQuickParams): Promise<AddStockQuickResult> {
   if (quantidade <= 0) {
     return { success: false, message: "Quantidade inválida." }
   }
 
   const { data: produto, error: erroProduto } = await supabase
     .from("products")
-    .select("id, estoque, custo")
+    .select("id, nome, sku, marca, categoria, tipo, cor, tamanho, unidade, estoque, custo")
     .eq("id", productId)
     .eq("user_id", userId)
     .single()
@@ -31,17 +49,17 @@ export async function addStockQuick({
     return { success: false, message: "Produto não encontrado." }
   }
 
-  const estoqueAtual = Number(produto.estoque || 0)
-  const custoAtual = Number(produto.custo || 0)
+  const estoqueAnterior = Number(produto.estoque || 0)
+  const custoAnterior = Number(produto.custo || 0)
   const quantidadeEntrada = Number(quantidade)
   const custoEntrada = Number(custo || 0)
 
-  const novoEstoque = estoqueAtual + quantidadeEntrada
+  const novoEstoque = estoqueAnterior + quantidadeEntrada
 
-  let novoCusto = custoAtual
+  let novoCusto = custoAnterior
 
-  if (custoEntrada > 0) {
-    const custoTotalAtual = estoqueAtual * custoAtual
+  if (custoEntrada > 0 && novoEstoque > 0) {
+    const custoTotalAtual = estoqueAnterior * custoAnterior
     const custoTotalEntrada = quantidadeEntrada * custoEntrada
     novoCusto = (custoTotalAtual + custoTotalEntrada) / novoEstoque
   }
@@ -69,7 +87,27 @@ export async function addStockQuick({
       (custoEntrada > 0
         ? `Entrada com custo R$ ${custoEntrada.toFixed(2)}`
         : "Entrada rápida de estoque"),
+    origem,
+    referenciaId,
+    estoqueApos: novoEstoque,
+    productSnapshot: {
+      nome: produto.nome,
+      sku: produto.sku,
+      marca: produto.marca,
+      categoria: produto.categoria,
+      tipo: produto.tipo,
+      cor: produto.cor,
+      tamanho: produto.tamanho,
+      unidade: produto.unidade,
+    },
   })
 
-  return { success: true }
+  return {
+    success: true,
+    message: "Estoque adicionado com sucesso.",
+    estoqueAnterior,
+    estoqueAtual: novoEstoque,
+    custoAnterior,
+    custoAtualizado: novoCusto,
+  }
 }

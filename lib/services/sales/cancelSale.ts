@@ -31,7 +31,7 @@ export async function cancelSale(input: CancelSaleInput): Promise<CancelSaleResu
   if (!vendaAtual.estoque_devolvido) {
     const { data: produtoData, error: erroProduto } = await supabase
       .from("products")
-      .select("id, estoque")
+      .select("id, nome, sku, marca, categoria, tipo, cor, tamanho, unidade, estoque")
       .eq("id", vendaAtual.product_id)
       .eq("user_id", userId)
       .maybeSingle()
@@ -52,13 +52,35 @@ export async function cancelSale(input: CancelSaleInput): Promise<CancelSaleResu
       return { success: false, message: "Erro ao devolver o item ao estoque." }
     }
 
-    await registrarMovimentoEstoque({
-      productId: vendaAtual.product_id,
-      userId,
-      tipo: "cancelamento",
-      quantidade: Number(vendaAtual.quantidade),
-      motivo: "Cancelamento de venda",
-    })
+    try {
+      await registrarMovimentoEstoque({
+        productId: vendaAtual.product_id,
+        userId,
+        tipo: "cancelamento",
+        quantidade: Number(vendaAtual.quantidade),
+        motivo: "Cancelamento de venda",
+        origem: "venda",
+        referenciaId: vendaAtual.id,
+        estoqueApos: novoEstoque,
+        productSnapshot: {
+          nome: produtoData.nome,
+          sku: produtoData.sku,
+          marca: produtoData.marca,
+          categoria: produtoData.categoria,
+          tipo: produtoData.tipo,
+          cor: produtoData.cor,
+          tamanho: produtoData.tamanho,
+          unidade: produtoData.unidade,
+        },
+      })
+    } catch (error: any) {
+      return {
+        success: false,
+        message:
+          error?.message ||
+          "Estoque devolvido, mas houve erro ao registrar a movimentação de cancelamento.",
+      }
+    }
   }
 
   const { error: erroVenda } = await supabase
