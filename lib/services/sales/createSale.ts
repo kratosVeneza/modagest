@@ -12,6 +12,9 @@ type CreateSaleInput = {
   valorRecebidoInicial?: number
   formaPagamentoInicial?: string
   observacaoPagamentoInicial?: string | null
+  valorOriginal?: number
+  descontoPercentual?: number
+  descontoValor?: number
 }
 
 type CreateSaleResult =
@@ -30,6 +33,9 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     valorRecebidoInicial = 0,
     formaPagamentoInicial = "Pix",
     observacaoPagamentoInicial = null,
+    valorOriginal = valorTotal,
+    descontoPercentual = 0,
+    descontoValor = 0,
   } = input
 
   const { data: produto, error: produtoError } = await supabase
@@ -49,6 +55,22 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
 
   if (quantidade > Number(produto.estoque)) {
     return { success: false, message: "Estoque insuficiente para essa venda." }
+  }
+
+  if (valorUnitario <= 0) {
+    return { success: false, message: "Valor unitário inválido." }
+  }
+
+  if (valorTotal < 0) {
+    return { success: false, message: "Valor total inválido." }
+  }
+
+  if (descontoPercentual < 0 || descontoPercentual > 100) {
+    return { success: false, message: "O desconto deve estar entre 0% e 100%." }
+  }
+
+  if (descontoValor < 0) {
+    return { success: false, message: "Valor de desconto inválido." }
   }
 
   if (valorRecebidoInicial < 0) {
@@ -71,6 +93,9 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     quantidade,
     valor_unitario: valorUnitario,
     valor_total: valorTotal,
+    valor_original: valorOriginal,
+    desconto_percentual: descontoPercentual,
+    desconto_valor: descontoValor,
     user_id: userId,
     status: "Ativa",
     created_at: dataVendaIso,
@@ -87,7 +112,6 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     return { success: false, message: "Erro ao registrar venda." }
   }
 
-  // 1) Baixar estoque primeiro
   const novoEstoque = Number(produto.estoque) - quantidade
 
   const { error: erroEstoque } = await supabase
@@ -103,7 +127,6 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     }
   }
 
-  // 2) Registrar movimento de estoque logo depois
   try {
     await registrarMovimentoEstoque({
       productId,
@@ -123,7 +146,6 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
 
   let warning = ""
 
-  // 3) Registrar pagamento e financeiro depois
   if (valorRecebidoInicial > 0) {
     const { error: erroPagamento } = await supabase
       .from("sale_payments")
@@ -139,7 +161,8 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
       ])
 
     if (erroPagamento) {
-      warning = "Venda salva e estoque baixado, mas houve erro ao registrar o pagamento inicial."
+      warning =
+        "Venda salva e estoque baixado, mas houve erro ao registrar o pagamento inicial."
       return { success: true, saleId: vendaCriada.id, warning }
     }
 
@@ -151,12 +174,19 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
           type: "entrada",
           amount: valorRecebidoInicial,
           status: "pago",
+          description:
+            descontoPercentual > 0
+              ? `Recebimento inicial de venda com desconto de ${descontoPercentual}%`
+              : "Recebimento inicial de venda",
+          reference_type: "venda",
+          reference_id: vendaCriada.id,
           created_at: dataVendaIso,
         },
       ])
 
     if (erroFinanceiro) {
-      warning = "Venda salva, estoque baixado e pagamento registrado, mas erro ao lançar no financeiro."
+      warning =
+        "Venda salva, estoque baixado e pagamento registrado, mas erro ao lançar no financeiro."
       return { success: true, saleId: vendaCriada.id, warning }
     }
   }

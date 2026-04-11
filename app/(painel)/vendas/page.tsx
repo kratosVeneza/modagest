@@ -52,12 +52,7 @@ function montarDataISO(dataInput: string) {
 }
 
 function montarNomeProduto(produto: Produto) {
-  return [
-    produto.nome,
-    produto.cor,
-    produto.tamanho,
-    produto.sku,
-  ]
+  return [produto.nome, produto.cor, produto.tamanho, produto.sku]
     .filter(Boolean)
     .join(" • ")
 }
@@ -78,6 +73,8 @@ export default function Vendas() {
   const [formaPagamentoInicial, setFormaPagamentoInicial] = useState("Pix")
   const [observacaoPagamentoInicial, setObservacaoPagamentoInicial] = useState("")
   const [buscaProduto, setBuscaProduto] = useState("")
+  const [precoUnitarioEditavel, setPrecoUnitarioEditavel] = useState("")
+  const [descontoPercentual, setDescontoPercentual] = useState("")
 
   useEffect(() => {
     carregarProdutos()
@@ -155,8 +152,22 @@ export default function Vendas() {
   }, [clientes, clienteId])
 
   const quantidadeNumero = Number(quantidade || 0)
-  const valorUnitario = produtoSelecionado ? Number(produtoSelecionado.preco) : 0
-  const valorTotal = valorUnitario * (quantidadeNumero > 0 ? quantidadeNumero : 0)
+
+  const valorUnitarioBase = produtoSelecionado ? Number(produtoSelecionado.preco) : 0
+  const valorUnitario = Number(precoUnitarioEditavel || 0)
+
+  const subtotalVenda = valorUnitario * (quantidadeNumero > 0 ? quantidadeNumero : 0)
+
+  const descontoCalculado = useMemo(() => {
+    const percentual = Number(descontoPercentual || 0)
+
+    if (percentual <= 0) return 0
+    if (percentual > 100) return subtotalVenda
+
+    return subtotalVenda * (percentual / 100)
+  }, [descontoPercentual, subtotalVenda])
+
+  const valorTotal = Math.max(subtotalVenda - descontoCalculado, 0)
   const recebidoInicial = Number(valorRecebidoInicial || 0)
   const saldoRestante = valorTotal - recebidoInicial
 
@@ -164,6 +175,16 @@ export default function Vendas() {
     produtoSelecionado && quantidadeNumero > 0
       ? produtoSelecionado.estoque - quantidadeNumero
       : produtoSelecionado?.estoque ?? 0
+
+  function selecionarProduto(produto: Produto) {
+    setProdutoId(String(produto.id))
+    setPrecoUnitarioEditavel(String(Number(produto.preco).toFixed(2)))
+  }
+
+  function limparProdutoSelecionado() {
+    setProdutoId("")
+    setPrecoUnitarioEditavel("")
+  }
 
   async function registrarVenda() {
     setMensagem("")
@@ -196,6 +217,8 @@ export default function Vendas() {
     }
 
     const qtd = Number(quantidade)
+    const desconto = Number(descontoPercentual || 0)
+    const valorUnitarioFinal = Number(precoUnitarioEditavel || 0)
 
     if (qtd <= 0) {
       setMensagem("Informe uma quantidade válida.")
@@ -207,13 +230,23 @@ export default function Vendas() {
       return
     }
 
+    if (valorUnitarioFinal <= 0) {
+      setMensagem("Informe um preço unitário válido.")
+      return
+    }
+
+    if (desconto < 0 || desconto > 100) {
+      setMensagem("Informe um desconto válido entre 0% e 100%.")
+      return
+    }
+
     if (recebidoInicial < 0) {
       setMensagem("O valor recebido inicial não pode ser negativo.")
       return
     }
 
     if (recebidoInicial > valorTotal) {
-      setMensagem("O valor recebido inicial não pode ser maior que o valor total.")
+      setMensagem("O valor recebido inicial não pode ser maior que o valor total final da venda.")
       return
     }
 
@@ -224,12 +257,15 @@ export default function Vendas() {
       productId: produto.id,
       customerId: clienteId ? Number(clienteId) : null,
       quantidade: qtd,
-      valorUnitario: Number(produto.preco),
-      valorTotal: Number(produto.preco) * qtd,
+      valorUnitario: valorUnitarioFinal,
+      valorTotal,
       dataVendaIso: montarDataISO(dataVenda),
       valorRecebidoInicial: recebidoInicial,
       formaPagamentoInicial,
       observacaoPagamentoInicial: observacaoPagamentoInicial || null,
+      valorOriginal: subtotalVenda,
+      descontoPercentual: desconto,
+      descontoValor: descontoCalculado,
     })
 
     if (!resultado.success) {
@@ -250,6 +286,8 @@ export default function Vendas() {
     setFormaPagamentoInicial("Pix")
     setObservacaoPagamentoInicial("")
     setBuscaProduto("")
+    setPrecoUnitarioEditavel("")
+    setDescontoPercentual("")
     setSalvando(false)
     setMensagem("")
     setMensagemSucesso("Venda cadastrada")
@@ -338,25 +376,81 @@ export default function Vendas() {
               />
             </div>
 
-            <div>
+            <div style={{ gridColumn: "1 / -1" }}>
               <label style={labelAjuda}>
-                Produto
-                <HelpTooltip text="Selecione o produto vendido. Aqui aparecem apenas produtos com estoque disponível." />
+                Seleção de produto
+                <HelpTooltip text="Clique em um produto da lista abaixo. Só aparecem produtos com estoque disponível." />
               </label>
-              <select value={produtoId} onChange={(e) => setProdutoId(e.target.value)}>
-                <option value="">Selecione um produto</option>
-                {produtosFiltrados.map((produto) => (
-                  <option key={produto.id} value={produto.id}>
-                    {montarNomeProduto(produto)} • Estoque: {produto.estoque}
-                  </option>
-                ))}
-              </select>
 
-              {buscaProduto.trim() && produtosFiltrados.length === 0 && (
-                <div style={{ marginTop: 8, fontSize: 12, color: "#991b1b" }}>
-                  Nenhum produto com estoque encontrado para essa busca.
+              {produtoSelecionado && (
+                <div style={produtoSelecionadoBox}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{montarNomeProduto(produtoSelecionado)}</div>
+                    <div style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>
+                      Estoque: {produtoSelecionado.estoque} • Preço cadastrado: R$ {Number(produtoSelecionado.preco).toFixed(2)}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={limparProdutoSelecionado}
+                  >
+                    Trocar
+                  </button>
                 </div>
               )}
+
+              <div style={listaProdutos}>
+                {produtosFiltrados.length === 0 ? (
+                  <div style={listaVazia}>
+                    Nenhum produto com estoque encontrado para essa busca.
+                  </div>
+                ) : (
+                  produtosFiltrados.map((produto) => {
+                    const selecionado = Number(produtoId) === produto.id
+
+                    return (
+                      <button
+                        key={produto.id}
+                        type="button"
+                        onClick={() => selecionarProduto(produto)}
+                        style={{
+                          ...cardProduto,
+                          ...(selecionado ? cardProdutoSelecionado : {}),
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                          <div style={{ textAlign: "left" }}>
+                            <div style={{ fontWeight: 700, color: "#0f172a" }}>
+                              {produto.nome}
+                            </div>
+
+                            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                              {[produto.cor, produto.tamanho, produto.sku].filter(Boolean).join(" • ")}
+                            </div>
+
+                            {(produto.marca || produto.categoria) && (
+                              <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                                {[produto.marca, produto.categoria].filter(Boolean).join(" • ")}
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ textAlign: "right", minWidth: 120 }}>
+                            <div style={{ fontWeight: 700, color: "#0f172a" }}>
+                              R$ {Number(produto.preco).toFixed(2)}
+                            </div>
+                            <div style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>
+                              Estoque: {produto.estoque}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
             </div>
 
             <div>
@@ -384,6 +478,36 @@ export default function Vendas() {
                 placeholder="Quantidade"
                 value={quantidade}
                 onChange={(e) => setQuantidade(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={labelAjuda}>
+                Preço unitário da venda
+                <HelpTooltip text="Você pode manter o preço cadastrado ou editar para um valor diferente nesta venda." />
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Preço unitário"
+                value={precoUnitarioEditavel}
+                onChange={(e) => setPrecoUnitarioEditavel(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={labelAjuda}>
+                Desconto (%)
+                <HelpTooltip text="Desconto aplicado sobre o subtotal da venda." />
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                placeholder="Ex: 10"
+                value={descontoPercentual}
+                onChange={(e) => setDescontoPercentual(e.target.value)}
               />
             </div>
 
@@ -486,13 +610,30 @@ export default function Vendas() {
           </div>
 
           <div style={resumoLinha}>
-            <span className="info-muted">Preço unitário</span>
+            <span className="info-muted">Preço cadastrado</span>
+            <strong>R$ {valorUnitarioBase.toFixed(2)}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Preço unitário usado</span>
             <strong>R$ {valorUnitario.toFixed(2)}</strong>
           </div>
 
           <div style={resumoLinha}>
             <span className="info-muted">Quantidade</span>
             <strong>{quantidadeNumero > 0 ? quantidadeNumero : 0}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Subtotal</span>
+            <strong>R$ {subtotalVenda.toFixed(2)}</strong>
+          </div>
+
+          <div style={resumoLinha}>
+            <span className="info-muted">Desconto</span>
+            <strong>
+              {Number(descontoPercentual || 0).toFixed(2)}% • R$ {descontoCalculado.toFixed(2)}
+            </strong>
           </div>
 
           <div style={resumoLinha}>
@@ -536,8 +677,8 @@ export default function Vendas() {
 
           <div className="summary-box" style={totalBox}>
             <span style={tituloComAjuda}>
-              Total da venda
-              <HelpTooltip text="Valor total calculado com base no preço do produto multiplicado pela quantidade vendida." />
+              Total final da venda
+              <HelpTooltip text="Subtotal menos desconto, considerando o preço unitário usado nesta venda." />
             </span>
             <strong style={{ fontSize: "22px" }}>
               R$ {valorTotal.toFixed(2)}
@@ -577,4 +718,49 @@ const labelAjuda = {
 const tituloComAjuda = {
   display: "inline-flex",
   alignItems: "center",
+}
+
+const produtoSelecionadoBox = {
+  marginBottom: 12,
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap" as const,
+}
+
+const listaProdutos = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 10,
+  maxHeight: 320,
+  overflowY: "auto" as const,
+  paddingRight: 4,
+}
+
+const listaVazia = {
+  padding: "14px 12px",
+  borderRadius: 10,
+  border: "1px dashed #cbd5e1",
+  color: "#64748b",
+  fontSize: 14,
+  background: "#f8fafc",
+}
+
+const cardProduto = {
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  cursor: "pointer",
+}
+
+const cardProdutoSelecionado = {
+  border: "1px solid #3b82f6",
+  background: "#eff6ff",
 }
