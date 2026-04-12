@@ -28,6 +28,7 @@ import {
   BarChart3,
   Bot,
   Upload,
+  ReceiptText,
 } from "lucide-react"
 
 const menuGroups = [
@@ -52,15 +53,16 @@ const menuGroups = [
   ],
 },
   {
-    title: "Gestão",
-    items: [
-      { href: "/clientes", label: "Clientes", icon: Users },
-      { href: "/financeiro", label: "Financeiro", icon: ClipboardList },
-      { href: "/historico-vendas", label: "Histórico de Vendas", icon: ClipboardList },
-      { href: "/loja", label: "Minha Loja", icon: Store },
-      { href: "/meu-plano", label: "Meu Plano", icon: Store },
-    ],
-  },
+  title: "Gestão",
+  items: [
+    { href: "/clientes", label: "Clientes", icon: Users },
+    { href: "/financeiro", label: "Financeiro", icon: ClipboardList },
+    { href: "/historico-vendas", label: "Histórico de Vendas", icon: ClipboardList },
+    { href: "/configuracoes/tributacao", label: "Tributação", icon: ReceiptText },
+    { href: "/loja", label: "Minha Loja", icon: Store },
+    { href: "/meu-plano", label: "Meu Plano TESTE", icon: Store },
+  ],
+},
 ]
 
 export default function PainelLayout({
