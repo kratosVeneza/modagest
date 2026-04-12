@@ -52,6 +52,7 @@ const menuGroups = [
     { href: "/assistente-ia", label: "Assistente IA", icon: Bot },
   ],
 },
+
   {
   title: "Gestão",
   items: [
