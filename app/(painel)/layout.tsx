@@ -60,7 +60,7 @@ const menuGroups = [
     { href: "/historico-vendas", label: "Histórico de Vendas", icon: ClipboardList },
     { href: "/configuracoes/tributacao", label: "Tributação", icon: ReceiptText },
     { href: "/loja", label: "Minha Loja", icon: Store },
-    { href: "/meu-plano", label: "Meu Plano TESTE", icon: Store },
+    { href: "/meu-plano", label: "Meu Plano", icon: Store },
   ],
 },
 ]
