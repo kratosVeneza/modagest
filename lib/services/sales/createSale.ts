@@ -1,5 +1,9 @@
 import { supabase } from "@/lib/supabase"
 import { registrarMovimentoEstoque } from "@/lib/stockMovements"
+import { getStoreSettings } from "@/lib/settings/getStoreSettings"
+import { shouldCalculateTaxesOnSale } from "@/lib/tax/canUseTaxFeatures"
+import { getProductTaxContext } from "@/lib/tax/getProductTaxContext"
+import { calculateTax } from "@/lib/tax/calculateTax"
 
 type CreateSaleInput = {
   userId: string
@@ -40,7 +44,7 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
 
   const { data: produto, error: produtoError } = await supabase
     .from("products")
-    .select("id, estoque, preco, user_id")
+    .select("id, nome, estoque, preco, user_id")
     .eq("id", productId)
     .eq("user_id", userId)
     .maybeSingle()
@@ -87,6 +91,60 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     }
   }
 
+  // =========================
+  // BLOCO NOVO: TRIBUTAÇÃO
+  // =========================
+  const settings = await getStoreSettings(userId)
+  const calcularImposto = shouldCalculateTaxesOnSale(settings)
+
+  let taxPayload = {
+    ncm_snapshot: null as string | null,
+    tax_rule_id: null as number | null,
+    cst_snapshot: null as string | null,
+    cclasstrib_snapshot: null as string | null,
+    cbs_aliquota_aplicada: 0,
+    ibs_aliquota_aplicada: 0,
+    percentual_reducao_aplicado: 0,
+    base_calculo: valorTotal,
+    valor_cbs: 0,
+    valor_ibs: 0,
+    valor_total_impostos: 0,
+  }
+
+  if (calcularImposto) {
+    try {
+      const { product, taxRule } = await getProductTaxContext(productId)
+
+      const tax = calculateTax({
+        valorUnitario,
+        quantidade,
+        product,
+        taxRule,
+      })
+
+      taxPayload = {
+        ncm_snapshot: product.ncm || null,
+        tax_rule_id: taxRule?.id || null,
+        cst_snapshot: tax.cst,
+        cclasstrib_snapshot: tax.cclasstrib,
+        cbs_aliquota_aplicada: tax.cbsAliquotaAplicada,
+        ibs_aliquota_aplicada: tax.ibsAliquotaAplicada,
+        percentual_reducao_aplicado: tax.percentualReducaoAplicado,
+        base_calculo: tax.baseCalculo,
+        valor_cbs: tax.valorCBS,
+        valor_ibs: tax.valorIBS,
+        valor_total_impostos: tax.valorTotalImpostos,
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        message:
+          error?.message ||
+          "Não foi possível calcular os impostos da venda.",
+      }
+    }
+  }
+
   const vendaPayload = {
     product_id: productId,
     customer_id: customerId,
@@ -100,6 +158,9 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     status: "Ativa",
     created_at: dataVendaIso,
     estoque_devolvido: false,
+
+    // CAMPOS NOVOS DE TRIBUTAÇÃO
+    ...taxPayload,
   }
 
   const { data: vendaCriada, error: erroVenda } = await supabase
@@ -134,6 +195,9 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
       tipo: "saida",
       quantidade,
       motivo: "Venda",
+      origem: "venda",
+      referenciaId: Number(vendaCriada.id),
+      estoqueApos: novoEstoque,
     })
   } catch (error: any) {
     return {
