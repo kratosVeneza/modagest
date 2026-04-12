@@ -18,6 +18,9 @@ import { updateSalePayment } from "@/lib/services/sales/updateSalePayment"
 import { deleteSalePayment } from "@/lib/services/sales/deleteSalePayment"
 import { deleteCanceledSale } from "@/lib/services/sales/deleteCanceledSale"
 import { applySaleDiscount } from "@/lib/services/sales/applySalesDiscount"
+import { getStoreSettings } from "@/lib/settings/getStoreSettings"
+import { canUseTaxFeatures } from "@/lib/tax/canUseTaxFeatures"
+import type { StoreSettings } from "@/lib/settings/types"
 import {
   getSalesHistory,
   type PagamentoBanco,
@@ -96,6 +99,9 @@ export default function HistoricoVendas() {
   const [descontoVendaPercentual, setDescontoVendaPercentual] = useState("")
   const [salvandoDesconto, setSalvandoDesconto] = useState(false)
 
+  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null)
+  const [mostrarTributacao, setMostrarTributacao] = useState(false)
+
   useEffect(() => {
     validarAcesso()
   }, [])
@@ -124,7 +130,11 @@ export default function HistoricoVendas() {
       return
     }
 
-    const resultado = await getSalesHistory(user.id)
+    const settings = await getStoreSettings(user.id)
+setStoreSettings(settings)
+setMostrarTributacao(canUseTaxFeatures(settings))
+
+const resultado = await getSalesHistory(user.id)
 
     if (!resultado.success) {
       setMensagem(resultado.message)
@@ -545,6 +555,24 @@ const passouFiltroStatus =
       .reduce((soma, venda) => soma + Number(venda.desconto_valor || 0), 0)
   }, [vendasFiltradas])
 
+  const totalCBSFiltrado = useMemo(() => {
+  return vendasFiltradas
+    .filter((venda) => venda.status !== "Cancelada")
+    .reduce((soma, venda) => soma + Number((venda as any).valor_cbs || 0), 0)
+}, [vendasFiltradas])
+
+const totalIBSFiltrado = useMemo(() => {
+  return vendasFiltradas
+    .filter((venda) => venda.status !== "Cancelada")
+    .reduce((soma, venda) => soma + Number((venda as any).valor_ibs || 0), 0)
+}, [vendasFiltradas])
+
+const totalImpostosFiltrado = useMemo(() => {
+  return vendasFiltradas
+    .filter((venda) => venda.status !== "Cancelada")
+    .reduce((soma, venda) => soma + Number((venda as any).valor_total_impostos || 0), 0)
+}, [vendasFiltradas])
+
   const descontoCalculado = useMemo(() => {
     if (!vendaSelecionada) return 0
 
@@ -612,42 +640,50 @@ const passouFiltroStatus =
     }
 
     const cabecalho = [
-      "Cliente",
-      "Produto",
-      "Cor",
-      "Tamanho",
-      "SKU",
-      "Quantidade",
-      "Valor Unitario",
-      "Valor Original",
-      "Desconto %",
-      "Desconto Valor",
-      "Valor Total",
-      "Recebido",
-      "Em Aberto",
-      "Situação Pagamento",
-      "Status Venda",
-      "Data",
-    ]
+  "Cliente",
+  "Produto",
+  "Cor",
+  "Tamanho",
+  "SKU",
+  "Quantidade",
+  "Valor Unitario",
+  "Valor Original",
+  "Desconto %",
+  "Desconto Valor",
+  "Valor Total",
+  "Recebido",
+  "Em Aberto",
+  "Situação Pagamento",
+  "Status Venda",
+  ...(mostrarTributacao ? ["CBS", "IBS", "Total Impostos"] : []),
+  "Data",
+]
 
     const linhas = vendasFiltradas.map((venda) => [
-      venda.nomeCliente,
-      venda.nomeProduto,
-      venda.corProduto,
-      venda.tamanhoProduto,
-      venda.skuProduto,
-      String(venda.quantidade),
-      venda.valor_unitario.toFixed(2),
-      venda.valor_original.toFixed(2),
-      venda.desconto_percentual.toFixed(2),
-      venda.desconto_valor.toFixed(2),
-      venda.valor_total.toFixed(2),
-      venda.valor_recebido.toFixed(2),
-      venda.valor_em_aberto.toFixed(2),
-      venda.payment_status,
-      venda.status,
-      formatarData(venda.created_at),
-    ])
+  venda.nomeCliente,
+  venda.nomeProduto,
+  venda.corProduto,
+  venda.tamanhoProduto,
+  venda.skuProduto,
+  String(venda.quantidade),
+  venda.valor_unitario.toFixed(2),
+  venda.valor_original.toFixed(2),
+  venda.desconto_percentual.toFixed(2),
+  venda.desconto_valor.toFixed(2),
+  venda.valor_total.toFixed(2),
+  venda.valor_recebido.toFixed(2),
+  venda.valor_em_aberto.toFixed(2),
+  venda.payment_status,
+  venda.status,
+  ...(mostrarTributacao
+    ? [
+        Number((venda as any).valor_cbs || 0).toFixed(2),
+        Number((venda as any).valor_ibs || 0).toFixed(2),
+        Number((venda as any).valor_total_impostos || 0).toFixed(2),
+      ]
+    : []),
+  formatarData(venda.created_at),
+])
 
     const conteudo = [cabecalho, ...linhas]
       .map((linha) =>
@@ -690,42 +726,56 @@ const passouFiltroStatus =
     doc.text(`Total em aberto: R$ ${totalEmAbertoFiltrado.toFixed(2)}`, 14, startY + 12)
     doc.text(`Total de descontos: R$ ${totalDescontoFiltrado.toFixed(2)}`, 14, startY + 18)
 
+    if (mostrarTributacao) {
+  doc.text(`Total CBS: R$ ${totalCBSFiltrado.toFixed(2)}`, 110, startY)
+  doc.text(`Total IBS: R$ ${totalIBSFiltrado.toFixed(2)}`, 110, startY + 6)
+  doc.text(`Total impostos: R$ ${totalImpostosFiltrado.toFixed(2)}`, 110, startY + 12)
+}
+
     autoTable(doc, {
       startY: startY + 26,
-      head: [[
-        "Cliente",
-        "Produto",
-        "Cor",
-        "Tam.",
-        "SKU",
-        "Qtd.",
-        "Original",
-        "Desc.",
-        "Total",
-        "Recebido",
-        "Em Aberto",
-        "Situação",
-        "Status",
-        "Data",
-      ]],
+     head: [[
+  "Cliente",
+  "Produto",
+  "Cor",
+  "Tam.",
+  "SKU",
+  "Qtd.",
+  "Original",
+  "Desc.",
+  "Total",
+  "Recebido",
+  "Em Aberto",
+  ...(mostrarTributacao ? ["CBS", "IBS", "Imp."] : []),
+  "Situação",
+  "Status",
+  "Data",
+]],
       body: vendasFiltradas.map((venda) => [
-        venda.nomeCliente,
-        venda.nomeProduto,
-        venda.corProduto,
-        venda.tamanhoProduto,
-        venda.skuProduto,
-        String(venda.quantidade),
-        `R$ ${venda.valor_original.toFixed(2)}`,
-        venda.desconto_percentual > 0
-          ? `${venda.desconto_percentual.toFixed(2)}% / R$ ${venda.desconto_valor.toFixed(2)}`
-          : "-",
-        `R$ ${venda.valor_total.toFixed(2)}`,
-        `R$ ${venda.valor_recebido.toFixed(2)}`,
-        `R$ ${venda.valor_em_aberto.toFixed(2)}`,
-        venda.payment_status,
-        venda.status,
-        formatarData(venda.created_at),
-      ]),
+  venda.nomeCliente,
+  venda.nomeProduto,
+  venda.corProduto,
+  venda.tamanhoProduto,
+  venda.skuProduto,
+  String(venda.quantidade),
+  `R$ ${venda.valor_original.toFixed(2)}`,
+  venda.desconto_percentual > 0
+    ? `${venda.desconto_percentual.toFixed(2)}% / R$ ${venda.desconto_valor.toFixed(2)}`
+    : "-",
+  `R$ ${venda.valor_total.toFixed(2)}`,
+  `R$ ${venda.valor_recebido.toFixed(2)}`,
+  `R$ ${venda.valor_em_aberto.toFixed(2)}`,
+  ...(mostrarTributacao
+    ? [
+        `R$ ${Number((venda as any).valor_cbs || 0).toFixed(2)}`,
+        `R$ ${Number((venda as any).valor_ibs || 0).toFixed(2)}`,
+        `R$ ${Number((venda as any).valor_total_impostos || 0).toFixed(2)}`,
+      ]
+    : []),
+  venda.payment_status,
+  venda.status,
+  formatarData(venda.created_at),
+]),
       styles: {
         fontSize: 8.5,
       },
@@ -855,6 +905,34 @@ const passouFiltroStatus =
           </span>{" "}
           <strong>R$ {totalDescontoFiltrado.toFixed(2)}</strong>
         </span>
+
+        {mostrarTributacao && (
+  <>
+    <span style={totalResumo}>
+      <span style={tituloComAjuda}>
+        CBS
+        <HelpTooltip text="Soma do CBS das vendas ativas mostradas na tela." />
+      </span>{" "}
+      <strong>R$ {totalCBSFiltrado.toFixed(2)}</strong>
+    </span>
+
+    <span style={totalResumo}>
+      <span style={tituloComAjuda}>
+        IBS
+        <HelpTooltip text="Soma do IBS das vendas ativas mostradas na tela." />
+      </span>{" "}
+      <strong>R$ {totalIBSFiltrado.toFixed(2)}</strong>
+    </span>
+
+    <span style={totalResumo}>
+      <span style={tituloComAjuda}>
+        Impostos
+        <HelpTooltip text="Soma total dos impostos calculados nas vendas." />
+      </span>{" "}
+      <strong>R$ {totalImpostosFiltrado.toFixed(2)}</strong>
+    </span>
+  </>
+)}
       </div>
 
       <div className="data-table-wrap">
@@ -900,6 +978,31 @@ const passouFiltroStatus =
                   <HelpTooltip text="Indica se a venda está ativa ou cancelada." />
                 </span>
               </th>
+
+              {mostrarTributacao && (
+  <>
+    <th style={th}>
+      <span style={tituloComAjuda}>
+        CBS
+        <HelpTooltip text="Valor de CBS calculado nesta venda." />
+      </span>
+    </th>
+
+    <th style={th}>
+      <span style={tituloComAjuda}>
+        IBS
+        <HelpTooltip text="Valor de IBS calculado nesta venda." />
+      </span>
+    </th>
+
+    <th style={th}>
+      <span style={tituloComAjuda}>
+        Impostos
+        <HelpTooltip text="Total de impostos calculados nesta venda." />
+      </span>
+    </th>
+  </>
+)}
               <th style={th}>
                 <span style={tituloComAjuda}>
                   Data
@@ -963,18 +1066,32 @@ const passouFiltroStatus =
                 </td>
 
                 <td style={td}>
-                  <span
-                    className={
-                      venda.status === "Cancelada"
-                        ? "status-pill status-red"
-                        : "status-pill status-green"
-                    }
-                  >
-                    {venda.status}
-                  </span>
-                </td>
+  <span
+    className={
+      venda.status === "Cancelada"
+        ? "status-pill status-red"
+        : "status-pill status-green"
+    }
+  >
+    {venda.status}
+  </span>
+</td>
 
-                <td style={td}>{formatarData(venda.created_at)}</td>
+{mostrarTributacao && (
+  <>
+    <td style={td}>
+      R$ {Number((venda as any).valor_cbs || 0).toFixed(2)}
+    </td>
+    <td style={td}>
+      R$ {Number((venda as any).valor_ibs || 0).toFixed(2)}
+    </td>
+    <td style={td}>
+      R$ {Number((venda as any).valor_total_impostos || 0).toFixed(2)}
+    </td>
+  </>
+)}
+
+<td style={td}>{formatarData(venda.created_at)}</td>
 
                 <td style={td}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1080,7 +1197,7 @@ const passouFiltroStatus =
 
             {vendasFiltradas.length === 0 && (
               <tr>
-                <td style={tdVazio} colSpan={11}>
+                <td style={tdVazio} colSpan={mostrarTributacao ? 14 : 11}>
                   Nenhuma venda encontrada.
                 </td>
               </tr>

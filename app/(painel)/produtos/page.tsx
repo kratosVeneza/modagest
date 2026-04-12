@@ -7,6 +7,10 @@ import TableSkeleton from "../../components/TableSkeleton"
 import HelpTooltip from "../../components/HelpTooltip"
 import HelpBanner from "../../components/InfoBanner"
 import { addStockQuick } from "@/lib/services/products/addStockQuick"
+import { getStoreSettings } from "@/lib/settings/getStoreSettings"
+import { canUseTaxFeatures, shouldRequireFiscalFields } from "@/lib/tax/canUseTaxFeatures"
+import { getTaxRules, type TaxRule } from "@/lib/tax/getTaxRules"
+import type { StoreSettings } from "@/lib/settings/types"
 
 type Produto = {
   id: number
@@ -23,6 +27,15 @@ type Produto = {
   custo: number
   preco: number
   user_id: string
+
+  ncm?: string | null
+  cest?: string | null
+  origem?: string | null
+  categoria_fiscal?: string | null
+  tax_rule_id?: number | null
+  usa_imposto_manual?: boolean
+  cbs_aliquota_manual?: number | null
+  ibs_aliquota_manual?: number | null
 }
 
 type ErrosFormulario = {
@@ -63,6 +76,18 @@ export default function Produtos() {
   const [mensagem, setMensagem] = useState("")
   const [carregando, setCarregando] = useState(true)
   const [erros, setErros] = useState<ErrosFormulario>({})
+  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null)
+const [mostrarTributacao, setMostrarTributacao] = useState(false)
+const [taxRules, setTaxRules] = useState<TaxRule[]>([])
+
+const [ncm, setNcm] = useState("")
+const [cest, setCest] = useState("")
+const [origem, setOrigem] = useState("")
+const [categoriaFiscal, setCategoriaFiscal] = useState("")
+const [taxRuleId, setTaxRuleId] = useState("")
+const [usaImpostoManual, setUsaImpostoManual] = useState(false)
+const [cbsAliquotaManual, setCbsAliquotaManual] = useState("")
+const [ibsAliquotaManual, setIbsAliquotaManual] = useState("")
   // 🔥 ENTRADA RÁPIDA
 const [modalEntradaAberto, setModalEntradaAberto] = useState(false)
 const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null)
@@ -72,8 +97,39 @@ const [salvandoEntrada, setSalvandoEntrada] = useState(false)
 
 
   useEffect(() => {
-    carregarProdutos()
-  }, [])
+  carregarDadosIniciais()
+}, [])
+
+async function carregarDadosIniciais() {
+  setCarregando(true)
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    setCarregando(false)
+    return
+  }
+
+  const settings = await getStoreSettings(user.id)
+  setStoreSettings(settings)
+  setMostrarTributacao(canUseTaxFeatures(settings))
+
+  if (canUseTaxFeatures(settings)) {
+    try {
+      const rules = await getTaxRules()
+      setTaxRules(rules)
+    } catch {
+      setTaxRules([])
+    }
+  } else {
+    setTaxRules([])
+  }
+
+  await carregarProdutos()
+}
 
   async function carregarProdutos() {
     setCarregando(true)
@@ -133,6 +189,14 @@ const [salvandoEntrada, setSalvandoEntrada] = useState(false)
   setPreco("")
   setIdEmEdicao(null)
   setErros({})
+  setNcm("")
+setCest("")
+setOrigem("")
+setCategoriaFiscal("")
+setTaxRuleId("")
+setUsaImpostoManual(false)
+setCbsAliquotaManual("")
+setIbsAliquotaManual("")
 } 
 
   function abrirNovoModal() {
@@ -160,6 +224,29 @@ const [salvandoEntrada, setSalvandoEntrada] = useState(false)
   if (preco && custo && Number(preco) < Number(custo)) {
     novosErros.preco = "O preço de venda não deve ser menor que o custo."
   }
+
+  if (storeSettings && shouldRequireFiscalFields(storeSettings)) {
+  if (!ncm.trim()) {
+    novosErros.nome = novosErros.nome || ""
+    setMensagem("Informe o NCM do produto.")
+    setErros(novosErros)
+    return false
+  }
+
+  if (!usaImpostoManual && !taxRuleId) {
+    setMensagem("Selecione uma regra tributária para o produto.")
+    setErros(novosErros)
+    return false
+  }
+
+  if (usaImpostoManual) {
+    if (cbsAliquotaManual === "" || ibsAliquotaManual === "") {
+      setMensagem("Informe as alíquotas manuais do produto.")
+      setErros(novosErros)
+      return false
+    }
+  }
+}
 
   setErros(novosErros)
 
@@ -189,18 +276,36 @@ const [salvandoEntrada, setSalvandoEntrada] = useState(false)
 }
 
     const payload = {
-      nome,
-      marca: marca || null,
-      categoria,
-      tipo,
-      unidade,
-      cor: cor || null,
-      tamanho: tamanho || null,
-      estoque: Number(estoque),
-      estoque_minimo: Number(estoqueMinimo || 0),
-      custo: Number(custo),
-      preco: Number(preco),
-    }
+  nome,
+  marca: marca || null,
+  categoria,
+  tipo,
+  unidade,
+  cor: cor || null,
+  tamanho: tamanho || null,
+  estoque: Number(estoque),
+  estoque_minimo: Number(estoqueMinimo || 0),
+  custo: Number(custo),
+  preco: Number(preco),
+
+  ncm: mostrarTributacao ? ncm || null : null,
+  cest: mostrarTributacao ? cest || null : null,
+  origem: mostrarTributacao ? origem || null : null,
+  categoria_fiscal: mostrarTributacao ? categoriaFiscal || null : null,
+  tax_rule_id:
+    mostrarTributacao && !usaImpostoManual && taxRuleId
+      ? Number(taxRuleId)
+      : null,
+  usa_imposto_manual: mostrarTributacao ? usaImpostoManual : false,
+  cbs_aliquota_manual:
+    mostrarTributacao && usaImpostoManual
+      ? Number(cbsAliquotaManual || 0)
+      : null,
+  ibs_aliquota_manual:
+    mostrarTributacao && usaImpostoManual
+      ? Number(ibsAliquotaManual || 0)
+      : null,
+}
 
     if (idEmEdicao) {
       const { error } = await supabase
@@ -251,6 +356,22 @@ const [salvandoEntrada, setSalvandoEntrada] = useState(false)
     setEstoqueMinimo(String(produto.estoque_minimo ?? 0))
     setCusto(String(produto.custo ?? 0))
     setPreco(String(produto.preco))
+    setNcm(produto.ncm || "")
+setCest(produto.cest || "")
+setOrigem(produto.origem || "")
+setCategoriaFiscal(produto.categoria_fiscal || "")
+setTaxRuleId(produto.tax_rule_id ? String(produto.tax_rule_id) : "")
+setUsaImpostoManual(Boolean(produto.usa_imposto_manual))
+setCbsAliquotaManual(
+  produto.cbs_aliquota_manual !== null && produto.cbs_aliquota_manual !== undefined
+    ? String(produto.cbs_aliquota_manual)
+    : ""
+)
+setIbsAliquotaManual(
+  produto.ibs_aliquota_manual !== null && produto.ibs_aliquota_manual !== undefined
+    ? String(produto.ibs_aliquota_manual)
+    : ""
+)
     setModalAberto(true)
   }
 
@@ -462,6 +583,9 @@ async function salvarEntradaRapida() {
                   Markup
                   <HelpTooltip text="Percentual do lucro em relação ao custo do produto." />
                 </span>
+
+                {mostrarTributacao && <th style={th}>Tributação</th>}
+
               </th>
               <th style={th}>Ações</th>
             </tr>
@@ -469,7 +593,7 @@ async function salvarEntradaRapida() {
 
           <tbody>
             {carregando ? (
-              <TableSkeleton rows={6} cols={15} />
+              <TableSkeleton rows={6} cols={mostrarTributacao ? 16 : 15} />
             ) : produtosFiltrados.length > 0 ? (
               produtosFiltrados.map((p) => {
                 const preco = Number(p.preco)
@@ -483,6 +607,15 @@ async function salvarEntradaRapida() {
                 return (
                   <tr key={p.id}>
                     <td style={td}>{p.sku}</td>
+                    {mostrarTributacao && (
+  <td style={td}>
+    {p.usa_imposto_manual
+      ? "Manual"
+      : p.tax_rule_id
+      ? "Configurada"
+      : "Pendente"}
+  </td>
+)}
                     <td style={td}>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                         <strong>{p.nome}</strong>
@@ -544,7 +677,7 @@ async function salvarEntradaRapida() {
               })
             ) : (
               <tr>
-                <td style={tdVazio} colSpan={15}>
+                <td style={tdVazio} colSpan={mostrarTributacao ? 16 : 15}>
                   Nenhum produto encontrado.
                 </td>
               </tr>
@@ -759,6 +892,141 @@ async function salvarEntradaRapida() {
 </div>
           </div>
 
+          {mostrarTributacao && (
+  <div
+    style={{
+      marginTop: 18,
+      padding: "14px",
+      borderRadius: "14px",
+      border: "1px solid #e5e7eb",
+      background: "#f8fafc",
+    }}
+  >
+    <div
+      style={{
+        marginBottom: 10,
+        fontSize: 14,
+        fontWeight: 700,
+      }}
+    >
+      Tributação do produto
+    </div>
+
+    <div className="grid-2">
+      <div>
+        <label style={labelAjuda}>
+          NCM
+          <HelpTooltip text="Classificação fiscal do produto para cálculo tributário." />
+        </label>
+        <input
+          placeholder="Ex: 6109.10.00"
+          value={ncm}
+          onChange={(e) => setNcm(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label style={labelAjuda}>
+          CEST
+          <HelpTooltip text="Código CEST, quando aplicável ao produto." />
+        </label>
+        <input
+          placeholder="Opcional"
+          value={cest}
+          onChange={(e) => setCest(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label style={labelAjuda}>
+          Origem
+          <HelpTooltip text="Origem do produto, se quiser controlar essa informação." />
+        </label>
+        <input
+          placeholder="Ex: nacional"
+          value={origem}
+          onChange={(e) => setOrigem(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label style={labelAjuda}>
+          Categoria fiscal
+          <HelpTooltip text="Categoria fiscal usada para organização tributária." />
+        </label>
+        <input
+          placeholder="Ex: vestuário"
+          value={categoriaFiscal}
+          onChange={(e) => setCategoriaFiscal(e.target.value)}
+        />
+      </div>
+
+      <div style={{ gridColumn: "1 / -1" }}>
+        <label style={labelAjuda}>
+          Regra tributária
+          <HelpTooltip text="Selecione a regra de CBS/IBS para este produto." />
+        </label>
+        <select
+          value={taxRuleId}
+          onChange={(e) => setTaxRuleId(e.target.value)}
+          disabled={usaImpostoManual}
+        >
+          <option value="">Selecione uma regra</option>
+          {taxRules.map((rule) => (
+            <option key={rule.id} value={rule.id}>
+              {rule.nome}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+
+    <div style={{ marginTop: 14 }}>
+      <label style={labelAjuda}>
+        <input
+          type="checkbox"
+          checked={usaImpostoManual}
+          onChange={(e) => setUsaImpostoManual(e.target.checked)}
+          style={{ marginRight: 10 }}
+        />
+        Usar imposto manual neste produto
+      </label>
+    </div>
+
+    {usaImpostoManual && (
+      <div className="grid-2" style={{ marginTop: 14 }}>
+        <div>
+          <label style={labelAjuda}>
+            CBS manual (%)
+            <HelpTooltip text="Alíquota manual de CBS para este produto." />
+          </label>
+          <input
+            type="number"
+            step="0.0001"
+            placeholder="Ex: 0.9"
+            value={cbsAliquotaManual}
+            onChange={(e) => setCbsAliquotaManual(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label style={labelAjuda}>
+            IBS manual (%)
+            <HelpTooltip text="Alíquota manual de IBS para este produto." />
+          </label>
+          <input
+            type="number"
+            step="0.0001"
+            placeholder="Ex: 0.1"
+            value={ibsAliquotaManual}
+            onChange={(e) => setIbsAliquotaManual(e.target.value)}
+          />
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
           <div
             style={{
               marginTop: 18,
@@ -775,6 +1043,7 @@ async function salvarEntradaRapida() {
                 fontWeight: 700,
               }}
             >
+              
               Prévia da precificação
             </div>
 
