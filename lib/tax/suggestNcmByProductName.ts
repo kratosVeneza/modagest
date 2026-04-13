@@ -6,6 +6,12 @@ export type NcmSuggestion = {
   score: number
 }
 
+type SuggestNcmInput = {
+  nome: string
+  categoria?: string
+  tipo?: string
+}
+
 function normalizeText(value: string) {
   return value
     .toLowerCase()
@@ -33,19 +39,73 @@ const stopWords = new Set([
 ])
 
 const synonymMap: Record<string, string[]> = {
-  camiseta: ["camiseta", "camisa", "tshirt", "blusa"],
-  conjunto: ["conjunto", "kit roupa", "vestuario"],
-  meia: ["meia", "meia esportiva"],
+  camiseta: ["camiseta", "camisa", "tshirt", "blusa", "t shirt"],
+  conjunto: ["conjunto", "kit roupa", "vestuario", "conjunto feminino", "conjunto masculino"],
+  meia: ["meia", "meia esportiva", "meiao"],
   tenis: ["tenis", "calcado", "sapato esportivo"],
   short: ["short", "bermuda", "calcao"],
+  top: ["top", "top fitness", "blusa"],
+  legging: ["legging", "calca", "calca esportiva"],
   fitness: ["fitness", "esportivo", "academia"],
+  corrida: ["corrida", "running", "esportivo"],
   dry: ["dry fit", "fibra sintetica", "tecido sintetico"],
-  chave: ["chave", "ferramenta manual", "ferramenta"],
-  fenda: ["fenda", "chave de fenda", "parafuso", "aparafusar"],
-  martelo: ["martelo", "ferramenta manual"],
+  chave: ["chave", "ferramenta", "ferramenta manual"],
+  fenda: ["fenda", "chave de fenda", "aparafusar", "parafuso"],
+  phillips: ["phillips", "estrela", "parafuso"],
   alicate: ["alicate", "ferramenta manual"],
-  gel: ["gel", "suplemento", "energetico"],
+  martelo: ["martelo", "ferramenta manual"],
+  ferramenta: ["ferramenta", "utensilio manual", "metal"],
+  gel: ["gel", "suplemento", "energetico", "carboidrato"],
+  squeeze: ["squeeze", "garrafa", "recipiente"],
   garrafa: ["garrafa", "squeeze", "recipiente"],
+  relogio: ["relogio", "smartwatch", "cronometro"],
+  oculos: ["oculos", "acessorio esportivo"],
+}
+
+const categoryTermsMap: Record<string, string[]> = {
+  roupas: [
+    "vestuario",
+    "roupa",
+    "camiseta",
+    "blusa",
+    "calca",
+    "short",
+    "top",
+    "legging",
+    "conjunto",
+    "malha",
+    "fibras texteis",
+  ],
+  calcados: [
+    "calcado",
+    "tenis",
+    "sapato",
+    "esportivo",
+  ],
+  acessorios: [
+    "acessorio",
+    "meia",
+    "oculos",
+    "relogio",
+    "garrafa",
+    "squeeze",
+    "bolsa",
+    "pochete",
+  ],
+  suplementos: [
+    "suplemento",
+    "gel",
+    "energetico",
+    "carboidrato",
+    "nutricao",
+  ],
+  equipamentos: [
+    "equipamento",
+    "ferramenta",
+    "utensilio",
+    "metal",
+    "manual",
+  ],
 }
 
 function tokenize(value: string) {
@@ -54,21 +114,33 @@ function tokenize(value: string) {
     .filter((word) => word && !stopWords.has(word))
 }
 
-function expandTerms(productName: string) {
-  const words = tokenize(productName)
-  const expanded = new Set<string>(words)
+function expandTerms(nome: string, categoria?: string, tipo?: string) {
+  const baseWords = [
+    ...tokenize(nome),
+    ...tokenize(categoria || ""),
+    ...tokenize(tipo || ""),
+  ]
 
-  for (const word of words) {
+  const expanded = new Set<string>(baseWords)
+
+  for (const word of baseWords) {
     const synonyms = synonymMap[word]
     if (synonyms) {
-      for (const item of synonyms) {
-        const normalized = normalizeText(item)
-        if (normalized) expanded.add(normalized)
+      for (const synonym of synonyms) {
+        expanded.add(normalizeText(synonym))
       }
     }
   }
 
-  return Array.from(expanded)
+  const categoriaNormalizada = normalizeText(categoria || "")
+  const categoryTerms = categoryTermsMap[categoriaNormalizada]
+  if (categoryTerms) {
+    for (const term of categoryTerms) {
+      expanded.add(normalizeText(term))
+    }
+  }
+
+  return Array.from(expanded).filter(Boolean)
 }
 
 function isFinalNcmCode(codigo: string) {
@@ -77,53 +149,102 @@ function isFinalNcmCode(codigo: string) {
 }
 
 function scoreSuggestion(
-  nomeOriginal: string,
-  termosExpandidos: string[],
+  input: SuggestNcmInput,
+  termos: string[],
   codigo: string,
   descricao: string
 ) {
-  const original = normalizeText(nomeOriginal)
+  const nomeNormalizado = normalizeText(input.nome)
+  const tipoNormalizado = normalizeText(input.tipo || "")
+  const categoriaNormalizada = normalizeText(input.categoria || "")
   const desc = normalizeText(descricao)
 
   let score = 0
 
   if (isFinalNcmCode(codigo)) score += 20
 
-  if (desc.includes(original) && original.length >= 4) {
-    score += 50
+  if (nomeNormalizado && desc.includes(nomeNormalizado)) {
+    score += 60
   }
 
-  const originalTokens = tokenize(nomeOriginal)
+  const nomeTokens = tokenize(input.nome)
+  for (const token of nomeTokens) {
+    if (desc.includes(token)) score += 15
+  }
 
-  for (const token of originalTokens) {
-    if (desc.includes(token)) {
-      score += 15
+  if (tipoNormalizado && desc.includes(tipoNormalizado)) {
+    score += 20
+  }
+
+  for (const termo of termos) {
+    if (desc.includes(termo)) score += 4
+  }
+
+  if (categoriaNormalizada === "roupas") {
+    if (
+      desc.includes("vestuario") ||
+      desc.includes("malha") ||
+      desc.includes("camiseta") ||
+      desc.includes("fibras texteis")
+    ) {
+      score += 20
     }
   }
 
-  for (const termo of termosExpandidos) {
-    if (desc.includes(termo)) {
-      score += 4
+  if (categoriaNormalizada === "calcados") {
+    if (desc.includes("calcado") || desc.includes("tenis") || desc.includes("sapato")) {
+      score += 20
     }
   }
 
-  if (desc.startsWith(original)) {
-    score += 15
+  if (categoriaNormalizada === "acessorios") {
+    if (
+      desc.includes("acessorio") ||
+      desc.includes("meia") ||
+      desc.includes("oculos") ||
+      desc.includes("relogio")
+    ) {
+      score += 20
+    }
   }
 
-  if (originalTokens.length === 1 && originalTokens[0].length <= 3) {
-    score -= 10
+  if (categoriaNormalizada === "suplementos") {
+    if (
+      desc.includes("suplemento") ||
+      desc.includes("energetico") ||
+      desc.includes("carboidrato")
+    ) {
+      score += 20
+    }
+  }
+
+  if (categoriaNormalizada === "equipamentos") {
+    if (
+      desc.includes("ferramenta") ||
+      desc.includes("manual") ||
+      desc.includes("metal")
+    ) {
+      score += 20
+    }
+  }
+
+  if (desc.startsWith(nomeNormalizado)) {
+    score += 10
   }
 
   return score
 }
 
-export async function suggestNcmByProductName(nome: string) {
-  const nomeNormalizado = normalizeText(nome)
+export async function suggestNcmByProductName(input: {
+  nome: string
+  categoria?: string
+  tipo?: string
+}) {
+  const nomeNormalizado = normalizeText(input.nome)
 
   if (!nomeNormalizado || nomeNormalizado.length < 3) return []
 
-  const termos = expandTerms(nome)
+  const termos = expandTerms(input.nome, input.categoria, input.tipo)
 
   const orQuery = termos
     .map((termo) => `descricao.ilike.%${termo}%`)
@@ -133,7 +254,7 @@ export async function suggestNcmByProductName(nome: string) {
     .from("ncm_catalog")
     .select("codigo, descricao")
     .or(orQuery)
-    .limit(120)
+    .limit(150)
 
   if (error) {
     throw new Error("Não foi possível buscar sugestões de NCM.")
@@ -143,11 +264,10 @@ export async function suggestNcmByProductName(nome: string) {
     .map((item) => ({
       codigo: item.codigo,
       descricao: item.descricao,
-      score: scoreSuggestion(nome, termos, item.codigo, item.descricao),
+      score: scoreSuggestion(input, termos, item.codigo, item.descricao),
     }))
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 10)
 
   const finais = ranked.filter((item) => isFinalNcmCode(item.codigo))
 
