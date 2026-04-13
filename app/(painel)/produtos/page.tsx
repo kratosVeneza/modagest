@@ -10,6 +10,7 @@ import { addStockQuick } from "@/lib/services/products/addStockQuick"
 import { getStoreSettings } from "@/lib/settings/getStoreSettings"
 import { canUseTaxFeatures, shouldRequireFiscalFields } from "@/lib/tax/canUseTaxFeatures"
 import { getTaxRules, type TaxRule } from "@/lib/tax/getTaxRules"
+import { suggestNcmByProductName } from "@/lib/tax/suggestNcmByProductName"
 import type { StoreSettings } from "@/lib/settings/types"
 
 type Produto = {
@@ -88,6 +89,11 @@ const [taxRuleId, setTaxRuleId] = useState("")
 const [usaImpostoManual, setUsaImpostoManual] = useState(false)
 const [cbsAliquotaManual, setCbsAliquotaManual] = useState("")
 const [ibsAliquotaManual, setIbsAliquotaManual] = useState("")
+
+const [sugestoesNcm, setSugestoesNcm] = useState<
+  { codigo: string; descricao: string; score: number }[]
+>([])
+const [buscandoNcm, setBuscandoNcm] = useState(false)
   // 🔥 ENTRADA RÁPIDA
 const [modalEntradaAberto, setModalEntradaAberto] = useState(false)
 const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null)
@@ -197,6 +203,7 @@ setTaxRuleId("")
 setUsaImpostoManual(false)
 setCbsAliquotaManual("")
 setIbsAliquotaManual("")
+setSugestoesNcm([])
 } 
 
   function abrirNovoModal() {
@@ -444,11 +451,43 @@ const unidadesSugestao = useMemo(() => {
 }, [produtos])
 
   const custoPreview = Number(custo || 0)
-  const precoPreview = Number(preco || 0)
-  const lucroPreview = precoPreview - custoPreview
-  const margemPreview = precoPreview > 0 ? (lucroPreview / precoPreview) * 100 : 0
-  const markupPreview = custoPreview > 0 ? (lucroPreview / custoPreview) * 100 : 0
-  // 🔥 ENTRADA RÁPIDA
+const precoPreview = Number(preco || 0)
+const lucroPreview = precoPreview - custoPreview
+const margemPreview = precoPreview > 0 ? (lucroPreview / precoPreview) * 100 : 0
+const markupPreview = custoPreview > 0 ? (lucroPreview / custoPreview) * 100 : 0
+
+async function buscarNcm() {
+  if (!nome.trim()) {
+    setMensagem("Digite o nome do produto para sugerir o NCM.")
+    return
+  }
+
+  try {
+    setBuscandoNcm(true)
+    const sugestoes = await suggestNcmByProductName(nome)
+    setSugestoesNcm(sugestoes)
+
+    if (sugestoes.length === 0) {
+      setMensagem("Nenhuma sugestão de NCM encontrada para esse nome.")
+    }
+  } catch (error) {
+    console.error(error)
+    setMensagem("Erro ao buscar sugestões de NCM.")
+  } finally {
+    setBuscandoNcm(false)
+  }
+}
+
+function selecionarNcm(item: { codigo: string; descricao: string }) {
+  setNcm(item.codigo)
+
+  if (!categoriaFiscal.trim()) {
+    setCategoriaFiscal(item.descricao)
+  }
+
+  setSugestoesNcm([])
+}
+
 function abrirModalEntrada(produto: Produto) {
   setProdutoSelecionado(produto)
   setQuantidadeEntrada("")
@@ -894,6 +933,10 @@ async function salvarEntradaRapida() {
 </div>
           </div>
 
+          <p style={{ color: "red", fontWeight: 700 }}>
+  mostrarTributacao: {String(mostrarTributacao)}
+</p>
+
           {mostrarTributacao && (
   <div
     style={{
@@ -916,20 +959,81 @@ async function salvarEntradaRapida() {
 
     <div className="grid-2">
       <div>
-        <label style={labelAjuda}>
-          NCM
-          <HelpTooltip text="Classificação fiscal do produto para cálculo tributário." />
-        </label>
-        <input
-          placeholder="Ex: 6109.10.00"
-          value={ncm}
-          onChange={(e) => setNcm(e.target.value)}
-        />
-      </div>
+  <label style={labelAjuda}>
+    NCM
+    <HelpTooltip text="Classificação fiscal do produto para cálculo tributário." />
+  </label>
+  <input
+    placeholder="Ex: 6109.10.00"
+    value={ncm}
+    onChange={(e) => setNcm(e.target.value)}
+  />
 
-      <div>
-        <label style={labelAjuda}>
-          CEST
+  <div
+    style={{
+      display: "flex",
+      gap: 10,
+      alignItems: "center",
+      marginTop: 10,
+      flexWrap: "wrap",
+    }}
+  >
+    <button
+      type="button"
+      className="btn btn-secondary btn-sm"
+      onClick={buscarNcm}
+      disabled={buscandoNcm}
+    >
+      {buscandoNcm ? "Buscando..." : "Sugerir NCM"}
+    </button>
+
+    <span style={{ fontSize: 12, color: "#6b7280" }}>
+      Busca assistida com base local da NCM
+    </span>
+  </div>
+
+  {sugestoesNcm.length > 0 && (
+    <div
+      style={{
+        marginTop: 10,
+        border: "1px solid #e5e7eb",
+        borderRadius: 12,
+        background: "#fff",
+        overflow: "hidden",
+      }}
+    >
+      {sugestoesNcm.map((item, index) => (
+        <button
+          key={`${item.codigo}-${index}`}
+          type="button"
+          onClick={() => selecionarNcm(item)}
+          style={{
+            display: "block",
+            width: "100%",
+            textAlign: "left",
+            padding: "12px 14px",
+            border: "none",
+            borderBottom: "1px solid #e5e7eb",
+            background: "transparent",
+            cursor: "pointer",
+          }}
+        >
+          <div style={{ fontWeight: 700 }}>{item.codigo}</div>
+          <div style={{ fontSize: 13, color: "#4b5563", marginTop: 4 }}>
+            {item.descricao}
+          </div>
+          <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
+            Relevância: {item.score}
+          </div>
+        </button>
+      ))}
+    </div>
+  )}
+</div>
+
+<div>
+  <label style={labelAjuda}>
+    CEST
           <HelpTooltip text="Código CEST, quando aplicável ao produto." />
         </label>
         <input
