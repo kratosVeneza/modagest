@@ -579,15 +579,15 @@ async function salvarEntradaRapida() {
                 </span>
               </th>
               <th style={th}>
-                <span style={tituloComAjuda}>
-                  Markup
-                  <HelpTooltip text="Percentual do lucro em relação ao custo do produto." />
-                </span>
+  <span style={tituloComAjuda}>
+    Markup
+    <HelpTooltip text="Percentual do lucro em relação ao custo do produto." />
+  </span>
+</th>
 
-                {mostrarTributacao && <th style={th}>Tributação</th>}
+{mostrarTributacao && <th style={th}>Tributação</th>}
 
-              </th>
-              <th style={th}>Ações</th>
+<th style={th}>Ações</th>
             </tr>
           </thead>
 
@@ -606,73 +606,75 @@ async function salvarEntradaRapida() {
 
                 return (
                   <tr key={p.id}>
-                    <td style={td}>{p.sku}</td>
-                    {mostrarTributacao && (
+  <td style={td}>{p.sku}</td>
   <td style={td}>
-    {p.usa_imposto_manual
-      ? "Manual"
-      : p.tax_rule_id
-      ? "Configurada"
-      : "Pendente"}
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <strong>{p.nome}</strong>
+      {(p.cor || p.tamanho) && (
+        <span style={{ fontSize: 12, color: "#6b7280" }}>
+          {[p.cor, p.tamanho].filter(Boolean).join(" • ")}
+        </span>
+      )}
+    </div>
   </td>
-)}
-                    <td style={td}>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <strong>{p.nome}</strong>
-                        {(p.cor || p.tamanho) && (
-                          <span style={{ fontSize: 12, color: "#6b7280" }}>
-                            {[p.cor, p.tamanho].filter(Boolean).join(" • ")}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td style={td}>{p.marca || "-"}</td>
-                    <td style={td}>{p.categoria || "-"}</td>
-                    <td style={td}>{p.tipo || "-"}</td>
-                    <td style={td}>{p.unidade || "-"}</td>
-                    <td style={td}>{p.estoque}</td>
-                    <td style={td}>{p.estoque_minimo ?? 0}</td>
-                    <td style={td}>
-                      <span
-                        className={
-                          estoqueBaixo
-                            ? "status-pill status-red"
-                            : "status-pill status-green"
-                        }
-                      >
-                        {estoqueBaixo ? "Baixo" : "OK"}
-                      </span>
-                    </td>
-                    <td style={td}>R$ {custo.toFixed(2)}</td>
-                    <td style={td}>R$ {preco.toFixed(2)}</td>
-                    <td style={td}>R$ {lucro.toFixed(2)}</td>
-                    <td style={td}>{margem.toFixed(1)}%</td>
-                    <td style={td}>{markup.toFixed(1)}%</td>
-                    <td style={td}>
-  <div style={acoesTabela}>
-    <button
-      onClick={() => editarProduto(p)}
-      className="btn btn-success btn-sm"
+  <td style={td}>{p.marca || "-"}</td>
+  <td style={td}>{p.categoria || "-"}</td>
+  <td style={td}>{p.tipo || "-"}</td>
+  <td style={td}>{p.unidade || "-"}</td>
+  <td style={td}>{p.estoque}</td>
+  <td style={td}>{p.estoque_minimo ?? 0}</td>
+  <td style={td}>
+    <span
+      className={
+        estoqueBaixo
+          ? "status-pill status-red"
+          : "status-pill status-green"
+      }
     >
-      Editar
-    </button>
+      {estoqueBaixo ? "Baixo" : "OK"}
+    </span>
+  </td>
+  <td style={td}>R$ {custo.toFixed(2)}</td>
+  <td style={td}>R$ {preco.toFixed(2)}</td>
+  <td style={td}>R$ {lucro.toFixed(2)}</td>
+  <td style={td}>{margem.toFixed(1)}%</td>
+  <td style={td}>{markup.toFixed(1)}%</td>
 
-    <button
-      onClick={() => excluirProduto(p.id)}
-      className="btn btn-danger btn-sm"
-    >
-      Excluir
-    </button>
+  {mostrarTributacao && (
+    <td style={td}>
+      {p.usa_imposto_manual
+        ? "Manual"
+        : p.tax_rule_id
+        ? "Configurada"
+        : "Pendente"}
+    </td>
+  )}
 
-    <button
-      onClick={() => abrirModalEntrada(p)}
-      className="btn btn-primary btn-sm"
-    >
-      + Entrada
-    </button>
-  </div>
-</td>
-                  </tr>
+  <td style={td}>
+    <div style={acoesTabela}>
+      <button
+        onClick={() => editarProduto(p)}
+        className="btn btn-success btn-sm"
+      >
+        Editar
+      </button>
+
+      <button
+        onClick={() => excluirProduto(p.id)}
+        className="btn btn-danger btn-sm"
+      >
+        Excluir
+      </button>
+
+      <button
+        onClick={() => abrirModalEntrada(p)}
+        className="btn btn-primary btn-sm"
+      >
+        + Entrada
+      </button>
+    </div>
+  </td>
+</tr>
                 )
               })
             ) : (
