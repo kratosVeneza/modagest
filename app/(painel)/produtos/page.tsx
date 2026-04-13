@@ -477,7 +477,11 @@ async function buscarNcm() {
 
   try {
     setBuscandoNcm(true)
-    const sugestoes = await suggestNcmByProductName(nome)
+    const sugestoes = await suggestNcmByProductName({
+  nome,
+  categoria,
+  tipo,
+})
     setSugestoesNcm(sugestoes)
 
     if (sugestoes.length === 0) {
