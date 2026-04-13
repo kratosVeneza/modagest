@@ -94,6 +94,19 @@ const [sugestoesNcm, setSugestoesNcm] = useState<
   { codigo: string; descricao: string; score: number }[]
 >([])
 const [buscandoNcm, setBuscandoNcm] = useState(false)
+
+useEffect(() => {
+  if (nome.length < 3) {
+    setSugestoesNcm([])
+    return
+  }
+
+  const delay = setTimeout(() => {
+    buscarNcm()
+  }, 500)
+
+  return () => clearTimeout(delay)
+}, [nome])
   // 🔥 ENTRADA RÁPIDA
 const [modalEntradaAberto, setModalEntradaAberto] = useState(false)
 const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null)
@@ -962,7 +975,16 @@ async function salvarEntradaRapida() {
   <input
     placeholder="Ex: 6109.10.00"
     value={ncm}
-    onChange={(e) => setNcm(e.target.value)}
+    onChange={(e) => {
+  const value = e.target.value
+  setNome(value)
+
+  if (value.length >= 3) {
+    buscarNcm()
+  } else {
+    setSugestoesNcm([])
+  }
+}}
   />
 
   <div
