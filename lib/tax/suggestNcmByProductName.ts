@@ -235,12 +235,7 @@ function scoreSuggestion(
   return score
 }
 
-export async function suggestNcmByProductName(input: {
-  nome: string
-  categoria?: string
-  tipo?: string
-}) {
-    
+export async function suggestNcmByProductName(input: SuggestNcmInput) {
   const nomeNormalizado = normalizeText(input.nome)
 
   if (!nomeNormalizado || nomeNormalizado.length < 3) return []
