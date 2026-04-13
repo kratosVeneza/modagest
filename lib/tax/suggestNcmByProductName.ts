@@ -240,6 +240,7 @@ export async function suggestNcmByProductName(input: {
   categoria?: string
   tipo?: string
 }) {
+    
   const nomeNormalizado = normalizeText(input.nome)
 
   if (!nomeNormalizado || nomeNormalizado.length < 3) return []
