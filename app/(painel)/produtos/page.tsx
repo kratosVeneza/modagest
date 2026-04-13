@@ -933,10 +933,6 @@ async function salvarEntradaRapida() {
 </div>
           </div>
 
-          <p style={{ color: "red", fontWeight: 700 }}>
-  mostrarTributacao: {String(mostrarTributacao)}
-</p>
-
           {mostrarTributacao && (
   <div
     style={{
