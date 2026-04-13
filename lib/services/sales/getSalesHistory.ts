@@ -10,6 +10,19 @@ export type VendaBanco = {
   valor_original: number | null
   desconto_percentual: number | null
   desconto_valor: number | null
+
+  ncm_snapshot?: string | null
+  tax_rule_id?: number | null
+  cst_snapshot?: string | null
+  cclasstrib_snapshot?: string | null
+  cbs_aliquota_aplicada?: number | null
+  ibs_aliquota_aplicada?: number | null
+  percentual_reducao_aplicado?: number | null
+  base_calculo?: number | null
+  valor_cbs?: number | null
+  valor_ibs?: number | null
+  valor_total_impostos?: number | null
+
   created_at: string
   user_id: string
   status: string
@@ -191,29 +204,42 @@ export async function getSalesHistory(userId: string): Promise<GetSalesHistoryRe
 
     const valorEmAberto = Math.max(valorTotal - valorRecebido, 0)
 
-    return {
-      id: venda.id,
-      product_id: venda.product_id,
-      customer_id: venda.customer_id,
-      quantidade: venda.quantidade,
-      valor_unitario: Number(venda.valor_unitario),
-      valor_total: valorTotal,
-      valor_original: valorOriginal,
-      desconto_percentual: descontoPercentual,
-      desconto_valor: descontoValor,
-      valor_recebido: valorRecebido,
-      valor_em_aberto: valorEmAberto,
-      payment_status: calcularStatusPagamento(valorTotal, valorRecebido),
-      created_at: venda.created_at,
-      status: venda.status || "Ativa",
-      estoque_devolvido: Boolean(venda.estoque_devolvido),
-      nomeProduto: produtoRelacionado?.nome || "Produto removido",
-      skuProduto: produtoRelacionado?.sku || "-",
-      corProduto: produtoRelacionado?.cor || "-",
-      tamanhoProduto: produtoRelacionado?.tamanho || "-",
-      nomeCliente: clienteRelacionado?.nome || "Sem cliente",
-      pagamentos: pagamentosDaVenda,
-    }
+   return {
+  id: venda.id,
+  product_id: venda.product_id,
+  customer_id: venda.customer_id,
+  quantidade: venda.quantidade,
+  valor_unitario: Number(venda.valor_unitario),
+  valor_total: valorTotal,
+  valor_original: valorOriginal,
+  desconto_percentual: descontoPercentual,
+  desconto_valor: descontoValor,
+  valor_recebido: valorRecebido,
+  valor_em_aberto: valorEmAberto,
+  payment_status: calcularStatusPagamento(valorTotal, valorRecebido),
+
+  ncm_snapshot: venda.ncm_snapshot || null,
+  tax_rule_id: venda.tax_rule_id ?? null,
+  cst_snapshot: venda.cst_snapshot || null,
+  cclasstrib_snapshot: venda.cclasstrib_snapshot || null,
+  cbs_aliquota_aplicada: Number(venda.cbs_aliquota_aplicada || 0),
+  ibs_aliquota_aplicada: Number(venda.ibs_aliquota_aplicada || 0),
+  percentual_reducao_aplicado: Number(venda.percentual_reducao_aplicado || 0),
+  base_calculo: Number(venda.base_calculo || 0),
+  valor_cbs: Number(venda.valor_cbs || 0),
+  valor_ibs: Number(venda.valor_ibs || 0),
+  valor_total_impostos: Number(venda.valor_total_impostos || 0),
+
+  created_at: venda.created_at,
+  status: venda.status || "Ativa",
+  estoque_devolvido: Boolean(venda.estoque_devolvido),
+  nomeProduto: produtoRelacionado?.nome || "Produto removido",
+  skuProduto: produtoRelacionado?.sku || "-",
+  corProduto: produtoRelacionado?.cor || "-",
+  tamanhoProduto: produtoRelacionado?.tamanho || "-",
+  nomeCliente: clienteRelacionado?.nome || "Sem cliente",
+  pagamentos: pagamentosDaVenda,
+}
   })
 
   return {

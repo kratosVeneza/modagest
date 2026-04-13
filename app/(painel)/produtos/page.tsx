@@ -895,7 +895,7 @@ async function salvarEntradaRapida() {
           {mostrarTributacao && (
   <div
     style={{
-      marginTop: 18,
+      marginTop: 12,
       padding: "14px",
       borderRadius: "14px",
       border: "1px solid #e5e7eb",
@@ -1029,7 +1029,7 @@ async function salvarEntradaRapida() {
 
           <div
             style={{
-              marginTop: 18,
+              marginTop: 12,
               padding: "14px",
               borderRadius: "14px",
               border: "1px solid #e5e7eb",
