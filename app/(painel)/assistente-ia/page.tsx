@@ -636,10 +636,6 @@ if (
       continue
     }
 
-    if (resultado.warning) {
-  mensagensErro.push(resultado.warning)
-}
-
     vendasSalvas.push(
       `${produtoSelecionado.nome}${
         produtoSelecionado.cor ? ` • ${produtoSelecionado.cor}` : ""

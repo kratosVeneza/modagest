@@ -88,6 +88,7 @@ export default function HistoricoVendas() {
   const [modalExcluirVendaAberto, setModalExcluirVendaAberto] = useState(false)
   const [vendaParaExcluir, setVendaParaExcluir] = useState<VendaExibicao | null>(null)
   const [excluindoVenda, setExcluindoVenda] = useState(false)
+  const [acaoVendaEmAndamentoId, setAcaoVendaEmAndamentoId] = useState<number | null>(null)
 
   const [filtroStatus, setFiltroStatus] = useState<
   "todas" | "ativas" | "canceladas" | "pagas" | "parciais" | "pendentes"
@@ -154,8 +155,18 @@ const resultado = await getSalesHistory(user.id)
   }
 
   async function cancelarVenda(venda: VendaExibicao) {
-    setMensagem("")
+  if (acaoVendaEmAndamentoId === venda.id) return
 
+  const confirmou = window.confirm(
+    `Deseja realmente cancelar a venda de "${venda.nomeProduto}"?`
+  )
+
+  if (!confirmou) return
+
+  setMensagem("")
+  setAcaoVendaEmAndamentoId(venda.id)
+
+  try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -175,11 +186,24 @@ const resultado = await getSalesHistory(user.id)
     if (resultado.success) {
       await carregarVendas()
     }
+  } finally {
+    setAcaoVendaEmAndamentoId(null)
   }
+}
 
   async function restaurarVenda(venda: VendaExibicao) {
-    setMensagem("")
+  if (acaoVendaEmAndamentoId === venda.id) return
 
+  const confirmou = window.confirm(
+    `Deseja realmente restaurar a venda de "${venda.nomeProduto}"?`
+  )
+
+  if (!confirmou) return
+
+  setMensagem("")
+  setAcaoVendaEmAndamentoId(venda.id)
+
+  try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -199,7 +223,10 @@ const resultado = await getSalesHistory(user.id)
     if (resultado.success) {
       await carregarVendas()
     }
+  } finally {
+    setAcaoVendaEmAndamentoId(null)
   }
+}
 
   function abrirModalPagamento(venda: VendaExibicao) {
     setVendaSelecionada(venda)
@@ -1115,29 +1142,44 @@ const totalImpostosFiltrado = useMemo(() => {
                       )}
 
                       {venda.status !== "Cancelada" ? (
-                        <button
-                          onClick={() => cancelarVenda(venda)}
-                          className="btn btn-danger btn-sm"
-                        >
-                          Cancelar venda
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => restaurarVenda(venda)}
-                            className="btn btn-success btn-sm"
-                          >
-                            Restaurar venda
-                          </button>
+  <button
+    onClick={() => cancelarVenda(venda)}
+    className="btn btn-danger btn-sm"
+    disabled={acaoVendaEmAndamentoId === venda.id}
+    style={{
+      opacity: acaoVendaEmAndamentoId === venda.id ? 0.7 : 1,
+      cursor: acaoVendaEmAndamentoId === venda.id ? "not-allowed" : "pointer",
+    }}
+  >
+    {acaoVendaEmAndamentoId === venda.id ? "Cancelando..." : "Cancelar venda"}
+  </button>
+) : (
+  <>
+    <button
+      onClick={() => restaurarVenda(venda)}
+      className="btn btn-success btn-sm"
+      disabled={acaoVendaEmAndamentoId === venda.id}
+      style={{
+        opacity: acaoVendaEmAndamentoId === venda.id ? 0.7 : 1,
+        cursor: acaoVendaEmAndamentoId === venda.id ? "not-allowed" : "pointer",
+      }}
+    >
+      {acaoVendaEmAndamentoId === venda.id ? "Restaurando..." : "Restaurar venda"}
+    </button>
 
-                          <button
-                            onClick={() => abrirModalExcluirVenda(venda)}
-                            className="btn btn-danger btn-sm"
-                          >
-                            Excluir venda
-                          </button>
-                        </>
-                      )}
+    <button
+      onClick={() => abrirModalExcluirVenda(venda)}
+      className="btn btn-danger btn-sm"
+      disabled={acaoVendaEmAndamentoId === venda.id}
+      style={{
+        opacity: acaoVendaEmAndamentoId === venda.id ? 0.7 : 1,
+        cursor: acaoVendaEmAndamentoId === venda.id ? "not-allowed" : "pointer",
+      }}
+    >
+      Excluir venda
+    </button>
+  </>
+)}
                     </div>
 
                     {venda.pagamentos.length > 0 && (
