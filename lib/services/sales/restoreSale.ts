@@ -116,6 +116,7 @@ export async function restoreSale(input: RestoreSaleInput): Promise<RestoreSaleR
         unidade: produtoData.unidade,
       },
     })
+    
   } catch (error: any) {
     await supabase
       .from("products")
