@@ -1,11 +1,16 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 import HelpTooltip from "../../components/HelpTooltip"
 import HelpBanner from "../../components/InfoBanner"
 import { createSale } from "@/lib/services/sales/createSale"
+import { getStoreSettings } from "@/lib/settings/getStoreSettings"
+import { shouldCalculateTaxesOnSale } from "@/lib/tax/canUseTaxFeatures"
+import { getProductTaxContext } from "@/lib/tax/getProductTaxContext"
+import { calculateTax } from "@/lib/tax/calculateTax"
+import type { StoreSettings } from "@/lib/settings/types"
 
 type Produto = {
   id: number
@@ -69,18 +74,42 @@ export default function Vendas() {
   const [mensagem, setMensagem] = useState("")
   const [mensagemSucesso, setMensagemSucesso] = useState("")
   const [salvando, setSalvando] = useState(false)
+  const salvandoRef = useRef(false)
   const [valorRecebidoInicial, setValorRecebidoInicial] = useState("")
   const [formaPagamentoInicial, setFormaPagamentoInicial] = useState("Pix")
   const [observacaoPagamentoInicial, setObservacaoPagamentoInicial] = useState("")
   const [buscaProduto, setBuscaProduto] = useState("")
   const [precoUnitarioEditavel, setPrecoUnitarioEditavel] = useState("")
   const [descontoPercentual, setDescontoPercentual] = useState("")
+  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null)
+const [resumoTributario, setResumoTributario] = useState<null | {
+  baseCalculo: number
+  valorCBS: number
+  valorIBS: number
+  valorTotalImpostos: number
+  valorLiquido: number
+  nomeRegra: string | null
+}>(null)
 
   useEffect(() => {
-    carregarProdutos()
-    carregarClientes()
-  }, [])
+  carregarDadosIniciais()
+}, [])
 
+async function carregarDadosIniciais() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
+
+  const settings = await getStoreSettings(user.id)
+  setStoreSettings(settings)
+
+  await Promise.all([carregarProdutos(), carregarClientes()])
+}
   async function carregarProdutos() {
     const {
       data: { user },
@@ -183,19 +212,83 @@ const temDesconto = Number(descontoPercentual || 0) > 0
       : produtoSelecionado?.estoque ?? 0
 
   function selecionarProduto(produto: Produto) {
-    setProdutoId(String(produto.id))
-    setPrecoUnitarioEditavel(String(Number(produto.preco).toFixed(2)))
-  }
+  const novoProdutoId = String(produto.id)
+  const novoPreco = String(Number(produto.preco).toFixed(2))
+
+  setProdutoId(novoProdutoId)
+  setPrecoUnitarioEditavel(novoPreco)
+
+  atualizarResumoTributario({
+    novoProdutoId,
+    novoPrecoUnitario: novoPreco,
+  })
+}
 
   function limparProdutoSelecionado() {
-    setProdutoId("")
-    setPrecoUnitarioEditavel("")
+  setProdutoId("")
+  setPrecoUnitarioEditavel("")
+  setResumoTributario(null)
+}
+
+  async function atualizarResumoTributario(params?: {
+  novoProdutoId?: string
+  novaQuantidade?: string
+  novoPrecoUnitario?: string
+}) {
+  try {
+    const produtoAtualId = params?.novoProdutoId ?? produtoId
+    const quantidadeAtual = params?.novaQuantidade ?? quantidade
+    const precoAtual = params?.novoPrecoUnitario ?? precoUnitarioEditavel
+
+    if (!storeSettings || !shouldCalculateTaxesOnSale(storeSettings)) {
+      setResumoTributario(null)
+      return
+    }
+
+    if (!produtoAtualId || !quantidadeAtual || !precoAtual) {
+      setResumoTributario(null)
+      return
+    }
+
+    const qtd = Number(quantidadeAtual)
+    const preco = Number(precoAtual)
+
+    if (qtd <= 0 || preco <= 0) {
+      setResumoTributario(null)
+      return
+    }
+
+    const { product, taxRule } = await getProductTaxContext(Number(produtoAtualId))
+
+    const tax = calculateTax({
+      valorUnitario: preco,
+      quantidade: qtd,
+      product,
+      taxRule,
+    })
+
+    setResumoTributario({
+      baseCalculo: tax.baseCalculo,
+      valorCBS: tax.valorCBS,
+      valorIBS: tax.valorIBS,
+      valorTotalImpostos: tax.valorTotalImpostos,
+      valorLiquido: tax.valorLiquido,
+      nomeRegra: tax.nomeRegra,
+    })
+  } catch {
+    setResumoTributario(null)
   }
+}
 
   async function registrarVenda() {
-    setMensagem("")
-    setMensagemSucesso("")
+  if (salvandoRef.current) return
 
+  salvandoRef.current = true
+  setSalvando(true)
+  setMensagem("")
+  setMensagemSucesso("")
+
+  try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -256,8 +349,6 @@ const temDesconto = Number(descontoPercentual || 0) > 0
       return
     }
 
-    setSalvando(true)
-
     const resultado = await createSale({
       userId: user.id,
       productId: produto.id,
@@ -275,7 +366,6 @@ const temDesconto = Number(descontoPercentual || 0) > 0
     })
 
     if (!resultado.success) {
-      setSalvando(false)
       setMensagem(resultado.message)
       return
     }
@@ -294,7 +384,6 @@ const temDesconto = Number(descontoPercentual || 0) > 0
     setBuscaProduto("")
     setPrecoUnitarioEditavel("")
     setDescontoPercentual("")
-    setSalvando(false)
     setMensagem("")
     setMensagemSucesso("Venda cadastrada")
 
@@ -303,7 +392,11 @@ const temDesconto = Number(descontoPercentual || 0) > 0
     }, 2500)
 
     await carregarProdutos()
+  } finally {
+    salvandoRef.current = false
+    setSalvando(false)
   }
+}
 
   return (
     <div>
@@ -480,11 +573,15 @@ const temDesconto = Number(descontoPercentual || 0) > 0
                 <HelpTooltip text="Informe quantas unidades foram vendidas nessa operação." />
               </label>
               <input
-                type="number"
-                placeholder="Quantidade"
-                value={quantidade}
-                onChange={(e) => setQuantidade(e.target.value)}
-              />
+  type="number"
+  placeholder="Quantidade"
+  value={quantidade}
+  onChange={(e) => {
+    const valor = e.target.value
+    setQuantidade(valor)
+    atualizarResumoTributario({ novaQuantidade: valor })
+  }}
+/>
             </div>
 
             <div>
@@ -493,12 +590,16 @@ const temDesconto = Number(descontoPercentual || 0) > 0
                 <HelpTooltip text="Você pode manter o preço cadastrado ou editar para um valor diferente nesta venda." />
               </label>
               <input
-                type="number"
-                step="0.01"
-                placeholder="Preço unitário"
-                value={precoUnitarioEditavel}
-                onChange={(e) => setPrecoUnitarioEditavel(e.target.value)}
-              />
+  type="number"
+  step="0.01"
+  placeholder="Preço unitário"
+  value={precoUnitarioEditavel}
+  onChange={(e) => {
+    const valor = e.target.value
+    setPrecoUnitarioEditavel(valor)
+    atualizarResumoTributario({ novoPrecoUnitario: valor })
+  }}
+/>
             </div>
 
             <div>
@@ -703,6 +804,50 @@ const temDesconto = Number(descontoPercentual || 0) > 0
             </span>
             <strong>R$ {Math.max(saldoRestante, 0).toFixed(2)}</strong>
           </div>
+
+          {resumoTributario && (
+  <div
+    style={{
+      marginTop: 18,
+      marginBottom: 4,
+      padding: 16,
+      borderRadius: 14,
+      border: "1px solid #dbeafe",
+      background: "#f8fbff",
+    }}
+  >
+    <div style={{ fontWeight: 700, marginBottom: 10 }}>Resumo tributário</div>
+
+    <div style={resumoLinha}>
+      <span className="info-muted">Base de cálculo</span>
+      <strong>R$ {resumoTributario.baseCalculo.toFixed(2)}</strong>
+    </div>
+
+    <div style={resumoLinha}>
+      <span className="info-muted">CBS</span>
+      <strong>R$ {resumoTributario.valorCBS.toFixed(2)}</strong>
+    </div>
+
+    <div style={resumoLinha}>
+      <span className="info-muted">IBS</span>
+      <strong>R$ {resumoTributario.valorIBS.toFixed(2)}</strong>
+    </div>
+
+    <div style={resumoLinha}>
+      <span className="info-muted">Total de impostos</span>
+      <strong>R$ {resumoTributario.valorTotalImpostos.toFixed(2)}</strong>
+    </div>
+
+    <div style={resumoLinha}>
+      <span className="info-muted">Valor líquido</span>
+      <strong>R$ {resumoTributario.valorLiquido.toFixed(2)}</strong>
+    </div>
+
+    <div style={{ paddingTop: 10, fontSize: 13, color: "#475569" }}>
+      Regra aplicada: <strong>{resumoTributario.nomeRegra || "Não informada"}</strong>
+    </div>
+  </div>
+)}
 
           <div className="summary-box" style={totalBox}>
   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

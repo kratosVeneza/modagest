@@ -42,23 +42,8 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     descontoValor = 0,
   } = input
 
-  const { data: produto, error: produtoError } = await supabase
-    .from("products")
-    .select("id, nome, estoque, preco, user_id")
-    .eq("id", productId)
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (produtoError || !produto) {
-    return { success: false, message: "Produto não encontrado." }
-  }
-
   if (quantidade <= 0) {
     return { success: false, message: "Quantidade inválida." }
-  }
-
-  if (quantidade > Number(produto.estoque)) {
-    return { success: false, message: "Estoque insuficiente para essa venda." }
   }
 
   if (valorUnitario <= 0) {
@@ -91,9 +76,21 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     }
   }
 
-  // =========================
-  // BLOCO NOVO: TRIBUTAÇÃO
-  // =========================
+  const { data: produto, error: produtoError } = await supabase
+    .from("products")
+    .select("id, nome, estoque, preco, user_id")
+    .eq("id", productId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (produtoError || !produto) {
+    return { success: false, message: "Produto não encontrado." }
+  }
+
+  if (quantidade > Number(produto.estoque)) {
+    return { success: false, message: "Estoque insuficiente para essa venda." }
+  }
+
   const settings = await getStoreSettings(userId)
   const calcularImposto = shouldCalculateTaxesOnSale(settings)
 
@@ -139,9 +136,34 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
       return {
         success: false,
         message:
-          error?.message ||
-          "Não foi possível calcular os impostos da venda.",
+          error?.message || "Não foi possível calcular os impostos da venda.",
       }
+    }
+  }
+
+  const novoEstoque = Number(produto.estoque) - quantidade
+
+  const { data: produtoAtualizado, error: erroReservaEstoque } = await supabase
+    .from("products")
+    .update({ estoque: novoEstoque })
+    .eq("id", productId)
+    .eq("user_id", userId)
+    .eq("estoque", produto.estoque)
+    .select("id, estoque")
+    .maybeSingle()
+
+  if (erroReservaEstoque) {
+    return {
+      success: false,
+      message: "Erro ao reservar o estoque para essa venda.",
+    }
+  }
+
+  if (!produtoAtualizado) {
+    return {
+      success: false,
+      message:
+        "O estoque desse produto acabou de ser alterado por outra operação. Atualize a tela e tente novamente.",
     }
   }
 
@@ -158,8 +180,6 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     status: "Ativa",
     created_at: dataVendaIso,
     estoque_devolvido: false,
-
-    // CAMPOS NOVOS DE TRIBUTAÇÃO
     ...taxPayload,
   }
 
@@ -170,22 +190,13 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     .single()
 
   if (erroVenda || !vendaCriada) {
+    await supabase
+      .from("products")
+      .update({ estoque: produto.estoque })
+      .eq("id", productId)
+      .eq("user_id", userId)
+
     return { success: false, message: "Erro ao registrar venda." }
-  }
-
-  const novoEstoque = Number(produto.estoque) - quantidade
-
-  const { error: erroEstoque } = await supabase
-    .from("products")
-    .update({ estoque: novoEstoque })
-    .eq("id", productId)
-    .eq("user_id", userId)
-
-  if (erroEstoque) {
-    return {
-      success: false,
-      message: "Venda salva, mas houve erro ao atualizar o estoque.",
-    }
   }
 
   try {
@@ -200,11 +211,23 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
       estoqueApos: novoEstoque,
     })
   } catch (error: any) {
+    await supabase
+      .from("products")
+      .update({ estoque: produto.estoque })
+      .eq("id", productId)
+      .eq("user_id", userId)
+
+    await supabase
+      .from("sales")
+      .delete()
+      .eq("id", vendaCriada.id)
+      .eq("user_id", userId)
+
     return {
       success: false,
       message:
         error?.message ||
-        "Venda salva, mas houve erro ao registrar a movimentação de estoque.",
+        "Houve erro ao registrar a movimentação de estoque. Nenhuma alteração foi mantida.",
     }
   }
 
