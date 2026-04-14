@@ -11,6 +11,7 @@ import { getStoreSettings } from "@/lib/settings/getStoreSettings"
 import { canUseTaxFeatures, shouldRequireFiscalFields } from "@/lib/tax/canUseTaxFeatures"
 import { getTaxRules, type TaxRule } from "@/lib/tax/getTaxRules"
 import { suggestNcmByProductName } from "@/lib/tax/suggestNcmByProductName"
+import SearchableSelect from "../../components/SearchableSelect"
 import {
   getProductCategories,
   type ProductCategory,
@@ -90,8 +91,6 @@ const [mostrarTributacao, setMostrarTributacao] = useState(false)
 const [taxRules, setTaxRules] = useState<TaxRule[]>([])
 const [productCategories, setProductCategories] = useState<ProductCategory[]>([])
 const [productTypes, setProductTypes] = useState<ProductTypeItem[]>([])
-const [buscaCategoria, setBuscaCategoria] = useState("")
-const [buscaTipo, setBuscaTipo] = useState("")
 
 const [ncm, setNcm] = useState("")
 const [cest, setCest] = useState("")
@@ -242,8 +241,6 @@ setUsaImpostoManual(false)
 setCbsAliquotaManual("")
 setIbsAliquotaManual("")
 setSugestoesNcm([])
-setBuscaCategoria("")
-setBuscaTipo("")
 } 
 
   function abrirNovoModal() {
@@ -491,30 +488,28 @@ const unidadesSugestao = useMemo(() => {
 }, [produtos])
 
 const categoriasFiltradas = useMemo(() => {
-  const termo = buscaCategoria.trim().toLowerCase()
-
-  if (!termo) return productCategories
-
-  return productCategories.filter((item) =>
-    item.nome.toLowerCase().includes(termo)
-  )
-}, [productCategories, buscaCategoria])
+  return productCategories
+}, [productCategories])
 
 const tiposFiltrados = useMemo(() => {
-  const termo = buscaTipo.trim().toLowerCase()
-
   const categoriaSelecionada = productCategories.find(
-    (item) => item.nome === categoria
+    (item) => item.nome.trim().toLowerCase() === categoria.trim().toLowerCase()
   )
 
-  const base = categoriaSelecionada
-    ? productTypes.filter((item) => item.category_id === categoriaSelecionada.id)
-    : []
+  if (!categoriaSelecionada) return []
 
-  if (!termo) return base
+  return productTypes.filter((item) => item.category_id === categoriaSelecionada.id)
+}, [productTypes, productCategories, categoria])
 
-  return base.filter((item) => item.nome.toLowerCase().includes(termo))
-}, [productTypes, productCategories, categoria, buscaTipo])
+const categoriaOptions = categoriasFiltradas.map((item) => ({
+  value: item.nome,
+  label: item.nome,
+}))
+
+const tipoOptions = tiposFiltrados.map((item) => ({
+  value: item.nome,
+  label: item.nome,
+}))
 
   const custoPreview = Number(custo || 0)
 const precoPreview = Number(preco || 0)
@@ -853,69 +848,36 @@ async function salvarEntradaRapida() {
 </div>
 
            <div>
-  <label style={labelAjuda}>
-    Categoria
-    <HelpTooltip text="Categoria geral do produto, como roupas, acessórios ou calçados." />
-  </label>
-
-  <input
-    placeholder="Pesquisar categoria"
-    value={buscaCategoria}
-    onChange={(e) => setBuscaCategoria(e.target.value)}
-    style={{ marginBottom: 8 }}
-  />
-
-  <select
+  <SearchableSelect
+    label="Categoria"
+    placeholder="Selecione a categoria"
     value={categoria}
-    onChange={(e) => {
-      setCategoria(e.target.value)
+    options={categoriaOptions}
+    onChange={(value) => {
+      setCategoria(value)
       setTipo("")
-      setBuscaTipo("")
     }}
-    style={erros.categoria ? inputErroStyle : undefined}
-  >
-    <option value="">Selecione a categoria</option>
-    {categoriasFiltradas.map((item) => (
-      <option key={item.id} value={item.nome}>
-        {item.nome}
-      </option>
-    ))}
-  </select>
-
-  {erros.categoria && <div style={textoErroStyle}>{erros.categoria}</div>}
-</div>
-
-            <div>
-  <label style={labelAjuda}>
-    Tipo do produto
-    <HelpTooltip text="Tipo específico do item, como camiseta, tênis, relógio, gel ou pochete." />
-  </label>
-
-  <input
-    placeholder={categoria ? "Pesquisar tipo do produto" : "Selecione primeiro a categoria"}
-    value={buscaTipo}
-    onChange={(e) => setBuscaTipo(e.target.value)}
-    disabled={!categoria}
-    style={{ marginBottom: 8 }}
+    error={erros.categoria}
+    help={
+      <HelpTooltip text="Categoria geral do produto, como roupas, acessórios ou calçados." />
+    }
   />
-
-  <select
+</div>
+            <div>
+  <SearchableSelect
+    label="Tipo do produto"
+    placeholder={
+      categoria ? "Selecione o tipo" : "Selecione primeiro a categoria"
+    }
     value={tipo}
-    onChange={(e) => setTipo(e.target.value)}
+    options={tipoOptions}
+    onChange={setTipo}
     disabled={!categoria}
-    style={erros.tipo ? inputErroStyle : undefined}
-  >
-    <option value="">
-      {categoria ? "Selecione o tipo" : "Selecione primeiro a categoria"}
-    </option>
-    {tiposFiltrados.map((item) => (
-      <option key={item.id} value={item.nome}>
-        {item.nome}
-      </option>
-    ))}
-  </select>
-
-  {erros.tipo && <div style={textoErroStyle}>{erros.tipo}</div>}
+    error={erros.tipo}
+    help={
+      <HelpTooltip text="Tipo específico do item, como camiseta, tênis, relógio, gel ou pochete." />
+    }
+  />
 </div>
 
             <div>
@@ -1056,20 +1018,10 @@ async function salvarEntradaRapida() {
     <HelpTooltip text="Classificação fiscal do produto para cálculo tributário." />
   </label>
   <input
-    placeholder="Ex: 6109.10.00"
-    value={ncm}
-    onChange={(e) => {
-  const value = e.target.value
-  setNome(value)
-
-  if (value.length >= 3) {
-    buscarNcm()
-  } else {
-    setSugestoesNcm([])
-  }
-}}
-  />
-
+  placeholder="Ex: 6109.10.00"
+  value={ncm}
+  onChange={(e) => setNcm(e.target.value)}
+/>
   <div
     style={{
       display: "flex",
