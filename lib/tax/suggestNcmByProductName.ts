@@ -39,13 +39,20 @@ const stopWords = new Set([
 ])
 
 const synonymMap: Record<string, string[]> = {
-  camiseta: ["camiseta", "camisa", "tshirt", "blusa", "t shirt"],
+  camiseta: ["camiseta", "camisa", "tshirt", "blusa", "t shirt", "vestuario"],
+  camisa: ["camisa", "camiseta", "vestuario", "roupa"],
+  blusa: ["blusa", "camiseta", "vestuario", "roupa"],
   conjunto: ["conjunto", "kit roupa", "vestuario", "conjunto feminino", "conjunto masculino"],
-  meia: ["meia", "meia esportiva", "meiao"],
-  tenis: ["tenis", "calcado", "sapato esportivo"],
-  short: ["short", "bermuda", "calcao"],
-  top: ["top", "top fitness", "blusa"],
-  legging: ["legging", "calca", "calca esportiva"],
+  meia: ["meia", "meia esportiva", "meiao", "acessorio"],
+  tenis: ["tenis", "calcado", "calcados", "sapato esportivo"],
+  sapato: ["sapato", "calcado", "calcados", "tenis"],
+  chinelo: ["chinelo", "calcado", "calcados"],
+  sandalia: ["sandalia", "calcado", "calcados"],
+  calcado: ["calcado", "calcados", "sapato", "tenis"],
+  short: ["short", "bermuda", "calcao", "vestuario"],
+  bermuda: ["bermuda", "short", "calcao", "vestuario"],
+  top: ["top", "top fitness", "blusa", "vestuario"],
+  legging: ["legging", "calca", "calca esportiva", "vestuario"],
   fitness: ["fitness", "esportivo", "academia"],
   corrida: ["corrida", "running", "esportivo"],
   dry: ["dry fit", "fibra sintetica", "tecido sintetico"],
@@ -115,25 +122,32 @@ function tokenize(value: string) {
 }
 
 function expandTerms(nome: string, categoria?: string, tipo?: string) {
-  const baseWords = [
-    ...tokenize(nome),
-    ...tokenize(categoria || ""),
-    ...tokenize(tipo || ""),
-  ]
+  const nomeTokens = tokenize(nome)
+  const categoriaTokens = tokenize(categoria || "")
+  const tipoTokens = tokenize(tipo || "")
 
+  const baseWords = [...nomeTokens, ...categoriaTokens, ...tipoTokens]
   const expanded = new Set<string>(baseWords)
 
   for (const word of baseWords) {
     const synonyms = synonymMap[word]
     if (synonyms) {
       for (const synonym of synonyms) {
-        expanded.add(normalizeText(synonym))
+        const normalized = normalizeText(synonym)
+        if (normalized) expanded.add(normalized)
       }
     }
   }
 
+  const nomeCompleto = normalizeText(nome)
+  if (nomeCompleto) expanded.add(nomeCompleto)
+
+  const tipoCompleto = normalizeText(tipo || "")
+  if (tipoCompleto) expanded.add(tipoCompleto)
+
   const categoriaNormalizada = normalizeText(categoria || "")
   const categoryTerms = categoryTermsMap[categoriaNormalizada]
+
   if (categoryTerms) {
     for (const term of categoryTerms) {
       expanded.add(normalizeText(term))
@@ -167,11 +181,12 @@ function scoreSuggestion(
     score += 60
   }
 
-  const nomeTokens = tokenize(input.nome)
+    const nomeTokens = tokenize(input.nome)
   for (const token of nomeTokens) {
-    if (desc.includes(token)) score += 15
+    if (desc.includes(token)) {
+      score += token.length >= 5 ? 20 : 12
+    }
   }
-
   if (tipoNormalizado && desc.includes(tipoNormalizado)) {
     score += 20
   }
@@ -191,9 +206,14 @@ function scoreSuggestion(
     }
   }
 
-  if (categoriaNormalizada === "calcados") {
-    if (desc.includes("calcado") || desc.includes("tenis") || desc.includes("sapato")) {
-      score += 20
+    if (categoriaNormalizada === "calcados") {
+    if (
+      desc.includes("calcado") ||
+      desc.includes("calcados") ||
+      desc.includes("tenis") ||
+      desc.includes("sapato")
+    ) {
+      score += 30
     }
   }
 
@@ -218,13 +238,14 @@ function scoreSuggestion(
     }
   }
 
-  if (categoriaNormalizada === "equipamentos") {
+    if (categoriaNormalizada === "equipamentos") {
     if (
       desc.includes("ferramenta") ||
       desc.includes("manual") ||
-      desc.includes("metal")
+      desc.includes("metal") ||
+      desc.includes("utensilios")
     ) {
-      score += 20
+      score += 25
     }
   }
 
@@ -242,13 +263,16 @@ export async function suggestNcmByProductName(input: SuggestNcmInput) {
 
   const termos = expandTerms(input.nome, input.categoria, input.tipo)
 
-  const orQuery = termos
-    .map((termo) => `descricao.ilike.%${termo}%`)
+    const orQuery = termos
+    .flatMap((termo) => [
+      `descricao.ilike.%${termo}%`,
+      `descricao_concatenada.ilike.%${termo}%`,
+    ])
     .join(",")
 
   const { data, error } = await supabase
     .from("ncm_catalog")
-    .select("codigo, descricao")
+    .select("codigo, descricao, descricao_concatenada")
     .or(orQuery)
     .limit(150)
 
@@ -256,7 +280,7 @@ export async function suggestNcmByProductName(input: SuggestNcmInput) {
     throw new Error("Não foi possível buscar sugestões de NCM.")
   }
 
-  const ranked = (data || [])
+    const ranked = (data || [])
     .map((item) => ({
       codigo: item.codigo,
       descricao: item.descricao,
