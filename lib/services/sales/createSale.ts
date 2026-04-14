@@ -21,7 +21,7 @@ type CreateSaleInput = {
 }
 
 type CreateSaleResult =
-  | { success: true; saleId: number; warning?: string }
+  | { success: true; saleId: number }
   | { success: false; message: string }
 
 export async function createSale(input: CreateSaleInput): Promise<CreateSaleResult> {
@@ -147,6 +147,9 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     p_valor_cbs: taxPayload.valor_cbs,
     p_valor_ibs: taxPayload.valor_ibs,
     p_valor_total_impostos: taxPayload.valor_total_impostos,
+    p_valor_recebido_inicial: valorRecebidoInicial,
+    p_forma_pagamento_inicial: formaPagamentoInicial,
+    p_observacao_pagamento_inicial: observacaoPagamentoInicial,
   })
 
   if (error) {
@@ -162,53 +165,6 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     return {
       success: false,
       message: resultado?.message || "Não foi possível registrar a venda.",
-    }
-  }
-
-  let warning = ""
-
-  if (valorRecebidoInicial > 0) {
-    const { error: erroPagamento } = await supabase
-      .from("sale_payments")
-      .insert([
-        {
-          sale_id: resultado.sale_id,
-          user_id: userId,
-          valor: valorRecebidoInicial,
-          forma_pagamento: formaPagamentoInicial,
-          observacao: observacaoPagamentoInicial || null,
-          created_at: dataVendaIso,
-        },
-      ])
-
-    if (erroPagamento) {
-      warning =
-        "Venda salva e estoque baixado, mas houve erro ao registrar o pagamento inicial."
-      return { success: true, saleId: Number(resultado.sale_id), warning }
-    }
-
-    const { error: erroFinanceiro } = await supabase
-      .from("financial_transactions")
-      .insert([
-        {
-          user_id: userId,
-          type: "entrada",
-          amount: valorRecebidoInicial,
-          status: "pago",
-          description:
-            descontoPercentual > 0
-              ? `Recebimento inicial de venda com desconto de ${descontoPercentual}%`
-              : "Recebimento inicial de venda",
-          reference_type: "venda",
-          reference_id: resultado.sale_id,
-          created_at: dataVendaIso,
-        },
-      ])
-
-    if (erroFinanceiro) {
-      warning =
-        "Venda salva, estoque baixado e pagamento registrado, mas erro ao lançar no financeiro."
-      return { success: true, saleId: Number(resultado.sale_id), warning }
     }
   }
 

@@ -370,10 +370,6 @@ const temDesconto = Number(descontoPercentual || 0) > 0
       return
     }
 
-    if (resultado.warning) {
-      setMensagem(resultado.warning)
-    }
-
     setProdutoId("")
     setClienteId("")
     setQuantidade("")
