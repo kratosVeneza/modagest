@@ -47,15 +47,48 @@ export async function restoreSale(input: RestoreSaleInput): Promise<RestoreSaleR
     return { success: false, message: "Não há estoque suficiente para restaurar essa venda." }
   }
 
-  const novoEstoque = Number(produtoData.estoque) - Number(vendaAtual.quantidade)
+  const { data: vendaTravada, error: erroTravamento } = await supabase
+    .from("sales")
+    .update({
+      status: "Ativa",
+      estoque_devolvido: false,
+    })
+    .eq("id", vendaAtual.id)
+    .eq("user_id", userId)
+    .eq("status", "Cancelada")
+    .eq("estoque_devolvido", true)
+    .select("id, status, estoque_devolvido, quantidade, product_id")
+    .maybeSingle()
+
+  if (erroTravamento) {
+    return { success: false, message: "Erro ao iniciar a restauração da venda." }
+  }
+
+  if (!vendaTravada) {
+    return {
+      success: false,
+      message: "Essa venda já foi processada por outra operação. Atualize a tela e tente novamente.",
+    }
+  }
+
+  const novoEstoque = Number(produtoData.estoque) - Number(vendaTravada.quantidade)
 
   const { error: erroAtualizarEstoque } = await supabase
     .from("products")
     .update({ estoque: novoEstoque })
-    .eq("id", vendaAtual.product_id)
+    .eq("id", vendaTravada.product_id)
     .eq("user_id", userId)
 
   if (erroAtualizarEstoque) {
+    await supabase
+      .from("sales")
+      .update({
+        status: "Cancelada",
+        estoque_devolvido: true,
+      })
+      .eq("id", vendaTravada.id)
+      .eq("user_id", userId)
+
     return {
       success: false,
       message: "Erro ao baixar novamente o estoque para restaurar a venda.",
@@ -64,13 +97,13 @@ export async function restoreSale(input: RestoreSaleInput): Promise<RestoreSaleR
 
   try {
     await registrarMovimentoEstoque({
-      productId: vendaAtual.product_id,
+      productId: vendaTravada.product_id,
       userId,
-      tipo: "saida", // CORRETO: é uma saída novamente
-      quantidade: Number(vendaAtual.quantidade),
+      tipo: "saida",
+      quantidade: Number(vendaTravada.quantidade),
       motivo: "Restauração de venda cancelada",
       origem: "venda",
-      referenciaId: vendaAtual.id,
+      referenciaId: vendaTravada.id,
       estoqueApos: novoEstoque,
       productSnapshot: {
         nome: produtoData.nome,
@@ -84,27 +117,28 @@ export async function restoreSale(input: RestoreSaleInput): Promise<RestoreSaleR
       },
     })
   } catch (error: any) {
+    await supabase
+      .from("products")
+      .update({ estoque: produtoData.estoque })
+      .eq("id", vendaTravada.product_id)
+      .eq("user_id", userId)
+
+    await supabase
+      .from("sales")
+      .update({
+        status: "Cancelada",
+        estoque_devolvido: true,
+      })
+      .eq("id", vendaTravada.id)
+      .eq("user_id", userId)
+
     return {
       success: false,
       message:
         error?.message ||
-        "Estoque ajustado, mas houve erro ao registrar a movimentação.",
+        "Houve erro ao registrar a movimentação de restauração. Nenhuma alteração foi mantida.",
     }
-  }
-
-  const { error: erroVenda } = await supabase
-    .from("sales")
-    .update({
-      status: "Ativa",
-      estoque_devolvido: false,
-    })
-    .eq("id", vendaAtual.id)
-    .eq("user_id", userId)
-
-  if (erroVenda) {
-    return { success: false, message: "Erro ao restaurar a venda." }
   }
 
   return { success: true, message: "Venda restaurada com sucesso." }
 }
-
