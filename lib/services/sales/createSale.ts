@@ -1,5 +1,4 @@
 import { supabase } from "@/lib/supabase"
-import { registrarMovimentoEstoque } from "@/lib/stockMovements"
 import { getStoreSettings } from "@/lib/settings/getStoreSettings"
 import { shouldCalculateTaxesOnSale } from "@/lib/tax/canUseTaxFeatures"
 import { getProductTaxContext } from "@/lib/tax/getProductTaxContext"
@@ -76,21 +75,6 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     }
   }
 
-  const { data: produto, error: produtoError } = await supabase
-    .from("products")
-    .select("id, nome, estoque, preco, user_id")
-    .eq("id", productId)
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (produtoError || !produto) {
-    return { success: false, message: "Produto não encontrado." }
-  }
-
-  if (quantidade > Number(produto.estoque)) {
-    return { success: false, message: "Estoque insuficiente para essa venda." }
-  }
-
   const settings = await getStoreSettings(userId)
   const calcularImposto = shouldCalculateTaxesOnSale(settings)
 
@@ -141,93 +125,43 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     }
   }
 
-  const novoEstoque = Number(produto.estoque) - quantidade
+  const { data, error } = await supabase.rpc("create_sale_safe", {
+    p_user_id: userId,
+    p_product_id: productId,
+    p_customer_id: customerId,
+    p_quantidade: quantidade,
+    p_valor_unitario: valorUnitario,
+    p_valor_total: valorTotal,
+    p_data_venda: dataVendaIso,
+    p_valor_original: valorOriginal,
+    p_desconto_percentual: descontoPercentual,
+    p_desconto_valor: descontoValor,
+    p_ncm_snapshot: taxPayload.ncm_snapshot,
+    p_tax_rule_id: taxPayload.tax_rule_id,
+    p_cst_snapshot: taxPayload.cst_snapshot,
+    p_cclasstrib_snapshot: taxPayload.cclasstrib_snapshot,
+    p_cbs_aliquota_aplicada: taxPayload.cbs_aliquota_aplicada,
+    p_ibs_aliquota_aplicada: taxPayload.ibs_aliquota_aplicada,
+    p_percentual_reducao_aplicado: taxPayload.percentual_reducao_aplicado,
+    p_base_calculo: taxPayload.base_calculo,
+    p_valor_cbs: taxPayload.valor_cbs,
+    p_valor_ibs: taxPayload.valor_ibs,
+    p_valor_total_impostos: taxPayload.valor_total_impostos,
+  })
 
-  const { data: produtoAtualizado, error: erroReservaEstoque } = await supabase
-    .from("products")
-    .update({ estoque: novoEstoque })
-    .eq("id", productId)
-    .eq("user_id", userId)
-    .eq("estoque", produto.estoque)
-    .select("id, estoque")
-    .maybeSingle()
-
-  if (erroReservaEstoque) {
+  if (error) {
     return {
       success: false,
-      message: "Erro ao reservar o estoque para essa venda.",
+      message: error.message || "Erro ao registrar venda.",
     }
   }
 
-  if (!produtoAtualizado) {
+  const resultado = Array.isArray(data) ? data[0] : data
+
+  if (!resultado?.success || !resultado?.sale_id) {
     return {
       success: false,
-      message:
-        "O estoque desse produto acabou de ser alterado por outra operação. Atualize a tela e tente novamente.",
-    }
-  }
-
-  const vendaPayload = {
-    product_id: productId,
-    customer_id: customerId,
-    quantidade,
-    valor_unitario: valorUnitario,
-    valor_total: valorTotal,
-    valor_original: valorOriginal,
-    desconto_percentual: descontoPercentual,
-    desconto_valor: descontoValor,
-    user_id: userId,
-    status: "Ativa",
-    created_at: dataVendaIso,
-    estoque_devolvido: false,
-    ...taxPayload,
-  }
-
-  const { data: vendaCriada, error: erroVenda } = await supabase
-    .from("sales")
-    .insert([vendaPayload])
-    .select("id")
-    .single()
-
-  if (erroVenda || !vendaCriada) {
-    await supabase
-      .from("products")
-      .update({ estoque: produto.estoque })
-      .eq("id", productId)
-      .eq("user_id", userId)
-
-    return { success: false, message: "Erro ao registrar venda." }
-  }
-
-  try {
-    await registrarMovimentoEstoque({
-      productId,
-      userId,
-      tipo: "saida",
-      quantidade,
-      motivo: "Venda",
-      origem: "venda",
-      referenciaId: Number(vendaCriada.id),
-      estoqueApos: novoEstoque,
-    })
-  } catch (error: any) {
-    await supabase
-      .from("products")
-      .update({ estoque: produto.estoque })
-      .eq("id", productId)
-      .eq("user_id", userId)
-
-    await supabase
-      .from("sales")
-      .delete()
-      .eq("id", vendaCriada.id)
-      .eq("user_id", userId)
-
-    return {
-      success: false,
-      message:
-        error?.message ||
-        "Houve erro ao registrar a movimentação de estoque. Nenhuma alteração foi mantida.",
+      message: resultado?.message || "Não foi possível registrar a venda.",
     }
   }
 
@@ -238,7 +172,7 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
       .from("sale_payments")
       .insert([
         {
-          sale_id: vendaCriada.id,
+          sale_id: resultado.sale_id,
           user_id: userId,
           valor: valorRecebidoInicial,
           forma_pagamento: formaPagamentoInicial,
@@ -250,7 +184,7 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     if (erroPagamento) {
       warning =
         "Venda salva e estoque baixado, mas houve erro ao registrar o pagamento inicial."
-      return { success: true, saleId: vendaCriada.id, warning }
+      return { success: true, saleId: Number(resultado.sale_id), warning }
     }
 
     const { error: erroFinanceiro } = await supabase
@@ -266,7 +200,7 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
               ? `Recebimento inicial de venda com desconto de ${descontoPercentual}%`
               : "Recebimento inicial de venda",
           reference_type: "venda",
-          reference_id: vendaCriada.id,
+          reference_id: resultado.sale_id,
           created_at: dataVendaIso,
         },
       ])
@@ -274,9 +208,9 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
     if (erroFinanceiro) {
       warning =
         "Venda salva, estoque baixado e pagamento registrado, mas erro ao lançar no financeiro."
-      return { success: true, saleId: vendaCriada.id, warning }
+      return { success: true, saleId: Number(resultado.sale_id), warning }
     }
   }
 
-  return { success: true, saleId: vendaCriada.id }
+  return { success: true, saleId: Number(resultado.sale_id) }
 }
