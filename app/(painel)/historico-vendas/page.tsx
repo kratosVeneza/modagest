@@ -356,11 +356,7 @@ const resultado = await getSalesHistory(user.id)
 
     fecharModalPagamento()
 
-    if (resultado.warning) {
-      setMensagem(resultado.warning)
-    } else {
-      setMensagem("Pagamento adicionado com sucesso.")
-    }
+    setMensagem("Pagamento adicionado com sucesso.")
 
     await carregarVendas()
   }

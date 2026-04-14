@@ -15,30 +15,26 @@ export async function deleteSalePayment(
 ): Promise<DeleteSalePaymentResult> {
   const { paymentId, saleId, userId } = input
 
-  const { data: venda, error: erroVenda } = await supabase
-    .from("sales")
-    .select("id, status")
-    .eq("id", saleId)
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (erroVenda || !venda) {
-    return { success: false, message: "Venda não encontrada." }
-  }
-
-  if (venda.status === "Cancelada") {
-    return { success: false, message: "Não é possível excluir pagamento de uma venda cancelada." }
-  }
-
-  const { error } = await supabase
-    .from("sale_payments")
-    .delete()
-    .eq("id", paymentId)
-    .eq("sale_id", saleId)
-    .eq("user_id", userId)
+  const { data, error } = await supabase.rpc("delete_sale_payment_safe", {
+    p_user_id: userId,
+    p_sale_id: saleId,
+    p_payment_id: paymentId,
+  })
 
   if (error) {
-    return { success: false, message: "Erro ao excluir pagamento." }
+    return {
+      success: false,
+      message: error.message || "Erro ao excluir pagamento.",
+    }
+  }
+
+  const resultado = Array.isArray(data) ? data[0] : data
+
+  if (!resultado?.success) {
+    return {
+      success: false,
+      message: resultado?.message || "Não foi possível excluir o pagamento.",
+    }
   }
 
   return { success: true }

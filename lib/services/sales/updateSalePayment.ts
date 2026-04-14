@@ -27,62 +27,30 @@ export async function updateSalePayment(
     dataPagamentoIso,
   } = input
 
-  const { data: venda, error: erroVenda } = await supabase
-    .from("sales")
-    .select("id, valor_total, status")
-    .eq("id", saleId)
-    .eq("user_id", userId)
-    .maybeSingle()
+  const { data, error } = await supabase.rpc("update_sale_payment_safe", {
+    p_user_id: userId,
+    p_sale_id: saleId,
+    p_payment_id: paymentId,
+    p_valor: valor,
+    p_forma_pagamento: formaPagamento,
+    p_observacao: observacao,
+    p_data_pagamento: dataPagamentoIso,
+  })
 
-  if (erroVenda || !venda) {
-    return { success: false, message: "Venda não encontrada." }
-  }
-
-  if (venda.status === "Cancelada") {
-    return { success: false, message: "Não é possível editar pagamento de venda cancelada." }
-  }
-
-  const { data: pagamentos, error: erroPagamentos } = await supabase
-    .from("sale_payments")
-    .select("id, valor")
-    .eq("sale_id", saleId)
-    .eq("user_id", userId)
-
-  if (erroPagamentos) {
-    return { success: false, message: "Erro ao validar pagamentos da venda." }
-  }
-
-  const pagamentoAtual = (pagamentos ?? []).find((p) => p.id === paymentId)
-
-  if (!pagamentoAtual) {
-    return { success: false, message: "Pagamento não encontrado." }
-  }
-
-  const totalOutrosPagamentos = (pagamentos ?? [])
-    .filter((p) => p.id !== paymentId)
-    .reduce((soma, p) => soma + Number(p.valor), 0)
-
-  if (totalOutrosPagamentos + valor > Number(venda.valor_total)) {
+  if (error) {
     return {
       success: false,
-      message: "A soma dos pagamentos não pode ultrapassar o valor total da venda.",
+      message: error.message || "Erro ao atualizar pagamento.",
     }
   }
 
-  const { error } = await supabase
-    .from("sale_payments")
-    .update({
-      valor,
-      forma_pagamento: formaPagamento,
-      observacao,
-      created_at: dataPagamentoIso,
-    })
-    .eq("id", paymentId)
-    .eq("sale_id", saleId)
-    .eq("user_id", userId)
+  const resultado = Array.isArray(data) ? data[0] : data
 
-  if (error) {
-    return { success: false, message: "Erro ao atualizar pagamento." }
+  if (!resultado?.success) {
+    return {
+      success: false,
+      message: resultado?.message || "Não foi possível atualizar o pagamento.",
+    }
   }
 
   return { success: true }
