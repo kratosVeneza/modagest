@@ -55,6 +55,9 @@ type FinancialTransaction = {
   due_date: string | null
   paid_at: string | null
   created_at: string
+  reference_type: string | null
+  reference_id: number | null
+  sale_payment_id: number | null
 }
 
 type Produto = {
@@ -185,10 +188,11 @@ export default function Dashboard() {
       .select("*")
       .eq("user_id", user.id)
 
-    const { data: movimentacoesData } = await supabase
+        const { data: movimentacoesData } = await supabase
       .from("financial_transactions")
       .select("*")
       .eq("user_id", user.id)
+      .neq("reference_type", "venda")
 
     const { data: clientesData } = await supabase
       .from("customers")
@@ -452,9 +456,9 @@ setMovimentacoesFinanceiras(movimentacoesLista)
   const entradasPagasTotal =
     pagamentosLista.reduce((soma, p) => soma + Number(p.valor), 0) + entradasManuaisPagas
 
-  const saldoAtualCalculado = entradasPagasTotal - saidasManuaisPagas
+    const saldoAtualCalculado = entradasPagasTotal - saidasManuaisPagas
   const saldoPrevistoCalculado =
-    saldoAtualCalculado + entradasManuaisPendentes - saidasManuaisPendentes
+    saldoAtualCalculado + entradasManuaisPendentes + emAbertoAtual - saidasManuaisPendentes
 
   setFaturamento(faturamentoAtual)
   setRecebido(recebidoAtual)
@@ -464,7 +468,7 @@ setMovimentacoesFinanceiras(movimentacoesLista)
   setSaldoAtual(saldoAtualCalculado)
   setSaldoPrevisto(saldoPrevistoCalculado)
   setDespesasPendentes(saidasManuaisPendentes)
-  setEntradasPendentes(entradasManuaisPendentes)
+  setEntradasPendentes(entradasManuaisPendentes + emAbertoAtual)
 
   setFaturamentoComparacao(faturamentoAnterior)
   setRecebidoComparacao(recebidoAnterior)

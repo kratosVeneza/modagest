@@ -9,7 +9,16 @@ import AnimatedModal from "../../components/AnimatedModal"
 import HelpTooltip from "../../components/HelpTooltip"
 import HelpBanner from "../../components/InfoBanner"
 import { getMyPlanAccess } from "@/lib/getMyPlanAccess"
+import {
+  getFinancialTransactions,
+  type FinancialTransaction,
+} from "@/lib/services/financial/getFinancialTransactions"
 import FeatureBlockedCard from "@/app/components/FeatureBlockedCard"
+import { createFinancialTransaction } from "@/lib/services/financial/createFinancialTransaction"
+import { updateFinancialTransaction } from "@/lib/services/financial/updateFinancialTransaction"
+import { deleteFinancialTransaction } from "@/lib/services/financial/deleteFinancialTransaction"
+import { markFinancialTransactionPaid } from "@/lib/services/financial/markFinancialTransactionPaid"
+
 
 type SalePayment = {
   id: number
@@ -17,19 +26,6 @@ type SalePayment = {
   valor: number
   forma_pagamento: string
   observacao: string | null
-  created_at: string
-}
-
-type FinancialTransaction = {
-  id: number
-  user_id: string
-  type: "entrada" | "saida"
-  description: string
-  category: string | null
-  amount: number
-  status: "pago" | "pendente"
-  due_date: string | null
-  paid_at: string | null
   created_at: string
 }
 
@@ -200,20 +196,17 @@ export default function Financeiro() {
   idsVendasAtivas.has(p.sale_id)
 )
 
-  const { data: movsData, error: movsError } = await supabase
-    .from("financial_transactions")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
+  const resultadoMovimentacoes = await getFinancialTransactions(user.id)
 
-  if (movsError) {
-    setMensagem("Erro ao carregar movimentações financeiras.")
+  if (!resultadoMovimentacoes.success) {
+    setMensagem(resultadoMovimentacoes.message)
     return
   }
 
   setPagamentosVendas(pagamentosValidos)
   setVendas(vendasAtivas)
-  setMovimentacoes((movsData ?? []) as FinancialTransaction[])
+  setMovimentacoes(resultadoMovimentacoes.transactions)
+
 }
 
   function abrirNovoModal() {
@@ -253,121 +246,107 @@ export default function Financeiro() {
   }
 
   async function salvarMovimentacao() {
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
-
-    if (!descricao.trim() || Number(valor || 0) <= 0) {
-      setMensagem("Informe descrição e valor válido.")
-      return
-    }
-
-    if (status === "pago" && !dataPagamento) {
-      setMensagem("Informe a data de pagamento.")
-      return
-    }
-
-    const payload = {
-      user_id: user.id,
-      type: tipo,
-      description: descricao.trim(),
-      category: categoria || null,
-      amount: Number(valor),
-      status,
-      due_date: montarDataISO(dataVencimento),
-      paid_at: status === "pago" ? montarDataISO(dataPagamento) : null,
-    }
-
-    if (idEdicao) {
-      const { error } = await supabase
-        .from("financial_transactions")
-        .update(payload)
-        .eq("id", idEdicao)
-        .eq("user_id", user.id)
-
-      if (error) {
-        setMensagem("Erro ao atualizar movimentação.")
-        return
-      }
-
-      fecharModal()
-      await carregarFinanceiro()
-      return
-    }
-
-    const { error } = await supabase.from("financial_transactions").insert([payload])
-
-    if (error) {
-      setMensagem("Erro ao cadastrar movimentação.")
-      return
-    }
-
-    fecharModal()
-    await carregarFinanceiro()
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
   }
+
+  if (!descricao.trim() || Number(valor || 0) <= 0) {
+    setMensagem("Informe descrição e valor válido.")
+    return
+  }
+
+  if (status === "pago" && !dataPagamento) {
+    setMensagem("Informe a data de pagamento.")
+    return
+  }
+
+  const payload = {
+    userId: user.id,
+    type: tipo,
+    description: descricao.trim(),
+    category: categoria || null,
+    amount: Number(valor),
+    status,
+    due_date: montarDataISO(dataVencimento),
+    paid_at: status === "pago" ? montarDataISO(dataPagamento) : null,
+  }
+
+  if (idEdicao) {
+    const result = await updateFinancialTransaction({
+      ...payload,
+      id: idEdicao,
+    })
+
+    if (!result.success) {
+      setMensagem(result.message)
+      return
+    }
+  } else {
+    const result = await createFinancialTransaction(payload)
+
+    if (!result.success) {
+      setMensagem(result.message)
+      return
+    }
+  }
+
+  fecharModal()
+  await carregarFinanceiro()
+}
 
   async function excluirMovimentacao(id: number) {
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
-
-    const { error } = await supabase
-      .from("financial_transactions")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id)
-
-    if (error) {
-      setMensagem("Erro ao excluir movimentação.")
-      return
-    }
-
-    await carregarFinanceiro()
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
   }
+
+  const result = await deleteFinancialTransaction(id, user.id)
+
+  if (!result.success) {
+    setMensagem(result.message)
+    return
+  }
+
+  await carregarFinanceiro()
+}
 
   async function marcarComoPago(item: FinancialTransaction) {
-    setMensagem("")
-    if (item.status === "pago") return
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  if (item.status === "pago") return
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    const { error } = await supabase
-      .from("financial_transactions")
-      .update({
-        status: "pago",
-        paid_at: new Date().toISOString(),
-      })
-      .eq("id", item.id)
-      .eq("user_id", user.id)
-
-    if (error) {
-      setMensagem("Erro ao marcar como pago.")
-      return
-    }
-
-    await carregarFinanceiro()
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
   }
+
+  const result = await markFinancialTransactionPaid(item.id, user.id)
+
+  if (!result.success) {
+    setMensagem(result.message)
+    return
+  }
+
+  await carregarFinanceiro()
+}
+
 
   function formatarData(dataIso?: string | null) {
     if (!dataIso) return "-"

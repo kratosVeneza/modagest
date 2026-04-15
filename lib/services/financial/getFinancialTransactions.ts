@@ -11,6 +11,9 @@ export type FinancialTransaction = {
   due_date: string | null
   paid_at: string | null
   created_at: string
+  reference_type: string | null
+  reference_id: number | null
+  sale_payment_id: number | null
 }
 
 type GetFinancialTransactionsResult =
