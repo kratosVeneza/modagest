@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 
 type Patient = {
@@ -93,7 +93,8 @@ export default function PagamentosServicoPage() {
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
 
-  const [billingIdPagamento, setBillingIdPagamento] = useState<number | null>(null)
+    const [billingIdPagamento, setBillingIdPagamento] = useState<number | null>(null)
+  const [paymentIdEdicao, setPaymentIdEdicao] = useState<number | null>(null)
   const [valorPagamento, setValorPagamento] = useState("")
   const [dataPagamento, setDataPagamento] = useState(hojeInputDate())
   const [formaPagamento, setFormaPagamento] = useState("Pix")
@@ -376,7 +377,7 @@ export default function PagamentosServicoPage() {
     await carregarDados()
   }
 
-    async function adicionarPagamento(cobranca: ServiceBilling) {
+      async function adicionarPagamento(cobranca: ServiceBilling) {
     setMensagem("")
 
     const {
@@ -395,64 +396,111 @@ export default function PagamentosServicoPage() {
       return
     }
 
-    const totalPagoAtual = totalPagoDaCobranca(cobranca.id)
-    const emAbertoAtual = Math.max(Number(cobranca.valor_total) - totalPagoAtual, 0)
+    const pagamentosDaCobranca = pagamentos.filter((p) => p.billing_id === cobranca.id)
+
+    const totalPagoOutros = pagamentosDaCobranca
+      .filter((p) => p.id !== paymentIdEdicao)
+      .reduce((soma, p) => soma + Number(p.valor), 0)
+
+    const emAbertoAtual = Math.max(Number(cobranca.valor_total) - totalPagoOutros, 0)
 
     if (valor > emAbertoAtual) {
       setMensagem("O pagamento não pode ser maior que o valor em aberto.")
       return
     }
 
-    const { data: pagamentoInserido, error: pagamentoError } = await supabase
-      .from("service_payments")
-      .insert([
-        {
-          user_id: user.id,
-          billing_id: cobranca.id,
-          patient_id: cobranca.patient_id,
-          servico: cobranca.servico,
+    let paymentIdFinal: number | null = null
+
+    if (paymentIdEdicao) {
+      const { error: updateError } = await supabase
+        .from("service_payments")
+        .update({
           valor,
           forma_pagamento: formaPagamento || null,
           observacao: observacaoPagamento || null,
           data_pagamento: dataPagamento,
-          competencia_inicio: cobranca.competencia_inicio || null,
-          competencia_fim: cobranca.competencia_fim || null,
-        },
-      ])
-      .select("id")
-      .single()
+        })
+        .eq("id", paymentIdEdicao)
+        .eq("user_id", user.id)
 
-    if (pagamentoError || !pagamentoInserido) {
-      setMensagem(pagamentoError?.message || "Erro ao adicionar pagamento.")
-      return
-    }
+      if (updateError) {
+        setMensagem(updateError.message || "Erro ao editar pagamento.")
+        return
+      }
 
-    const nomePaciente = cobranca.patients?.nome || "Paciente"
+      paymentIdFinal = paymentIdEdicao
 
-    const { error: financeiroError } = await supabase
-      .from("financial_transactions")
-      .insert([
-        {
-          user_id: user.id,
-          type: "entrada",
+      const { error: financeiroUpdateError } = await supabase
+        .from("financial_transactions")
+        .update({
           amount: valor,
-          status: "pago",
-          description: `Recebimento de serviço - ${cobranca.servico} - ${nomePaciente}`,
-          category: "Serviço",
-          reference_type: "servico",
-          reference_id: pagamentoInserido.id,
+          description: `Recebimento de serviço - ${cobranca.servico} - ${cobranca.patients?.nome || "Paciente"}`,
           created_at: new Date(`${dataPagamento}T12:00:00-03:00`).toISOString(),
           paid_at: new Date(`${dataPagamento}T12:00:00-03:00`).toISOString(),
-        },
-      ])
+        })
+        .eq("user_id", user.id)
+        .eq("reference_type", "servico")
+        .eq("reference_id", paymentIdEdicao)
 
-    if (financeiroError) {
-      setMensagem("Pagamento adicionado, mas houve erro ao lançar no financeiro.")
-      await carregarDados()
-      return
+      if (financeiroUpdateError) {
+        setMensagem("Pagamento editado, mas houve erro ao atualizar o financeiro.")
+        await carregarDados()
+        return
+      }
+    } else {
+      const { data: pagamentoInserido, error: pagamentoError } = await supabase
+        .from("service_payments")
+        .insert([
+          {
+            user_id: user.id,
+            billing_id: cobranca.id,
+            patient_id: cobranca.patient_id,
+            servico: cobranca.servico,
+            valor,
+            forma_pagamento: formaPagamento || null,
+            observacao: observacaoPagamento || null,
+            data_pagamento: dataPagamento,
+            competencia_inicio: cobranca.competencia_inicio || null,
+            competencia_fim: cobranca.competencia_fim || null,
+          },
+        ])
+        .select("id")
+        .single()
+
+      if (pagamentoError || !pagamentoInserido) {
+        setMensagem(pagamentoError?.message || "Erro ao adicionar pagamento.")
+        return
+      }
+
+      paymentIdFinal = pagamentoInserido.id
+
+      const nomePaciente = cobranca.patients?.nome || "Paciente"
+
+      const { error: financeiroError } = await supabase
+        .from("financial_transactions")
+        .insert([
+          {
+            user_id: user.id,
+            type: "entrada",
+            amount: valor,
+            status: "pago",
+            description: `Recebimento de serviço - ${cobranca.servico} - ${nomePaciente}`,
+            category: "Serviço",
+            reference_type: "servico",
+            reference_id: paymentIdFinal,
+            created_at: new Date(`${dataPagamento}T12:00:00-03:00`).toISOString(),
+            paid_at: new Date(`${dataPagamento}T12:00:00-03:00`).toISOString(),
+          },
+        ])
+
+      if (financeiroError) {
+        setMensagem("Pagamento adicionado, mas houve erro ao lançar no financeiro.")
+        await carregarDados()
+        return
+      }
     }
 
-    const totalPagoFinal = totalPagoAtual + valor
+    const totalPagoFinal = totalPagoOutros + valor
     const novoStatus = totalPagoFinal >= Number(cobranca.valor_total) ? "quitada" : "ativa"
 
     await supabase
@@ -462,12 +510,64 @@ export default function PagamentosServicoPage() {
       .eq("user_id", user.id)
 
     setBillingIdPagamento(null)
+    setPaymentIdEdicao(null)
     setValorPagamento("")
     setDataPagamento(hojeInputDate())
     setFormaPagamento("Pix")
     setObservacaoPagamento("")
 
-    setMensagem("Pagamento adicionado com sucesso.")
+    setMensagem(paymentIdEdicao ? "Pagamento editado com sucesso." : "Pagamento adicionado com sucesso.")
+    await carregarDados()
+  }
+
+    async function excluirPagamento(cobranca: ServiceBilling, pagamento: ServicePayment) {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const { error: financeiroDeleteError } = await supabase
+      .from("financial_transactions")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("reference_type", "servico")
+      .eq("reference_id", pagamento.id)
+
+    if (financeiroDeleteError) {
+      setMensagem(financeiroDeleteError.message || "Erro ao excluir lançamento financeiro do pagamento.")
+      return
+    }
+
+    const { error: pagamentoDeleteError } = await supabase
+      .from("service_payments")
+      .delete()
+      .eq("id", pagamento.id)
+      .eq("user_id", user.id)
+
+    if (pagamentoDeleteError) {
+      setMensagem(pagamentoDeleteError.message || "Erro ao excluir pagamento.")
+      return
+    }
+
+    const pagamentosRestantes = pagamentos
+      .filter((p) => p.billing_id === cobranca.id && p.id !== pagamento.id)
+      .reduce((soma, p) => soma + Number(p.valor), 0)
+
+    const novoStatus = pagamentosRestantes >= Number(cobranca.valor_total) ? "quitada" : "ativa"
+
+    await supabase
+      .from("service_billings")
+      .update({ status: novoStatus })
+      .eq("id", cobranca.id)
+      .eq("user_id", user.id)
+
+    setMensagem("Pagamento excluído com sucesso.")
     await carregarDados()
   }
 
@@ -496,6 +596,15 @@ export default function PagamentosServicoPage() {
 
     setMensagem("Cobrança cancelada com sucesso.")
     await carregarDados()
+  }
+
+    function editarPagamentoExistente(pagamento: ServicePayment) {
+    setBillingIdPagamento(pagamento.billing_id || null)
+    setPaymentIdEdicao(pagamento.id)
+    setValorPagamento(String(Number(pagamento.valor)))
+    setDataPagamento(pagamento.data_pagamento || hojeInputDate())
+    setFormaPagamento(pagamento.forma_pagamento || "Pix")
+    setObservacaoPagamento(pagamento.observacao || "")
   }
 
     const cobrancasFiltradas = useMemo(() => {
@@ -794,95 +903,163 @@ export default function PagamentosServicoPage() {
               </tr>
             </thead>
             <tbody>
-                            {cobrancasFiltradas.map((c) => (
-                <tr key={c.id}>
-                  <td style={td}>{c.patients?.nome || "-"}</td>
-                  <td style={td}>{c.servico || "-"}</td>
-                  <td style={td}>R$ {Number(c.valor_original).toFixed(2)}</td>
-                  <td style={td}>
-                    {Number(c.desconto_percentual || 0) > 0
-                      ? `${Number(c.desconto_percentual).toFixed(2)}%`
-                      : `R$ ${Number(c.desconto_valor || 0).toFixed(2)}`}
-                  </td>
-                  <td style={td}>R$ {Number(c.valor_total).toFixed(2)}</td>
-                  <td style={td}>R$ {totalPagoDaCobranca(c.id).toFixed(2)}</td>
-                  <td style={td}>R$ {valorEmAbertoDaCobranca(c).toFixed(2)}</td>
-                  <td style={td}>
-                    {new Date(`${c.data_vencimento}T12:00:00`).toLocaleDateString("pt-BR")}
-                  </td>
-                  <td style={td}>
-                    {c.data_restante_sugerida
-                      ? new Date(`${c.data_restante_sugerida}T12:00:00`).toLocaleDateString("pt-BR")
-                      : "-"}
-                  </td>
-                  <td style={td}>
-                    {c.competencia_inicio
-                      ? new Date(`${c.competencia_inicio}T12:00:00`).toLocaleDateString("pt-BR")
-                      : "-"}{" "}
-                    até{" "}
-                    {c.competencia_fim
-                      ? new Date(`${c.competencia_fim}T12:00:00`).toLocaleDateString("pt-BR")
-                      : "-"}
-                  </td>
-                                    <td style={td}>{c.status}</td>
-                  <td style={td}>{c.observacao || "-"}</td>
-                  <td style={td}>
-                    <div style={{ display: "grid", gap: 8 }}>
-                      {c.status !== "cancelada" && valorEmAbertoDaCobranca(c) > 0 && (
-                        <div style={{ display: "grid", gap: 6 }}>
-                          <input
-                            type="number"
-                            step="0.01"
-                            placeholder="Valor pagamento"
-                            value={billingIdPagamento === c.id ? valorPagamento : ""}
-                            onChange={(e) => {
-                              setBillingIdPagamento(c.id)
-                              setValorPagamento(e.target.value)
-                            }}
-                          />
-                          <input
-                            type="date"
-                            value={billingIdPagamento === c.id ? dataPagamento : hojeInputDate()}
-                            onChange={(e) => {
-                              setBillingIdPagamento(c.id)
-                              setDataPagamento(e.target.value)
-                            }}
-                          />
-                          <select
-                            value={billingIdPagamento === c.id ? formaPagamento : "Pix"}
-                            onChange={(e) => {
-                              setBillingIdPagamento(c.id)
-                              setFormaPagamento(e.target.value)
-                            }}
-                          >
-                            <option value="Pix">Pix</option>
-                            <option value="Dinheiro">Dinheiro</option>
-                            <option value="Cartão de débito">Cartão de débito</option>
-                            <option value="Cartão de crédito">Cartão de crédito</option>
-                            <option value="Transferência">Transferência</option>
-                            <option value="Outro">Outro</option>
-                          </select>
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() => adicionarPagamento(c)}
-                          >
-                            Adicionar pagamento
-                          </button>
-                        </div>
-                      )}
+                               {cobrancasFiltradas.map((c) => {
+                const pagamentosDaCobranca = pagamentos.filter((p) => p.billing_id === c.id)
 
-                      {c.status !== "cancelada" && (
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => cancelarCobranca(c.id)}
-                        >
-                          Cancelar cobrança
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                 return (
+                  <Fragment key={c.id}>
+                    <tr key={c.id}>
+                      <td style={td}>{c.patients?.nome || "-"}</td>
+                      <td style={td}>{c.servico || "-"}</td>
+                      <td style={td}>R$ {Number(c.valor_original).toFixed(2)}</td>
+                      <td style={td}>
+                        {Number(c.desconto_percentual || 0) > 0
+                          ? `${Number(c.desconto_percentual).toFixed(2)}%`
+                          : `R$ ${Number(c.desconto_valor || 0).toFixed(2)}`}
+                      </td>
+                      <td style={td}>R$ {Number(c.valor_total).toFixed(2)}</td>
+                      <td style={td}>R$ {totalPagoDaCobranca(c.id).toFixed(2)}</td>
+                      <td style={td}>R$ {valorEmAbertoDaCobranca(c).toFixed(2)}</td>
+                      <td style={td}>
+                        {new Date(`${c.data_vencimento}T12:00:00`).toLocaleDateString("pt-BR")}
+                      </td>
+                      <td style={td}>
+                        {c.data_restante_sugerida
+                          ? new Date(`${c.data_restante_sugerida}T12:00:00`).toLocaleDateString("pt-BR")
+                          : "-"}
+                      </td>
+                      <td style={td}>
+                        {c.competencia_inicio
+                          ? new Date(`${c.competencia_inicio}T12:00:00`).toLocaleDateString("pt-BR")
+                          : "-"}{" "}
+                        até{" "}
+                        {c.competencia_fim
+                          ? new Date(`${c.competencia_fim}T12:00:00`).toLocaleDateString("pt-BR")
+                          : "-"}
+                      </td>
+                      <td style={td}>{c.status}</td>
+                      <td style={td}>{c.observacao || "-"}</td>
+                      <td style={td}>
+                        <div style={{ display: "grid", gap: 8 }}>
+                          {c.status !== "cancelada" && valorEmAbertoDaCobranca(c) > 0 && (
+                            <div style={{ display: "grid", gap: 6 }}>
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="Valor pagamento"
+                                value={billingIdPagamento === c.id ? valorPagamento : ""}
+                                onChange={(e) => {
+                                  setBillingIdPagamento(c.id)
+                                  setPaymentIdEdicao(null)
+                                  setValorPagamento(e.target.value)
+                                }}
+                              />
+                              <input
+                                type="date"
+                                value={billingIdPagamento === c.id ? dataPagamento : hojeInputDate()}
+                                onChange={(e) => {
+                                  setBillingIdPagamento(c.id)
+                                  setPaymentIdEdicao(null)
+                                  setDataPagamento(e.target.value)
+                                }}
+                              />
+                              <select
+                                value={billingIdPagamento === c.id ? formaPagamento : "Pix"}
+                                onChange={(e) => {
+                                  setBillingIdPagamento(c.id)
+                                  setPaymentIdEdicao(null)
+                                  setFormaPagamento(e.target.value)
+                                }}
+                              >
+                                <option value="Pix">Pix</option>
+                                <option value="Dinheiro">Dinheiro</option>
+                                <option value="Cartão de débito">Cartão de débito</option>
+                                <option value="Cartão de crédito">Cartão de crédito</option>
+                                <option value="Transferência">Transferência</option>
+                                <option value="Outro">Outro</option>
+                              </select>
+                              <input
+                                type="text"
+                                placeholder="Observação do pagamento"
+                                value={billingIdPagamento === c.id ? observacaoPagamento : ""}
+                                onChange={(e) => {
+                                  setBillingIdPagamento(c.id)
+                                  setPaymentIdEdicao(null)
+                                  setObservacaoPagamento(e.target.value)
+                                }}
+                              />
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => adicionarPagamento(c)}
+                              >
+                                {billingIdPagamento === c.id && paymentIdEdicao ? "Salvar edição" : "Adicionar pagamento"}
+                              </button>
+                            </div>
+                          )}
+
+                          {c.status !== "cancelada" && (
+                            <button
+                              className="btn btn-danger btn-sm"
+                              onClick={() => cancelarCobranca(c.id)}
+                            >
+                              Cancelar cobrança
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+
+                    {pagamentosDaCobranca.length > 0 && (
+                      <tr key={`pagamentos-${c.id}`}>
+                        <td style={{ ...td, background: "#f8fafc" }} colSpan={13}>
+                          <div style={{ display: "grid", gap: 8 }}>
+                            <strong>Pagamentos da cobrança</strong>
+
+                            {pagamentosDaCobranca.map((p) => (
+                              <div
+                                key={p.id}
+                                style={{
+                                  display: "flex",
+                                  gap: 8,
+                                  flexWrap: "wrap",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  border: "1px solid #e5e7eb",
+                                  borderRadius: 8,
+                                  padding: 10,
+                                  background: "#fff",
+                                }}
+                              >
+                                <div style={{ display: "grid", gap: 4 }}>
+                                  <span>Valor: R$ {Number(p.valor).toFixed(2)}</span>
+                                  <span>Data: {new Date(`${p.data_pagamento}T12:00:00`).toLocaleDateString("pt-BR")}</span>
+                                  <span>Forma: {p.forma_pagamento || "-"}</span>
+                                  <span>Obs.: {p.observacao || "-"}</span>
+                                </div>
+
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => editarPagamentoExistente(p)}
+                                  >
+                                    Editar pagamento
+                                  </button>
+                                  <button
+                                    className="btn btn-danger btn-sm"
+                                    onClick={() => excluirPagamento(c, p)}
+                                  >
+                                    Excluir pagamento
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                </Fragment>
+                )
+              })}
 
                 {cobrancasFiltradas.length === 0 && (
                 <tr>
