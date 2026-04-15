@@ -34,6 +34,18 @@ type Pagamento = {
   created_at: string
 }
 
+type ServicePayment = {
+  id: number
+  patient_id: number
+  valor: number
+  forma_pagamento: string | null
+  observacao: string | null
+  data_pagamento: string
+  competencia_inicio: string | null
+  competencia_fim: string | null
+  created_at: string
+}
+
 type Venda = {
   id: number
   product_id: number
@@ -116,8 +128,9 @@ const periodos: { value: Periodo; label: string }[] = [
 ]
 
 export default function Dashboard() {
-  const [vendas, setVendas] = useState<Venda[]>([])
+    const [vendas, setVendas] = useState<Venda[]>([])
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
+  const [pagamentosServicos, setPagamentosServicos] = useState<ServicePayment[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [movimentacoesFinanceiras, setMovimentacoesFinanceiras] = useState<FinancialTransaction[]>([])
@@ -170,9 +183,9 @@ const [servicosRecebidosComparacao, setServicosRecebidosComparacao] = useState(0
   }
 }, [])
 
- useEffect(() => {
-  calcular(vendas, pagamentos, produtos, clientes, movimentacoesFinanceiras)
-}, [periodo, vendas, pagamentos, produtos, clientes, movimentacoesFinanceiras])
+  useEffect(() => {
+  calcular(vendas, pagamentos, pagamentosServicos, produtos, clientes, movimentacoesFinanceiras)
+}, [periodo, vendas, pagamentos, pagamentosServicos, produtos, clientes, movimentacoesFinanceiras])
 
   async function carregarDados() {
     const {
@@ -191,16 +204,20 @@ const [servicosRecebidosComparacao, setServicosRecebidosComparacao] = useState(0
       .select("*")
       .eq("user_id", user.id)
 
+          const { data: pagamentosServicosData } = await supabase
+      .from("service_payments")
+      .select("*")
+      .eq("user_id", user.id)
+
     const { data: produtosData } = await supabase
       .from("products")
       .select("*")
       .eq("user_id", user.id)
 
-        const { data: movimentacoesData } = await supabase
+            const { data: movimentacoesData } = await supabase
       .from("financial_transactions")
       .select("*")
       .eq("user_id", user.id)
-      .neq("reference_type", "venda")
 
     const { data: clientesData } = await supabase
       .from("customers")
@@ -209,15 +226,21 @@ const [servicosRecebidosComparacao, setServicosRecebidosComparacao] = useState(0
 
     const vendasLista = (vendasData || []) as Venda[]
 const pagamentosLista = (pagamentosData || []) as Pagamento[]
+const pagamentosServicosLista = (pagamentosServicosData || []) as ServicePayment[]
 const produtosLista = (produtosData || []) as Produto[]
 const clientesLista = (clientesData || []) as Cliente[]
 const movimentacoesLista = (movimentacoesData || []) as FinancialTransaction[]
 
+const movimentacoesManuais = movimentacoesLista.filter(
+  (m) => m.reference_type !== "venda" && m.reference_type !== "servico"
+)
+
 setVendas(vendasLista)
 setPagamentos(pagamentosLista)
+setPagamentosServicos(pagamentosServicosLista)
 setProdutos(produtosLista)
 setClientes(clientesLista)
-setMovimentacoesFinanceiras(movimentacoesLista) 
+setMovimentacoesFinanceiras(movimentacoesManuais) 
   }
 
   function obterIntervalos() {
@@ -289,15 +312,21 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     }
 
     if (periodo === "tudo") {
-      const datasVendas = vendas.map((v) => new Date(v.created_at).getTime())
+            const datasVendas = vendas.map((v) => new Date(v.created_at).getTime())
       const datasPagamentos = pagamentos.map((p) => new Date(p.created_at).getTime())
+      const datasPagamentosServicos = pagamentosServicos.map((p) =>
+        new Date(`${p.data_pagamento}T12:00:00`).getTime()
+      )
       const datasMovimentacoes = movimentacoesFinanceiras.map((m) =>
         new Date((m.paid_at || m.created_at) as string).getTime()
       )
 
-      const todasDatas = [...datasVendas, ...datasPagamentos, ...datasMovimentacoes].filter(
-        (item) => !Number.isNaN(item)
-      )
+      const todasDatas = [
+        ...datasVendas,
+        ...datasPagamentos,
+        ...datasPagamentosServicos,
+        ...datasMovimentacoes,
+      ].filter((item) => !Number.isNaN(item))
 
       const menorData = todasDatas.length > 0 ? Math.min(...todasDatas) : agora.getTime()
 
@@ -340,9 +369,10 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     }
   }
 
-  const calcular = (
+    const calcular = (
   vendasLista: Venda[],
   pagamentosLista: Pagamento[],
+  pagamentosServicosLista: ServicePayment[],
   produtosLista: Produto[],
   clientesLista: Cliente[],
   movimentacoesLista: FinancialTransaction[]
@@ -400,42 +430,30 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     0
   )
 
-  const servicosRecebidosAtual = movimentacoesLista
-    .filter((m) => {
-      const dataBase = m.paid_at || m.created_at
-      const data = new Date(dataBase)
-      return (
-        m.reference_type === "servico" &&
-        m.type === "entrada" &&
-        m.status === "pago" &&
-        data >= inicioAtual &&
-        data <= fimAtual
-      )
-    })
-    .reduce((soma, m) => soma + Number(m.amount), 0)
+    const pagamentosServicosAtual = pagamentosServicosLista.filter((p) => {
+    const data = new Date(`${p.data_pagamento}T12:00:00`)
+    return data >= inicioAtual && data <= fimAtual
+  })
 
-      const servicosRecebidosTotal = movimentacoesLista
-    .filter(
-      (m) =>
-        m.reference_type === "servico" &&
-        m.type === "entrada" &&
-        m.status === "pago"
-    )
-    .reduce((soma, m) => soma + Number(m.amount), 0)
+  const pagamentosServicosAnterior = pagamentosServicosLista.filter((p) => {
+    const data = new Date(`${p.data_pagamento}T12:00:00`)
+    return data >= inicioAnterior && data <= fimAnterior
+  })
 
-  const servicosRecebidosAnterior = movimentacoesLista
-    .filter((m) => {
-      const dataBase = m.paid_at || m.created_at
-      const data = new Date(dataBase)
-      return (
-        m.reference_type === "servico" &&
-        m.type === "entrada" &&
-        m.status === "pago" &&
-        data >= inicioAnterior &&
-        data <= fimAnterior
-      )
-    })
-    .reduce((soma, m) => soma + Number(m.amount), 0)
+  const servicosRecebidosAtual = pagamentosServicosAtual.reduce(
+    (soma, pagamento) => soma + Number(pagamento.valor),
+    0
+  )
+
+  const servicosRecebidosTotal = pagamentosServicosLista.reduce(
+    (soma, pagamento) => soma + Number(pagamento.valor),
+    0
+  )
+
+  const servicosRecebidosAnterior = pagamentosServicosAnterior.reduce(
+    (soma, pagamento) => soma + Number(pagamento.valor),
+    0
+  )
 
   const recebidoAtual = recebidoVendasAtual + servicosRecebidosAtual
   const recebidoAnterior = recebidoVendasAnterior + servicosRecebidosAnterior
@@ -485,26 +503,16 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     lucroAnterior += Number(pagamento.valor) - custoProporcional
   })
 
-  const entradasManuaisPagas = movimentacoesLista
-    .filter(
-      (m) =>
-        m.reference_type !== "servico" &&
-        m.type === "entrada" &&
-        m.status === "pago"
-    )
+    const entradasManuaisPagas = movimentacoesLista
+    .filter((m) => m.type === "entrada" && m.status === "pago")
     .reduce((soma, m) => soma + Number(m.amount), 0)
 
   const saidasManuaisPagas = movimentacoesLista
     .filter((m) => m.type === "saida" && m.status === "pago")
     .reduce((soma, m) => soma + Number(m.amount), 0)
 
-  const entradasManuaisPendentes = movimentacoesLista
-    .filter(
-      (m) =>
-        m.reference_type !== "servico" &&
-        m.type === "entrada" &&
-        m.status === "pendente"
-    )
+    const entradasManuaisPendentes = movimentacoesLista
+    .filter((m) => m.type === "entrada" && m.status === "pendente")
     .reduce((soma, m) => soma + Number(m.amount), 0)
 
   const saidasManuaisPendentes = movimentacoesLista
@@ -538,27 +546,15 @@ setMovimentacoesFinanceiras(movimentacoesLista)
   setServicosRecebidosComparacao(servicosRecebidosAnterior)
 
   gerarGraficoVendas(vendasPeriodoAtual, inicioAtual, quantidadeDias)
-    const entradasRecebidasPeriodo = [
+        const entradasRecebidasPeriodo = [
     ...pagamentosAtual.map((p) => ({
       created_at: p.created_at,
       valor: Number(p.valor),
     })),
-    ...movimentacoesLista
-      .filter((m) => {
-        const dataBase = m.paid_at || m.created_at
-        const data = new Date(dataBase)
-        return (
-          m.reference_type === "servico" &&
-          m.type === "entrada" &&
-          m.status === "pago" &&
-          data >= inicioAtual &&
-          data <= fimAtual
-        )
-      })
-      .map((m) => ({
-        created_at: (m.paid_at || m.created_at) as string,
-        valor: Number(m.amount),
-      })),
+    ...pagamentosServicosAtual.map((p) => ({
+      created_at: new Date(`${p.data_pagamento}T12:00:00-03:00`).toISOString(),
+      valor: Number(p.valor),
+    })),
   ]
 
   gerarGraficoRecebido(entradasRecebidasPeriodo, inicioAtual, quantidadeDias)
@@ -789,7 +785,17 @@ setMovimentacoesFinanceiras(movimentacoesLista)
       }
     }
 
-    if (faturamento <= 0) {
+        if (faturamento <= 0 && servicosRecebidos > 0) {
+      return {
+        titulo: "Serviços em andamento",
+        texto: `Você recebeu R$ ${servicosRecebidos.toFixed(2)} em serviços no período selecionado.`,
+        cor: "#166534",
+        fundo: "#ecfdf5",
+        borda: "#a7f3d0",
+      }
+    }
+
+    if (faturamento <= 0 && servicosRecebidos <= 0) {
       return {
         titulo: "Sem movimento no período",
         texto: "Ainda não há vendas ou serviços recebidos no período selecionado.",

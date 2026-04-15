@@ -470,21 +470,6 @@ export default function Financeiro() {
   return acc
 }, [])
 
-  const servicosAutomaticos: LinhaFinanceira[] = movimentacoes
-    .filter((m) => m.reference_type === "servico")
-    .map((m) => ({
-      origem: "servico",
-      id: `servico-${m.id}`,
-      tipo: m.type,
-      descricao: m.description,
-      categoria: m.category || "Serviço",
-      valor: Number(m.amount),
-      status: m.status,
-      vencimento: m.due_date,
-      pagamento: m.paid_at,
-      criadoEm: m.created_at,
-    }))
-
   const linhasManuais: LinhaFinanceira[] = movimentacoes
     .filter((m) => m.reference_type !== "servico")
     .map((m) => ({
@@ -860,13 +845,13 @@ const passouBusca =
       : "-"}
   </td>
 
-  <td style={td}>
+    <td style={td}>
     {item.origem === "venda"
       ? item.descricao.includes("(")
         ? item.descricao.split("(")[1]?.replace(")", "")
         : "-"
       : item.origem === "servico"
-      ? item.descricao.replace(/^Recebimento de serviço - /, "")
+      ? item.descricao.replace(/^Serviço - /, "")
       : "-"}
   </td>
 
