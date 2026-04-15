@@ -19,6 +19,7 @@ type ServiceBilling = {
   competencia_inicio: string | null
   competencia_fim: string | null
   data_vencimento: string
+  data_restante_sugerida?: string | null
   valor_original: number
   desconto_percentual: number
   desconto_valor: number
@@ -77,7 +78,7 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
 
-      const [patientId, setPatientId] = useState("")
+    const [patientId, setPatientId] = useState("")
   const [servico, setServico] = useState("Pilates")
   const [valorOriginal, setValorOriginal] = useState("")
   const [descontoPercentual, setDescontoPercentual] = useState("")
@@ -86,6 +87,12 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
   const [dataVencimento, setDataVencimento] = useState(hojeInputDate())
   const [competenciaInicio, setCompetenciaInicio] = useState("")
   const [competenciaFim, setCompetenciaFim] = useState("")
+
+  const [valorPagoInicial, setValorPagoInicial] = useState("")
+  const [dataPagamentoInicial, setDataPagamentoInicial] = useState(hojeInputDate())
+  const [formaPagamentoInicial, setFormaPagamentoInicial] = useState("Pix")
+  const [observacaoPagamentoInicial, setObservacaoPagamentoInicial] = useState("")
+  const [dataRestanteSugerida, setDataRestanteSugerida] = useState(hojeInputDate())
 
   useEffect(() => {
     carregarDados()
@@ -124,6 +131,7 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
         competencia_inicio,
         competencia_fim,
         data_vencimento,
+        data_restante_sugerida,
         valor_original,
         desconto_percentual,
         desconto_valor,
@@ -145,7 +153,20 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
     setCobrancas((cobrancasData ?? []) as unknown as ServiceBilling[])
   }
 
-  async function registrarCobranca() {
+    const valorOriginalNumero = Number(valorOriginal || 0)
+  const descontoPercentualNumero = Number(descontoPercentual || 0)
+  const descontoValorNumeroDigitado = Number(descontoValor || 0)
+  const valorPagoInicialNumero = Number(valorPagoInicial || 0)
+
+  const descontoCalculado =
+    descontoPercentualNumero > 0
+      ? (valorOriginalNumero * descontoPercentualNumero) / 100
+      : descontoValorNumeroDigitado
+
+  const valorFinalCalculado = Math.max(valorOriginalNumero - descontoCalculado, 0)
+  const valorRestanteCalculado = Math.max(valorFinalCalculado - valorPagoInicialNumero, 0)
+
+    async function registrarCobranca() {
     setMensagem("")
 
     const {
@@ -192,32 +213,103 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
     }
 
     const valorFinal = Math.max(valorBase - descontoAbs, 0)
+    const valorInicial = Number(valorPagoInicial || 0)
+
+    if (valorInicial < 0) {
+      setMensagem("O pagamento inicial não pode ser negativo.")
+      return
+    }
+
+    if (valorInicial > valorFinal) {
+      setMensagem("O pagamento inicial não pode ser maior que o valor final da cobrança.")
+      return
+    }
 
     if (!dataVencimento) {
       setMensagem("Informe a data de vencimento.")
       return
     }
 
-    const { error } = await supabase.from("service_billings").insert([
-      {
-        user_id: user.id,
-        patient_id: Number(patientId),
-        servico: servico.trim(),
-        competencia_inicio: competenciaInicio || null,
-        competencia_fim: competenciaFim || null,
-        data_vencimento: dataVencimento,
-        valor_original: valorBase,
-        desconto_percentual: descontoPct,
-        desconto_valor: descontoAbs,
-        valor_total: valorFinal,
-        status: "ativa",
-        observacao: observacao || null,
-      },
-    ])
+    const statusInicial = valorInicial >= valorFinal && valorFinal > 0 ? "quitada" : "ativa"
 
-    if (error) {
-      setMensagem(error.message || "Erro ao registrar cobrança.")
+    const { data: cobrancaInserida, error } = await supabase
+      .from("service_billings")
+      .insert([
+        {
+          user_id: user.id,
+          patient_id: Number(patientId),
+          servico: servico.trim(),
+          competencia_inicio: competenciaInicio || null,
+          competencia_fim: competenciaFim || null,
+        data_vencimento: dataVencimento,
+        data_restante_sugerida: dataRestanteSugerida || null,
+        valor_original: valorBase,
+          desconto_percentual: descontoPct,
+          desconto_valor: descontoAbs,
+          valor_total: valorFinal,
+          status: statusInicial,
+          observacao: observacao || null,
+        },
+      ])
+      .select("id")
+      .single()
+
+    if (error || !cobrancaInserida) {
+      setMensagem(error?.message || "Erro ao registrar cobrança.")
       return
+    }
+
+    if (valorInicial > 0) {
+      const { data: pagamentoInserido, error: pagamentoError } = await supabase
+        .from("service_payments")
+        .insert([
+          {
+            user_id: user.id,
+            patient_id: Number(patientId),
+            billing_id: cobrancaInserida.id,
+            servico: servico.trim(),
+            valor: valorInicial,
+            forma_pagamento: formaPagamentoInicial || null,
+            observacao: observacaoPagamentoInicial || null,
+            data_pagamento: dataPagamentoInicial,
+            competencia_inicio: competenciaInicio || null,
+            competencia_fim: competenciaFim || null,
+          },
+        ])
+        .select("id")
+        .single()
+
+      if (pagamentoError || !pagamentoInserido) {
+        setMensagem(pagamentoError?.message || "Cobrança criada, mas houve erro ao registrar o pagamento inicial.")
+        await carregarDados()
+        return
+      }
+
+      const paciente = pacientes.find((p) => p.id === Number(patientId))
+      const nomePaciente = paciente?.nome || "Paciente"
+
+      const { error: financeiroError } = await supabase
+        .from("financial_transactions")
+        .insert([
+          {
+            user_id: user.id,
+            type: "entrada",
+            amount: valorInicial,
+            status: "pago",
+            description: `Recebimento de serviço - ${servico} - ${nomePaciente}`,
+            category: "Serviço",
+            reference_type: "servico",
+            reference_id: pagamentoInserido.id,
+            created_at: new Date(`${dataPagamentoInicial}T12:00:00-03:00`).toISOString(),
+            paid_at: new Date(`${dataPagamentoInicial}T12:00:00-03:00`).toISOString(),
+          },
+        ])
+
+      if (financeiroError) {
+        setMensagem("Cobrança e pagamento inicial salvos, mas houve erro ao lançar no financeiro.")
+        await carregarDados()
+        return
+      }
     }
 
     setPatientId("")
@@ -229,6 +321,12 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
     setDataVencimento(hojeInputDate())
     setCompetenciaInicio("")
     setCompetenciaFim("")
+    setValorPagoInicial("")
+    setDataPagamentoInicial(hojeInputDate())
+    setFormaPagamentoInicial("Pix")
+    setObservacaoPagamentoInicial("")
+    setDataRestanteSugerida(hojeInputDate())
+
     setMensagem("Cobrança registrada com sucesso.")
     await carregarDados()
   }
@@ -362,10 +460,89 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
               onChange={(e) => setObservacao(e.target.value)}
             />
           </div>
+
+                    <div>
+            <label>Pagamento inicial (opcional)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={valorPagoInicial}
+              onChange={(e) => setValorPagoInicial(e.target.value)}
+              placeholder="Ex.: 100,00"
+            />
+          </div>
+
+          <div>
+            <label>Data do pagamento inicial</label>
+            <input
+              type="date"
+              value={dataPagamentoInicial}
+              onChange={(e) => setDataPagamentoInicial(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label>Forma do pagamento inicial</label>
+            <select
+              value={formaPagamentoInicial}
+              onChange={(e) => setFormaPagamentoInicial(e.target.value)}
+            >
+              <option value="Pix">Pix</option>
+              <option value="Dinheiro">Dinheiro</option>
+              <option value="Cartão de débito">Cartão de débito</option>
+              <option value="Cartão de crédito">Cartão de crédito</option>
+              <option value="Transferência">Transferência</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Data sugerida para restante</label>
+            <input
+              type="date"
+              value={dataRestanteSugerida}
+              onChange={(e) => setDataRestanteSugerida(e.target.value)}
+            />
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label>Observação do pagamento inicial</label>
+            <textarea
+              rows={2}
+              value={observacaoPagamentoInicial}
+              onChange={(e) => setObservacaoPagamentoInicial(e.target.value)}
+              placeholder="Ex.: entrada de matrícula, sinal, primeira parcela"
+            />
+          </div>
+        </div>
+
+                <div
+          style={{
+            marginTop: 16,
+            padding: 14,
+            border: "1px solid #d1d5db",
+            borderRadius: 10,
+            background: "#f8fafc",
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          <strong>Resumo da cobrança</strong>
+          <span>Valor original: R$ {valorOriginalNumero.toFixed(2)}</span>
+          <span>Desconto aplicado: R$ {descontoCalculado.toFixed(2)}</span>
+          <span>Valor final: R$ {valorFinalCalculado.toFixed(2)}</span>
+          <span>Pagamento inicial: R$ {valorPagoInicialNumero.toFixed(2)}</span>
+          <span>Valor restante: R$ {valorRestanteCalculado.toFixed(2)}</span>
+          <span>
+            Data sugerida para restante:{" "}
+            {dataRestanteSugerida
+              ? new Date(`${dataRestanteSugerida}T12:00:00`).toLocaleDateString("pt-BR")
+              : "-"}
+          </span>
         </div>
 
         <div style={{ marginTop: 14 }}>
-            <button onClick={registrarCobranca} className="btn btn-primary">
+          <button onClick={registrarCobranca} className="btn btn-primary">
             Registrar cobrança
           </button>
         </div>
@@ -413,7 +590,7 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
       <div className="section-card">
         <div style={{ marginBottom: 12 }}>
           <input
-            placeholder="Buscar pagamento"
+            placeholder="Buscar cobrança"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
@@ -429,6 +606,7 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
                 <th style={th}>Desconto</th>
                 <th style={th}>Valor final</th>
                 <th style={th}>Vencimento</th>
+                <th style={th}>Restante sugerido</th>
                 <th style={th}>Competência</th>
                 <th style={th}>Status</th>
                 <th style={th}>Observação</th>
@@ -450,6 +628,11 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
                     {new Date(`${c.data_vencimento}T12:00:00`).toLocaleDateString("pt-BR")}
                   </td>
                   <td style={td}>
+                    {c.data_restante_sugerida
+                      ? new Date(`${c.data_restante_sugerida}T12:00:00`).toLocaleDateString("pt-BR")
+                      : "-"}
+                  </td>
+                  <td style={td}>
                     {c.competencia_inicio
                       ? new Date(`${c.competencia_inicio}T12:00:00`).toLocaleDateString("pt-BR")
                       : "-"}{" "}
@@ -465,7 +648,7 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
 
                 {cobrancasFiltradas.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={9}>
+                    <td style={td} colSpan={10}>
                     Nenhuma cobrança encontrada.
                   </td>
                 </tr>
