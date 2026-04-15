@@ -12,16 +12,19 @@ type Patient = {
   ativo: boolean
 }
 
-type ServicePayment = {
+type ServiceBilling = {
   id: number
   patient_id: number
-  servico: string | null
-  valor: number
-  forma_pagamento: string | null
-  observacao: string | null
-  data_pagamento: string
+  servico: string
   competencia_inicio: string | null
   competencia_fim: string | null
+  data_vencimento: string
+  valor_original: number
+  desconto_percentual: number
+  desconto_valor: number
+  valor_total: number
+  status: string
+  observacao: string | null
   created_at: string
   patients?: {
     nome: string
@@ -39,21 +42,21 @@ function hojeInputDate() {
 function calcularProximoPagamento(
   dataInicio?: string | null,
   diaBasePagamento?: number | null,
-  pagamentos: ServicePayment[] = []
+  cobrancas: ServiceBilling[] = []
 ) {
   if (!dataInicio) return "-"
 
   const base = diaBasePagamento || new Date(`${dataInicio}T12:00:00`).getDate()
 
-  const ultimoPagamento = pagamentos
+      const ultimaCobranca = cobrancas
     .slice()
     .sort(
       (a, b) =>
-        new Date(`${b.data_pagamento}T12:00:00`).getTime() -
-        new Date(`${a.data_pagamento}T12:00:00`).getTime()
+        new Date(`${b.data_vencimento}T12:00:00`).getTime() -
+        new Date(`${a.data_vencimento}T12:00:00`).getTime()
     )[0]
 
-  const referencia = ultimoPagamento?.data_pagamento || dataInicio
+  const referencia = ultimaCobranca?.data_vencimento || dataInicio
   const dataRef = new Date(`${referencia}T12:00:00`)
 
   const proximo = new Date(
@@ -70,16 +73,17 @@ function calcularProximoPagamento(
 
 export default function PagamentosServicoPage() {
   const [pacientes, setPacientes] = useState<Patient[]>([])
-  const [pagamentos, setPagamentos] = useState<ServicePayment[]>([])
+const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
 
-    const [patientId, setPatientId] = useState("")
+      const [patientId, setPatientId] = useState("")
   const [servico, setServico] = useState("Pilates")
-  const [valor, setValor] = useState("")
-  const [formaPagamento, setFormaPagamento] = useState("Pix")
+  const [valorOriginal, setValorOriginal] = useState("")
+  const [descontoPercentual, setDescontoPercentual] = useState("")
+  const [descontoValor, setDescontoValor] = useState("")
   const [observacao, setObservacao] = useState("")
-  const [dataPagamento, setDataPagamento] = useState(hojeInputDate())
+  const [dataVencimento, setDataVencimento] = useState(hojeInputDate())
   const [competenciaInicio, setCompetenciaInicio] = useState("")
   const [competenciaFim, setCompetenciaFim] = useState("")
 
@@ -111,34 +115,37 @@ export default function PagamentosServicoPage() {
       return
     }
 
-    const { data: pagamentosData, error: pagamentosError } = await supabase
-      .from("service_payments")
-        .select(`
+        const { data: cobrancasData, error: cobrancasError } = await supabase
+      .from("service_billings")
+      .select(`
         id,
         patient_id,
         servico,
-        valor,
-        forma_pagamento,
-        observacao,
-        data_pagamento,
         competencia_inicio,
         competencia_fim,
+        data_vencimento,
+        valor_original,
+        desconto_percentual,
+        desconto_valor,
+        valor_total,
+        status,
+        observacao,
         created_at,
         patients (nome)
       `)
       .eq("user_id", user.id)
-      .order("data_pagamento", { ascending: false })
+      .order("data_vencimento", { ascending: false })
 
-    if (pagamentosError) {
-      setMensagem("Erro ao carregar pagamentos.")
+    if (cobrancasError) {
+      setMensagem("Erro ao carregar cobranças.")
       return
     }
 
     setPacientes((pacientesData ?? []) as Patient[])
-    setPagamentos((pagamentosData ?? []) as unknown as ServicePayment[])
+    setCobrancas((cobrancasData ?? []) as unknown as ServiceBilling[])
   }
 
-  async function registrarPagamento() {
+  async function registrarCobranca() {
     setMensagem("")
 
     const {
@@ -155,114 +162,116 @@ export default function PagamentosServicoPage() {
       return
     }
 
-    if (Number(valor || 0) <= 0) {
+    if (!servico.trim()) {
+      setMensagem("Informe o serviço.")
+      return
+    }
+
+    const valorBase = Number(valorOriginal || 0)
+
+    if (valorBase <= 0) {
       setMensagem("Informe um valor válido.")
       return
     }
 
-    if (!dataPagamento) {
-      setMensagem("Informe a data do pagamento.")
+    const descontoPct = Number(descontoPercentual || 0)
+    let descontoAbs = Number(descontoValor || 0)
+
+    if (descontoPct < 0 || descontoPct > 100) {
+      setMensagem("O desconto percentual deve estar entre 0 e 100.")
       return
     }
 
-    const { data: pagamentoInserido, error } = await supabase
-      .from("service_payments")
-      .insert([
-               {
-          user_id: user.id,
-          patient_id: Number(patientId),
-          servico: servico || null,
-          valor: Number(valor),
-          forma_pagamento: formaPagamento || null,
-          observacao: observacao || null,
-          data_pagamento: dataPagamento,
-          competencia_inicio: competenciaInicio || null,
-          competencia_fim: competenciaFim || null,
-        },
-      ])
-      .select("id")
-      .single()
-
-    if (error || !pagamentoInserido) {
-      setMensagem(error?.message || "Erro ao registrar pagamento.")
+    if (descontoAbs < 0) {
+      setMensagem("O desconto em valor não pode ser negativo.")
       return
     }
 
-    const paciente = pacientes.find((p) => p.id === Number(patientId))
-    const nomePaciente = paciente?.nome || "Paciente"
+    if (descontoPct > 0) {
+      descontoAbs = (valorBase * descontoPct) / 100
+    }
 
-        const { error: financeiroError } = await supabase
-      .from("financial_transactions")
-      .insert([
-        {
-          user_id: user.id,
-          type: "entrada",
-          amount: Number(valor),
-          status: "pago",
-          description: `Recebimento de serviço - ${servico} - ${nomePaciente}`,
-          category: "Serviço",
-          reference_type: "servico",
-          reference_id: pagamentoInserido.id,
-          created_at: new Date(`${dataPagamento}T12:00:00-03:00`).toISOString(),
-          paid_at: new Date(`${dataPagamento}T12:00:00-03:00`).toISOString(),
-        },
-      ])
+    const valorFinal = Math.max(valorBase - descontoAbs, 0)
 
-    if (financeiroError) {
-      setMensagem("Pagamento salvo, mas houve erro ao lançar no financeiro.")
-      await carregarDados()
+    if (!dataVencimento) {
+      setMensagem("Informe a data de vencimento.")
+      return
+    }
+
+    const { error } = await supabase.from("service_billings").insert([
+      {
+        user_id: user.id,
+        patient_id: Number(patientId),
+        servico: servico.trim(),
+        competencia_inicio: competenciaInicio || null,
+        competencia_fim: competenciaFim || null,
+        data_vencimento: dataVencimento,
+        valor_original: valorBase,
+        desconto_percentual: descontoPct,
+        desconto_valor: descontoAbs,
+        valor_total: valorFinal,
+        status: "ativa",
+        observacao: observacao || null,
+      },
+    ])
+
+    if (error) {
+      setMensagem(error.message || "Erro ao registrar cobrança.")
       return
     }
 
     setPatientId("")
     setServico("Pilates")
-    setValor("")
-    setFormaPagamento("Pix")
+    setValorOriginal("")
+    setDescontoPercentual("")
+    setDescontoValor("")
     setObservacao("")
-    setDataPagamento(hojeInputDate())
+    setDataVencimento(hojeInputDate())
     setCompetenciaInicio("")
     setCompetenciaFim("")
+    setMensagem("Cobrança registrada com sucesso.")
+    await carregarDados()
   }
 
-  const pagamentosFiltrados = useMemo(() => {
+    const cobrancasFiltradas = useMemo(() => {
     const termo = busca.trim().toLowerCase()
-    if (!termo) return pagamentos
+    if (!termo) return cobrancas
 
-        return pagamentos.filter((p) => {
+    return cobrancas.filter((c) => {
       return (
-        (p.patients?.nome || "").toLowerCase().includes(termo) ||
-        (p.servico || "").toLowerCase().includes(termo) ||
-        (p.forma_pagamento || "").toLowerCase().includes(termo) ||
-        (p.observacao || "").toLowerCase().includes(termo)
+        (c.patients?.nome || "").toLowerCase().includes(termo) ||
+        (c.servico || "").toLowerCase().includes(termo) ||
+        (c.status || "").toLowerCase().includes(termo) ||
+        (c.observacao || "").toLowerCase().includes(termo)
       )
     })
-  }, [pagamentos, busca])
+  }, [cobrancas, busca])
 
-  const resumoPacientes = useMemo(() => {
+    const resumoPacientes = useMemo(() => {
     return pacientes.map((p) => {
-      const pagamentosPaciente = pagamentos.filter((pg) => pg.patient_id === p.id)
+      const cobrancasPaciente = cobrancas.filter((c) => c.patient_id === p.id)
       return {
         ...p,
         proximoPagamento: calcularProximoPagamento(
           p.data_inicio,
           p.dia_base_pagamento,
-          pagamentosPaciente
+          cobrancasPaciente
         ),
       }
     })
-  }, [pacientes, pagamentos])
+  }, [pacientes, cobrancas])
 
   return (
     <div>
-      <h2 className="page-title">Pagamentos de Serviço</h2>
+            <h2 className="page-title">Cobranças de Serviço</h2>
       <p className="page-subtitle">
-        Registre recebimentos dos pacientes e acompanhe próximo pagamento.
+        Cadastre cobranças dos pacientes, controle vencimento, desconto e acompanhe o próximo pagamento.
       </p>
 
       {mensagem && <p>{mensagem}</p>}
 
       <div className="section-card" style={{ marginBottom: 20 }}>
-        <h3 style={{ marginBottom: 12 }}>Novo pagamento</h3>
+                <h3 style={{ marginBottom: 12 }}>Nova cobrança</h3>
 
         <div className="grid-2">
           <div>
@@ -288,37 +297,42 @@ export default function PagamentosServicoPage() {
             </select>
           </div>
 
-          <div>
-            <label>Valor</label>
+                    <div>
+            <label>Valor original</label>
             <input
               type="number"
               step="0.01"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
+              value={valorOriginal}
+              onChange={(e) => setValorOriginal(e.target.value)}
             />
           </div>
 
           <div>
-            <label>Forma de pagamento</label>
-            <select
-              value={formaPagamento}
-              onChange={(e) => setFormaPagamento(e.target.value)}
-            >
-              <option value="Pix">Pix</option>
-              <option value="Dinheiro">Dinheiro</option>
-              <option value="Cartão de débito">Cartão de débito</option>
-              <option value="Cartão de crédito">Cartão de crédito</option>
-              <option value="Transferência">Transferência</option>
-              <option value="Outro">Outro</option>
-            </select>
+            <label>Desconto (%)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={descontoPercentual}
+              onChange={(e) => setDescontoPercentual(e.target.value)}
+            />
           </div>
 
           <div>
-            <label>Data do pagamento</label>
+            <label>Desconto (R$)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={descontoValor}
+              onChange={(e) => setDescontoValor(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label>Data de vencimento</label>
             <input
               type="date"
-              value={dataPagamento}
-              onChange={(e) => setDataPagamento(e.target.value)}
+              value={dataVencimento}
+              onChange={(e) => setDataVencimento(e.target.value)}
             />
           </div>
 
@@ -351,8 +365,8 @@ export default function PagamentosServicoPage() {
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <button onClick={registrarPagamento} className="btn btn-primary">
-            Registrar pagamento
+            <button onClick={registrarCobranca} className="btn btn-primary">
+            Registrar cobrança
           </button>
         </div>
       </div>
@@ -408,43 +422,51 @@ export default function PagamentosServicoPage() {
         <div className="data-table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-                            <tr>
+                <tr>
                 <th style={th}>Paciente</th>
                 <th style={th}>Serviço</th>
-                <th style={th}>Valor</th>
-                <th style={th}>Forma</th>
-                <th style={th}>Data</th>
+                <th style={th}>Valor original</th>
+                <th style={th}>Desconto</th>
+                <th style={th}>Valor final</th>
+                <th style={th}>Vencimento</th>
                 <th style={th}>Competência</th>
+                <th style={th}>Status</th>
                 <th style={th}>Observação</th>
               </tr>
             </thead>
             <tbody>
-              {pagamentosFiltrados.map((p) => (
-                                <tr key={p.id}>
-                  <td style={td}>{p.patients?.nome || "-"}</td>
-                  <td style={td}>{p.servico || "-"}</td>
-                  <td style={td}>R$ {Number(p.valor).toFixed(2)}</td>
-                  <td style={td}>{p.forma_pagamento || "-"}</td>
+                            {cobrancasFiltradas.map((c) => (
+                <tr key={c.id}>
+                  <td style={td}>{c.patients?.nome || "-"}</td>
+                  <td style={td}>{c.servico || "-"}</td>
+                  <td style={td}>R$ {Number(c.valor_original).toFixed(2)}</td>
                   <td style={td}>
-                    {new Date(`${p.data_pagamento}T12:00:00`).toLocaleDateString("pt-BR")}
+                    {Number(c.desconto_percentual || 0) > 0
+                      ? `${Number(c.desconto_percentual).toFixed(2)}%`
+                      : `R$ ${Number(c.desconto_valor || 0).toFixed(2)}`}
+                  </td>
+                  <td style={td}>R$ {Number(c.valor_total).toFixed(2)}</td>
+                  <td style={td}>
+                    {new Date(`${c.data_vencimento}T12:00:00`).toLocaleDateString("pt-BR")}
                   </td>
                   <td style={td}>
-                    {p.competencia_inicio
-                      ? new Date(`${p.competencia_inicio}T12:00:00`).toLocaleDateString("pt-BR")
+                    {c.competencia_inicio
+                      ? new Date(`${c.competencia_inicio}T12:00:00`).toLocaleDateString("pt-BR")
                       : "-"}{" "}
                     até{" "}
-                    {p.competencia_fim
-                      ? new Date(`${p.competencia_fim}T12:00:00`).toLocaleDateString("pt-BR")
+                    {c.competencia_fim
+                      ? new Date(`${c.competencia_fim}T12:00:00`).toLocaleDateString("pt-BR")
                       : "-"}
                   </td>
-                  <td style={td}>{p.observacao || "-"}</td>
+                  <td style={td}>{c.status}</td>
+                  <td style={td}>{c.observacao || "-"}</td>
                 </tr>
               ))}
 
-              {pagamentosFiltrados.length === 0 && (
+                {cobrancasFiltradas.length === 0 && (
                 <tr>
-                    <td style={td} colSpan={7}>
-                    Nenhum pagamento encontrado.
+                  <td style={td} colSpan={9}>
+                    Nenhuma cobrança encontrada.
                   </td>
                 </tr>
               )}
