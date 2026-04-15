@@ -78,6 +78,11 @@ type GraficoDia = {
   total: number
 }
 
+type EntradaCaixaDia = {
+  created_at: string
+  valor: number
+}
+
 type TrendInfo = {
   variant: "up" | "down" | "neutral"
   label: string
@@ -120,18 +125,21 @@ export default function Dashboard() {
   const [periodo, setPeriodo] = useState<Periodo>("30dias")
 
   const [faturamento, setFaturamento] = useState(0)
-  const [recebido, setRecebido] = useState(0)
-  const [lucro, setLucro] = useState(0)
-  const [emAberto, setEmAberto] = useState(0)
+const [recebido, setRecebido] = useState(0)
+const [lucro, setLucro] = useState(0)
+const [emAberto, setEmAberto] = useState(0)
 
-  const [saldoAtual, setSaldoAtual] = useState(0)
-  const [saldoPrevisto, setSaldoPrevisto] = useState(0)
-  const [despesasPendentes, setDespesasPendentes] = useState(0)
-  const [entradasPendentes, setEntradasPendentes] = useState(0)
+const [saldoAtual, setSaldoAtual] = useState(0)
+const [saldoPrevisto, setSaldoPrevisto] = useState(0)
+const [despesasPendentes, setDespesasPendentes] = useState(0)
+const [entradasPendentes, setEntradasPendentes] = useState(0)
 
-  const [faturamentoComparacao, setFaturamentoComparacao] = useState(0)
-  const [recebidoComparacao, setRecebidoComparacao] = useState(0)
-  const [lucroComparacao, setLucroComparacao] = useState(0)
+const [faturamentoComparacao, setFaturamentoComparacao] = useState(0)
+const [recebidoComparacao, setRecebidoComparacao] = useState(0)
+const [lucroComparacao, setLucroComparacao] = useState(0)
+
+const [servicosRecebidos, setServicosRecebidos] = useState(0)
+const [servicosRecebidosComparacao, setServicosRecebidosComparacao] = useState(0)
 
   const [graficoVendas, setGraficoVendas] = useState<GraficoDia[]>([])
   const [graficoRecebido, setGraficoRecebido] = useState<GraficoDia[]>([])
@@ -382,15 +390,46 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     0
   )
 
-  const recebidoAtual = pagamentosAtual.reduce(
+  const recebidoVendasAtual = pagamentosAtual.reduce(
     (soma, pagamento) => soma + Number(pagamento.valor),
     0
   )
 
-  const recebidoAnterior = pagamentosAnterior.reduce(
+  const recebidoVendasAnterior = pagamentosAnterior.reduce(
     (soma, pagamento) => soma + Number(pagamento.valor),
     0
   )
+
+  const servicosRecebidosAtual = movimentacoesLista
+    .filter((m) => {
+      const dataBase = m.paid_at || m.created_at
+      const data = new Date(dataBase)
+      return (
+        m.reference_type === "servico" &&
+        m.type === "entrada" &&
+        m.status === "pago" &&
+        data >= inicioAtual &&
+        data <= fimAtual
+      )
+    })
+    .reduce((soma, m) => soma + Number(m.amount), 0)
+
+  const servicosRecebidosAnterior = movimentacoesLista
+    .filter((m) => {
+      const dataBase = m.paid_at || m.created_at
+      const data = new Date(dataBase)
+      return (
+        m.reference_type === "servico" &&
+        m.type === "entrada" &&
+        m.status === "pago" &&
+        data >= inicioAnterior &&
+        data <= fimAnterior
+      )
+    })
+    .reduce((soma, m) => soma + Number(m.amount), 0)
+
+  const recebidoAtual = recebidoVendasAtual + servicosRecebidosAtual
+  const recebidoAnterior = recebidoVendasAnterior + servicosRecebidosAnterior
 
   const recebidoPorVendaPeriodo = vendasPeriodoAtual.reduce((soma, venda) => {
     const totalRecebidoDaVenda = pagamentosLista
@@ -438,7 +477,12 @@ setMovimentacoesFinanceiras(movimentacoesLista)
   })
 
   const entradasManuaisPagas = movimentacoesLista
-    .filter((m) => m.type === "entrada" && m.status === "pago")
+    .filter(
+      (m) =>
+        m.reference_type !== "servico" &&
+        m.type === "entrada" &&
+        m.status === "pago"
+    )
     .reduce((soma, m) => soma + Number(m.amount), 0)
 
   const saidasManuaisPagas = movimentacoesLista
@@ -446,7 +490,12 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     .reduce((soma, m) => soma + Number(m.amount), 0)
 
   const entradasManuaisPendentes = movimentacoesLista
-    .filter((m) => m.type === "entrada" && m.status === "pendente")
+    .filter(
+      (m) =>
+        m.reference_type !== "servico" &&
+        m.type === "entrada" &&
+        m.status === "pendente"
+    )
     .reduce((soma, m) => soma + Number(m.amount), 0)
 
   const saidasManuaisPendentes = movimentacoesLista
@@ -454,9 +503,11 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     .reduce((soma, m) => soma + Number(m.amount), 0)
 
   const entradasPagasTotal =
-    pagamentosLista.reduce((soma, p) => soma + Number(p.valor), 0) + entradasManuaisPagas
+    pagamentosLista.reduce((soma, p) => soma + Number(p.valor), 0) +
+    servicosRecebidosAtual +
+    entradasManuaisPagas
 
-    const saldoAtualCalculado = entradasPagasTotal - saidasManuaisPagas
+  const saldoAtualCalculado = entradasPagasTotal - saidasManuaisPagas
   const saldoPrevistoCalculado =
     saldoAtualCalculado + entradasManuaisPendentes + emAbertoAtual - saidasManuaisPendentes
 
@@ -473,6 +524,9 @@ setMovimentacoesFinanceiras(movimentacoesLista)
   setFaturamentoComparacao(faturamentoAnterior)
   setRecebidoComparacao(recebidoAnterior)
   setLucroComparacao(lucroAnterior)
+
+  setServicosRecebidos(servicosRecebidosAtual)
+  setServicosRecebidosComparacao(servicosRecebidosAnterior)
 
   gerarGraficoVendas(vendasPeriodoAtual, inicioAtual, quantidadeDias)
   gerarGraficoRecebido(pagamentosAtual, inicioAtual, quantidadeDias)
@@ -518,7 +572,7 @@ setMovimentacoesFinanceiras(movimentacoesLista)
   }
 
   function gerarGraficoRecebido(
-    pagamentosPeriodo: Pagamento[],
+    entradasPeriodo: EntradaCaixaDia[],
     inicioAtual: Date,
     quantidadeDias: number
   ) {
@@ -536,13 +590,13 @@ setMovimentacoesFinanceiras(movimentacoesLista)
       mapa.set(chave, 0)
     }
 
-    pagamentosPeriodo.forEach((pagamento) => {
-      const dia = new Date(pagamento.created_at).toLocaleDateString("pt-BR", {
+    entradasPeriodo.forEach((entrada) => {
+      const dia = new Date(entrada.created_at).toLocaleDateString("pt-BR", {
         day: "2-digit",
         month: "2-digit",
       })
 
-      mapa.set(dia, (mapa.get(dia) || 0) + Number(pagamento.valor))
+      mapa.set(dia, (mapa.get(dia) || 0) + Number(entrada.valor))
     })
 
     const dados = Array.from(mapa.entries()).map(([dia, total]) => ({
@@ -686,7 +740,7 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     if (lucro > 0 && recebido > 0) {
       return {
         titulo: "Operação positiva",
-        texto: `Seu lucro recebido no período está em R$ ${lucro.toFixed(2)}.`,
+        texto: `Seu lucro recebido com produtos no período está em R$ ${lucro.toFixed(2)}.`,
         cor: "#065f46",
         fundo: "#ecfdf5",
         borda: "#a7f3d0",
@@ -696,7 +750,7 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     if (faturamento > 0 && recebido === 0) {
       return {
         titulo: "Atenção aos recebimentos",
-        texto: "Você vendeu no período, mas ainda não houve recebimentos registrados.",
+        texto: "Você vendeu no período, mas ainda não houve entradas registradas no caixa.",
         cor: "#92400e",
         fundo: "#fffbeb",
         borda: "#fde68a",
@@ -706,7 +760,7 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     if (faturamento <= 0) {
       return {
         titulo: "Sem movimento no período",
-        texto: "Ainda não há vendas registradas no período selecionado.",
+        texto: "Ainda não há vendas ou serviços recebidos no período selecionado.",
         cor: "#334155",
         fundo: "#f8fafc",
         borda: "#cbd5e1",
@@ -784,7 +838,7 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     }
 
     return linhas
-  }, [faturamento, faturamentoComparacao, recebido, lucro, estoqueBaixo])
+  }, [faturamento, faturamentoComparacao, recebido, lucro, estoqueBaixo, servicosRecebidos])
 
   return (
     <div style={{ padding: 24 }}>
@@ -793,7 +847,7 @@ setMovimentacoesFinanceiras(movimentacoesLista)
           <p style={eyebrow}>Dashboard</p>
           <h1 style={heroTitle}>Visão geral da sua operação</h1>
           <p style={heroSubtitle}>
-            Acompanhe faturamento, recebimentos, caixa, valores em aberto e lucro conforme o período selecionado.
+            Acompanhe produtos, serviços, recebimentos, caixa, valores em aberto e lucro conforme o período selecionado.
           </p>
 
           <div style={periodWrap}>
@@ -815,7 +869,7 @@ setMovimentacoesFinanceiras(movimentacoesLista)
 
         <div style={heroRight}>
           <div style={heroBadge}>
-            <span style={heroBadgeLabel}>Resultado do período</span>
+            <span style={heroBadgeLabel}>Lucro de produtos no período</span>
             <strong style={heroBadgeValue}>R$ {lucro.toFixed(2)}</strong>
           </div>
         </div>
@@ -887,10 +941,25 @@ setMovimentacoesFinanceiras(movimentacoesLista)
           </div>
         </div>
 
+        <div style={card}>
+  <div style={cardTop}>
+    <div>
+      <p style={cardLabel}>Serviços recebidos</p>
+      <h3 style={cardValue}>R$ {servicosRecebidos.toFixed(2)}</h3>
+    </div>
+    <div style={{ ...iconBox, background: "#dcfce7", color: "#166534" }}>
+      <Wallet size={20} />
+    </div>
+  </div>
+  <p style={helperText}>
+    Base anterior: R$ {servicosRecebidosComparacao.toFixed(2)}
+  </p>
+</div>
+
         <div style={cardDestaque}>
           <div style={cardTop}>
             <div>
-              <p style={cardLabelLight}>Total recebido</p>
+              <p style={cardLabelLight}>Entradas no caixa</p>
               <h3 style={cardValueLight}>R$ {recebido.toFixed(2)}</h3>
             </div>
             <div style={{ ...iconBoxHero, background: "rgba(16,185,129,0.18)" }}>
@@ -919,7 +988,7 @@ setMovimentacoesFinanceiras(movimentacoesLista)
         <div style={cardDestaque}>
           <div style={cardTop}>
             <div>
-              <p style={cardLabelLight}>Lucro recebido</p>
+              <p style={cardLabelLight}>Lucro de produtos</p>
               <h3 style={cardValueLight}>R$ {lucro.toFixed(2)}</h3>
             </div>
             <div style={{ ...iconBoxHero, background: "rgba(59,130,246,0.18)" }}>
@@ -994,7 +1063,7 @@ setMovimentacoesFinanceiras(movimentacoesLista)
               <BadgeDollarSign size={20} />
             </div>
           </div>
-          <p style={helperText}>Valor ainda pendente das vendas do período.</p>
+          <p style={helperText}>Valor ainda pendente das vendas de produtos no período.</p>
         </div>
       </div>
 
@@ -1035,6 +1104,19 @@ setMovimentacoesFinanceiras(movimentacoesLista)
           <p style={miniCardTitle}>R$ {entradasPendentes.toFixed(2)}</p>
           <p style={miniCardText}>
             Valores que ainda devem entrar no caixa e ainda não foram marcados como pagos.
+          </p>
+        </div>
+
+        <div style={miniCard}>
+          <div style={miniCardTop}>
+            <Wallet size={18} />
+            <strong>Serviços recebidos</strong>
+          </div>
+          <p style={miniCardTitle}>R$ {servicosRecebidos.toFixed(2)}</p>
+          <p style={miniCardText}>
+            {servicosRecebidos > 0
+              ? `Recebimentos de serviços no período. Base anterior: R$ ${servicosRecebidosComparacao.toFixed(2)}.`
+              : "Ainda não houve recebimentos de serviços neste período."}
           </p>
         </div>
       </div>
@@ -1097,8 +1179,8 @@ setMovimentacoesFinanceiras(movimentacoesLista)
         <div style={chartCard}>
           <div style={chartHeader}>
             <div>
-              <h2 style={chartTitle}>Recebido por dia</h2>
-              <p style={chartSubtitle}>Entradas reais de caixa no período</p>
+              <h2 style={chartTitle}>Entradas de caixa por dia</h2>
+              <p style={chartSubtitle}>Vendas recebidas e serviços recebidos no período</p>
             </div>
           </div>
 
