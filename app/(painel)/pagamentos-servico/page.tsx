@@ -15,6 +15,7 @@ type Patient = {
 type ServicePayment = {
   id: number
   patient_id: number
+  servico: string | null
   valor: number
   forma_pagamento: string | null
   observacao: string | null
@@ -73,7 +74,8 @@ export default function PagamentosServicoPage() {
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
 
-  const [patientId, setPatientId] = useState("")
+    const [patientId, setPatientId] = useState("")
+  const [servico, setServico] = useState("Pilates")
   const [valor, setValor] = useState("")
   const [formaPagamento, setFormaPagamento] = useState("Pix")
   const [observacao, setObservacao] = useState("")
@@ -111,9 +113,10 @@ export default function PagamentosServicoPage() {
 
     const { data: pagamentosData, error: pagamentosError } = await supabase
       .from("service_payments")
-      .select(`
+        .select(`
         id,
         patient_id,
+        servico,
         valor,
         forma_pagamento,
         observacao,
@@ -165,9 +168,10 @@ export default function PagamentosServicoPage() {
     const { data: pagamentoInserido, error } = await supabase
       .from("service_payments")
       .insert([
-        {
+               {
           user_id: user.id,
           patient_id: Number(patientId),
+          servico: servico || null,
           valor: Number(valor),
           forma_pagamento: formaPagamento || null,
           observacao: observacao || null,
@@ -187,7 +191,7 @@ export default function PagamentosServicoPage() {
     const paciente = pacientes.find((p) => p.id === Number(patientId))
     const nomePaciente = paciente?.nome || "Paciente"
 
-    const { error: financeiroError } = await supabase
+        const { error: financeiroError } = await supabase
       .from("financial_transactions")
       .insert([
         {
@@ -195,7 +199,7 @@ export default function PagamentosServicoPage() {
           type: "entrada",
           amount: Number(valor),
           status: "pago",
-          description: `Recebimento de serviço - ${nomePaciente}`,
+          description: `Recebimento de serviço - ${servico} - ${nomePaciente}`,
           category: "Serviço",
           reference_type: "servico",
           reference_id: pagamentoInserido.id,
@@ -211,23 +215,23 @@ export default function PagamentosServicoPage() {
     }
 
     setPatientId("")
+    setServico("Pilates")
     setValor("")
     setFormaPagamento("Pix")
     setObservacao("")
     setDataPagamento(hojeInputDate())
     setCompetenciaInicio("")
     setCompetenciaFim("")
-    setMensagem("Pagamento registrado com sucesso.")
-    await carregarDados()
   }
 
   const pagamentosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     if (!termo) return pagamentos
 
-    return pagamentos.filter((p) => {
+        return pagamentos.filter((p) => {
       return (
         (p.patients?.nome || "").toLowerCase().includes(termo) ||
+        (p.servico || "").toLowerCase().includes(termo) ||
         (p.forma_pagamento || "").toLowerCase().includes(termo) ||
         (p.observacao || "").toLowerCase().includes(termo)
       )
@@ -270,6 +274,17 @@ export default function PagamentosServicoPage() {
                   {p.nome}
                 </option>
               ))}
+            </select>
+          </div>
+
+                    <div>
+            <label>Serviço</label>
+            <select value={servico} onChange={(e) => setServico(e.target.value)}>
+              <option value="Pilates">Pilates</option>
+              <option value="Fisioterapia">Fisioterapia</option>
+              <option value="Academia">Academia</option>
+              <option value="Avaliação">Avaliação</option>
+              <option value="Outro">Outro</option>
             </select>
           </div>
 
@@ -393,8 +408,9 @@ export default function PagamentosServicoPage() {
         <div className="data-table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr>
+                            <tr>
                 <th style={th}>Paciente</th>
+                <th style={th}>Serviço</th>
                 <th style={th}>Valor</th>
                 <th style={th}>Forma</th>
                 <th style={th}>Data</th>
@@ -404,8 +420,9 @@ export default function PagamentosServicoPage() {
             </thead>
             <tbody>
               {pagamentosFiltrados.map((p) => (
-                <tr key={p.id}>
+                                <tr key={p.id}>
                   <td style={td}>{p.patients?.nome || "-"}</td>
+                  <td style={td}>{p.servico || "-"}</td>
                   <td style={td}>R$ {Number(p.valor).toFixed(2)}</td>
                   <td style={td}>{p.forma_pagamento || "-"}</td>
                   <td style={td}>
@@ -426,7 +443,7 @@ export default function PagamentosServicoPage() {
 
               {pagamentosFiltrados.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={6}>
+                    <td style={td} colSpan={7}>
                     Nenhum pagamento encontrado.
                   </td>
                 </tr>
