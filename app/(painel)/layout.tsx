@@ -29,6 +29,9 @@ import {
   Bot,
   Upload,
   ReceiptText,
+  CalendarDays,
+  Activity,
+  HeartPulse,
 } from "lucide-react"
 
 const menuGroups = [
@@ -40,30 +43,35 @@ const menuGroups = [
     ],
   },
   {
-  title: "Operação",
-  items: [
-    { href: "/produtos", label: "Produtos", icon: Package },
-
-    { href: "/importar-compra", label: "Importar compras", icon: Upload },
-
-    { href: "/estoque", label: "Estoque", icon: Boxes },
-    { href: "/pedidos", label: "Pedidos", icon: ShoppingCart },
-    { href: "/vendas", label: "Vendas", icon: Wallet },
-    { href: "/assistente-ia", label: "Assistente IA", icon: Bot },
-  ],
-},
-
+    title: "Operação",
+    items: [
+      { href: "/produtos", label: "Produtos", icon: Package },
+      { href: "/importar-compra", label: "Importar compras", icon: Upload },
+      { href: "/estoque", label: "Estoque", icon: Boxes },
+      { href: "/pedidos", label: "Pedidos", icon: ShoppingCart },
+      { href: "/vendas", label: "Vendas", icon: Wallet },
+      { href: "/assistente-ia", label: "Assistente IA", icon: Bot },
+    ],
+  },
   {
-  title: "Gestão",
-  items: [
-    { href: "/clientes", label: "Clientes", icon: Users },
-    { href: "/financeiro", label: "Financeiro", icon: ClipboardList },
-    { href: "/historico-vendas", label: "Histórico de Vendas", icon: ClipboardList },
-    { href: "/configuracoes/tributacao", label: "Tributação", icon: ReceiptText },
-    { href: "/loja", label: "Minha Loja", icon: Store },
-    { href: "/meu-plano", label: "Meu Plano", icon: Store },
-  ],
-},
+    title: "Serviços",
+    items: [
+      { href: "/pacientes", label: "Pacientes", icon: HeartPulse },
+      { href: "/agenda", label: "Agenda", icon: CalendarDays },
+      { href: "/evolucao", label: "Evolução", icon: Activity },
+    ],
+  },
+  {
+    title: "Gestão",
+    items: [
+      { href: "/clientes", label: "Clientes", icon: Users },
+      { href: "/financeiro", label: "Financeiro", icon: ClipboardList },
+      { href: "/historico-vendas", label: "Histórico de Vendas", icon: ClipboardList },
+      { href: "/configuracoes/tributacao", label: "Tributação", icon: ReceiptText },
+      { href: "/loja", label: "Minha Loja", icon: Store },
+      { href: "/meu-plano", label: "Meu Plano", icon: Store },
+    ],
+  },
 ]
 
 export default function PainelLayout({
