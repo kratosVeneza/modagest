@@ -30,6 +30,17 @@ type SalePayment = {
   user_id: string
 }
 
+type ServicePayment = {
+  id: number
+  patient_id: number
+  valor: number
+  forma_pagamento: string | null
+  observacao: string | null
+  data_pagamento: string
+  created_at: string
+  user_id: string
+}
+
 type Product = {
   id: number
   nome: string
@@ -45,15 +56,22 @@ type Customer = {
   user_id: string
 }
 
+type Patient = {
+  id: number
+  nome: string
+  user_id: string
+}
+
 type Loja = {
   nome_loja?: string | null
   logo_url?: string | null
 }
 
 type PaymentRow = {
-  id: number
+  id: string
   data: string
-  vendaId: number
+  origem: "Venda" | "Serviço"
+  referencia: string
   cliente: string
   produto: string
   sku: string
@@ -82,6 +100,8 @@ export default function RelatorioRecebimentosPage() {
   const [payments, setPayments] = useState<SalePayment[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [servicePayments, setServicePayments] = useState<ServicePayment[]>([])
+  const [patients, setPatients] = useState<Patient[]>([])
   const [periodo, setPeriodo] = useState<Periodo>("30dias")
   const [busca, setBusca] = useState("")
   const [mensagem, setMensagem] = useState("")
@@ -122,6 +142,8 @@ export default function RelatorioRecebimentosPage() {
       { data: paymentsData, error: paymentsError },
       { data: productsData, error: productsError },
       { data: customersData, error: customersError },
+      { data: servicePaymentsData, error: servicePaymentsError },
+      { data: patientsData, error: patientsError },
     ] = await Promise.all([
       supabase.from("sales").select("id, product_id, customer_id, valor_total, status, user_id").eq("user_id", user.id),
       supabase
@@ -134,9 +156,15 @@ export default function RelatorioRecebimentosPage() {
         .select("id, nome, sku, marca, categoria, user_id")
         .eq("user_id", user.id),
       supabase.from("customers").select("id, nome, user_id").eq("user_id", user.id),
+      supabase
+        .from("service_payments")
+        .select("id, patient_id, valor, forma_pagamento, observacao, data_pagamento, created_at, user_id")
+        .eq("user_id", user.id)
+        .order("data_pagamento", { ascending: false }),
+      supabase.from("patients").select("id, nome, user_id").eq("user_id", user.id),
     ])
 
-    if (salesError || paymentsError || productsError || customersError) {
+    if (salesError || paymentsError || productsError || customersError || servicePaymentsError || patientsError) {
       setMensagem("Erro ao carregar relatório de recebimentos.")
       setCarregando(false)
       return
@@ -146,6 +174,8 @@ export default function RelatorioRecebimentosPage() {
     setPayments((paymentsData ?? []) as SalePayment[])
     setProducts((productsData ?? []) as Product[])
     setCustomers((customersData ?? []) as Customer[])
+    setServicePayments((servicePaymentsData ?? []) as ServicePayment[])
+    setPatients((patientsData ?? []) as Patient[])
     setCarregando(false)
   }
 
@@ -192,7 +222,7 @@ export default function RelatorioRecebimentosPage() {
   }, [sales])
 
   const paymentRows = useMemo<PaymentRow[]>(() => {
-    return payments
+    const rowsVendas: PaymentRow[] = payments
       .filter((payment) => idsVendasAtivas.has(payment.sale_id))
       .filter((payment) => inPeriodo(payment.created_at))
       .map((payment) => {
@@ -201,9 +231,10 @@ export default function RelatorioRecebimentosPage() {
         const customer = customers.find((c) => c.id === sale?.customer_id)
 
         return {
-          id: payment.id,
+          id: `venda-${payment.id}`,
           data: payment.created_at,
-          vendaId: payment.sale_id,
+          origem: "Venda",
+          referencia: `#${payment.sale_id}`,
           cliente: customer?.nome || "Sem cliente",
           produto: product?.nome || "Produto removido",
           sku: product?.sku || "-",
@@ -212,8 +243,30 @@ export default function RelatorioRecebimentosPage() {
           observacao: payment.observacao || "-",
         }
       })
-      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-  }, [payments, sales, products, customers, periodo, idsVendasAtivas])
+
+    const rowsServicos: PaymentRow[] = servicePayments
+      .filter((payment) => inPeriodo(payment.created_at || payment.data_pagamento))
+      .map((payment) => {
+        const patient = patients.find((item) => item.id === payment.patient_id)
+
+        return {
+          id: `servico-${payment.id}`,
+          data: payment.created_at || payment.data_pagamento,
+          origem: "Serviço",
+          referencia: `#${payment.id}`,
+          cliente: patient?.nome || "Paciente removido",
+          produto: "Serviço prestado",
+          sku: "-",
+          forma: payment.forma_pagamento || "Não informado",
+          valor: Number(payment.valor),
+          observacao: payment.observacao || "-",
+        }
+      })
+
+    return [...rowsVendas, ...rowsServicos].sort(
+      (a, b) => new Date(b.data).getTime() - new Date(a.data).getTime()
+    )
+  }, [payments, sales, products, customers, servicePayments, patients, periodo, idsVendasAtivas])
 
   const paymentRowsFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
@@ -221,6 +274,7 @@ export default function RelatorioRecebimentosPage() {
 
     return paymentRows.filter((item) => {
       return (
+        item.origem.toLowerCase().includes(termo) ||
         item.cliente.toLowerCase().includes(termo) ||
         item.produto.toLowerCase().includes(termo) ||
         item.sku.toLowerCase().includes(termo) ||
@@ -263,10 +317,11 @@ export default function RelatorioRecebimentosPage() {
     }
 
     const linhas = [
-      ["Data", "Venda", "Cliente", "Produto", "SKU", "Forma", "Valor", "Observação"],
+      ["Data", "Origem", "Referência", "Cliente", "Produto", "SKU", "Forma", "Valor", "Observação"],
       ...paymentRowsFiltrados.map((r) => [
         formatarData(r.data),
-        String(r.vendaId),
+        r.origem,
+        r.referencia,
         r.cliente,
         r.produto,
         r.sku,
@@ -315,10 +370,11 @@ export default function RelatorioRecebimentosPage() {
 
     autoTable(doc, {
       startY: startY + 20,
-      head: [["Data", "Venda", "Cliente", "Produto", "Forma", "Valor"]],
+      head: [["Data", "Origem", "Referência", "Cliente", "Produto", "Forma", "Valor"]],
       body: paymentRowsFiltrados.map((r) => [
         formatarData(r.data),
-        `#${r.vendaId}`,
+        r.origem,
+        r.referencia,
         r.cliente,
         r.produto,
         r.forma,
@@ -338,12 +394,12 @@ export default function RelatorioRecebimentosPage() {
     </div>
       <h2 className="page-title">Relatório de Recebimentos</h2>
       <p className="page-subtitle">
-        Acompanhe os valores que realmente entraram no caixa, com data e forma de pagamento.
+        Acompanhe os valores que realmente entraram no caixa, incluindo vendas e serviços, com data e forma de pagamento.
       </p>
 
       <HelpBanner
         title="Como usar este relatório"
-        text="Aqui você vê todos os recebimentos vinculados às vendas ativas, com data, forma de pagamento, cliente, produto e observação. É o relatório ideal para acompanhar entradas reais no caixa."
+        text="Aqui você vê os recebimentos que realmente entraram no caixa, tanto de vendas quanto de serviços. Cada linha mostra a origem da entrada, cliente ou paciente, forma de pagamento e observação."
       />
 
       {mensagem && <p>{mensagem}</p>}
@@ -363,7 +419,7 @@ export default function RelatorioRecebimentosPage() {
 
       <div style={acoesTopo}>
         <input
-          placeholder="Buscar por cliente, produto, SKU, forma ou observação"
+          placeholder="Buscar por origem, cliente, produto, SKU, forma ou observação"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           style={inputBusca}
@@ -440,7 +496,8 @@ export default function RelatorioRecebimentosPage() {
             <thead>
               <tr>
                 <th style={th}>Data</th>
-                <th style={th}>Venda</th>
+                <th style={th}>Origem</th>
+                <th style={th}>Referência</th>
                 <th style={th}>Cliente</th>
                 <th style={th}>Produto</th>
                 <th style={th}>SKU</th>
@@ -463,7 +520,7 @@ export default function RelatorioRecebimentosPage() {
             <tbody>
               {carregando ? (
                 <tr>
-                  <td style={tdVazio} colSpan={8}>
+                  <td style={tdVazio} colSpan={9}>
                     Carregando...
                   </td>
                 </tr>
@@ -471,7 +528,8 @@ export default function RelatorioRecebimentosPage() {
                 paymentRowsFiltrados.map((r) => (
                   <tr key={r.id}>
                     <td style={td}>{formatarData(r.data)}</td>
-                    <td style={td}>#{r.vendaId}</td>
+                    <td style={td}>{r.origem}</td>
+                    <td style={td}>{r.referencia}</td>
                     <td style={td}>{r.cliente}</td>
                     <td style={td}>{r.produto}</td>
                     <td style={td}>{r.sku}</td>
@@ -482,7 +540,7 @@ export default function RelatorioRecebimentosPage() {
                 ))
               ) : (
                 <tr>
-                  <td style={tdVazio} colSpan={8}>
+                  <td style={tdVazio} colSpan={9}>
                     Nenhum recebimento encontrado no período.
                   </td>
                 </tr>

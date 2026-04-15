@@ -34,6 +34,14 @@ type SalePayment = {
   user_id: string
 }
 
+type ServicePayment = {
+  id: number
+  patient_id: number
+  valor: number
+  created_at: string
+  user_id: string
+}
+
 type FinancialTransaction = {
   id: number
   type: "entrada" | "saida"
@@ -57,6 +65,7 @@ export default function RelatoriosPage() {
   const [sales, setSales] = useState<Sale[]>([])
   const [payments, setPayments] = useState<SalePayment[]>([])
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
+  const [servicePayments, setServicePayments] = useState<ServicePayment[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
 
   const [mensagem, setMensagem] = useState("")
@@ -110,12 +119,17 @@ export default function RelatoriosPage() {
       .select("id, type, amount, status, created_at, user_id")
       .eq("user_id", user.id)
 
-      const { data: productsData, error: productsError } = await supabase
+    const { data: servicePaymentsData, error: servicePaymentsError } = await supabase
+      .from("service_payments")
+      .select("id, patient_id, valor, created_at, user_id")
+      .eq("user_id", user.id)
+
+    const { data: productsData, error: productsError } = await supabase
       .from("products")
       .select("id, nome, sku, estoque, custo, preco, user_id")
       .eq("user_id", user.id)
 
-    if (salesError || paymentsError || transactionsError || productsError) {
+    if (salesError || paymentsError || transactionsError || servicePaymentsError || productsError) {
       setMensagem("Erro ao carregar o centro de relatórios.")
       setCarregando(false)
       return
@@ -124,6 +138,7 @@ export default function RelatoriosPage() {
     setSales((salesData ?? []) as Sale[])
     setPayments((paymentsData ?? []) as SalePayment[])
     setTransactions((transactionsData ?? []) as FinancialTransaction[])
+    setServicePayments((servicePaymentsData ?? []) as ServicePayment[])
     setProdutos((productsData ?? []) as Produto[])
     setCarregando(false)
   }
@@ -137,9 +152,16 @@ export default function RelatoriosPage() {
       0
     )
 
-    const totalRecebimentos = payments
+    const totalRecebimentosVendas = payments
       .filter((payment) => idsVendasAtivas.has(payment.sale_id))
       .reduce((acc, payment) => acc + Number(payment.valor), 0)
+
+    const totalRecebimentosServicos = servicePayments.reduce(
+      (acc, payment) => acc + Number(payment.valor),
+      0
+    )
+
+    const totalRecebimentos = totalRecebimentosVendas + totalRecebimentosServicos
 
     const totalDespesasPagas = transactions
       .filter((item) => item.type === "saida" && item.status === "pago")
@@ -169,13 +191,15 @@ const valorProdutosSemVendaComEstoque = produtosSemVendaComEstoque.reduce(
     return {
   totalVendas,
   totalRecebimentos,
+  totalRecebimentosVendas,
+  totalRecebimentosServicos,
   totalDespesasPagas,
   totalDespesasPendentes,
   totalProdutosComEstoque: produtosComEstoque.length,
   produtosSemVendaComEstoque: produtosSemVendaComEstoque.length,
   valorProdutosSemVendaComEstoque,
 }
-  }, [sales, payments, transactions])
+  }, [sales, payments, transactions, servicePayments, produtos])
 
   const cards = [
     {
@@ -195,7 +219,7 @@ const valorProdutosSemVendaComEstoque = produtosSemVendaComEstoque.reduce(
     {
       href: "/relatorios/recebimentos",
       titulo: "Recebimentos",
-      descricao: "Acompanhe o dinheiro que entrou, por forma de pagamento e data.",
+      descricao: "Acompanhe o dinheiro que entrou por vendas e serviços, com forma de pagamento e data.",
       icon: <Wallet size={20} />,
       destaque: "Fluxo de entrada",
     },
@@ -228,12 +252,12 @@ const valorProdutosSemVendaComEstoque = produtosSemVendaComEstoque.reduce(
       <h2 className="page-title">Centro de Relatórios</h2>
 
       <p className="page-subtitle">
-        Acesse relatórios separados para analisar vendas, recebimentos, despesas e lucratividade.
+        Acesse relatórios separados para analisar vendas, recebimentos, despesas e lucratividade, sem misturar produto com serviço.
       </p>
 
       <HelpBanner
         title="Como usar os Relatórios"
-        text="Esta área reúne os principais relatórios do sistema. Use lucratividade para entender quais produtos dão mais retorno, vendas para acompanhar a operação comercial, recebimentos para ver o que entrou no caixa e despesas para controlar seus custos."
+        text="Esta área reúne os principais relatórios do sistema. Use lucratividade e vendas para analisar produtos, recebimentos para acompanhar entradas vindas de vendas e serviços, e despesas para controlar seus custos."
       />
 
       {mensagem && <p>{mensagem}</p>}
@@ -257,9 +281,25 @@ const valorProdutosSemVendaComEstoque = produtosSemVendaComEstoque.reduce(
         <div className="section-card">
           <h3 style={tituloComAjuda}>
             Total recebido
-            <HelpTooltip text="Soma dos pagamentos já recebidos das vendas ativas." />
+            <HelpTooltip text="Soma dos pagamentos já recebidos das vendas ativas e dos serviços registrados." />
           </h3>
           <p>R$ {resumo.totalRecebimentos.toFixed(2)}</p>
+        </div>
+
+        <div className="section-card">
+          <h3 style={tituloComAjuda}>
+            Recebido em vendas
+            <HelpTooltip text="Parte do total recebido que veio do módulo de vendas." />
+          </h3>
+          <p>R$ {resumo.totalRecebimentosVendas.toFixed(2)}</p>
+        </div>
+
+        <div className="section-card">
+          <h3 style={tituloComAjuda}>
+            Recebido em serviços
+            <HelpTooltip text="Parte do total recebido que veio dos pagamentos de serviço." />
+          </h3>
+          <p>R$ {resumo.totalRecebimentosServicos.toFixed(2)}</p>
         </div>
 
         <div className="section-card">
