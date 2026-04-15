@@ -54,13 +54,15 @@ const menuGroups = [
     ],
   },
   {
-    title: "Serviços",
-    items: [
-      { href: "/pacientes", label: "Pacientes", icon: HeartPulse },
-      { href: "/agenda", label: "Agenda", icon: CalendarDays },
-      { href: "/evolucao", label: "Evolução", icon: Activity },
-    ],
-  },
+  title: "Serviços",
+  items: [
+    { href: "/pacientes", label: "Pacientes", icon: HeartPulse },
+    { href: "/agenda", label: "Agenda", icon: CalendarDays },
+    { href: "/evolucao", label: "Evolução", icon: Activity },
+    { href: "/pagamentos-servico", label: "Pagamentos", icon: Wallet },
+    { href: "/reposicoes", label: "Reposições", icon: ClipboardList },
+  ],
+},
   {
     title: "Gestão",
     items: [
