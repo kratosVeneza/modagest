@@ -958,7 +958,7 @@ export default function PagamentosServicoPage() {
               </tr>
             </thead>
             <tbody>
-                               {cobrancasFiltradas.map((c) => {
+                {cobrancasFiltradas.map((c) => {
                 const pagamentosDaCobranca = pagamentos.filter((p) => p.billing_id === c.id)
 
                  return (
@@ -1052,7 +1052,7 @@ export default function PagamentosServicoPage() {
                             </div>
                           )}
 
-                                                    {c.status !== "cancelada" && (
+                            {c.status !== "cancelada" && (
                             <button
                               className="btn btn-danger btn-sm"
                               onClick={() => cancelarCobranca(c.id)}
