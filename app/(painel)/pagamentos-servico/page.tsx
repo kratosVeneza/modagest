@@ -598,6 +598,61 @@ export default function PagamentosServicoPage() {
     await carregarDados()
   }
 
+    async function excluirCobranca(cobranca: ServiceBilling) {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const pagamentosDaCobranca = pagamentos.filter((p) => p.billing_id === cobranca.id)
+    const idsPagamentos = pagamentosDaCobranca.map((p) => p.id)
+
+    if (idsPagamentos.length > 0) {
+      const { error: financeiroDeleteError } = await supabase
+        .from("financial_transactions")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("reference_type", "servico")
+        .in("reference_id", idsPagamentos)
+
+      if (financeiroDeleteError) {
+        setMensagem(financeiroDeleteError.message || "Erro ao excluir lançamentos financeiros da cobrança.")
+        return
+      }
+
+      const { error: pagamentosDeleteError } = await supabase
+        .from("service_payments")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("billing_id", cobranca.id)
+
+      if (pagamentosDeleteError) {
+        setMensagem(pagamentosDeleteError.message || "Erro ao excluir pagamentos da cobrança.")
+        return
+      }
+    }
+
+    const { error: cobrancaDeleteError } = await supabase
+      .from("service_billings")
+      .delete()
+      .eq("id", cobranca.id)
+      .eq("user_id", user.id)
+
+    if (cobrancaDeleteError) {
+      setMensagem(cobrancaDeleteError.message || "Erro ao excluir cobrança.")
+      return
+    }
+
+    setMensagem("Cobrança excluída com sucesso.")
+    await carregarDados()
+  }
+
     function editarPagamentoExistente(pagamento: ServicePayment) {
     setBillingIdPagamento(pagamento.billing_id || null)
     setPaymentIdEdicao(pagamento.id)
@@ -997,7 +1052,7 @@ export default function PagamentosServicoPage() {
                             </div>
                           )}
 
-                          {c.status !== "cancelada" && (
+                                                    {c.status !== "cancelada" && (
                             <button
                               className="btn btn-danger btn-sm"
                               onClick={() => cancelarCobranca(c.id)}
@@ -1005,6 +1060,13 @@ export default function PagamentosServicoPage() {
                               Cancelar cobrança
                             </button>
                           )}
+
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => excluirCobranca(c)}
+                          >
+                            Excluir cobrança
+                          </button>
                         </div>
                       </td>
                     </tr>
