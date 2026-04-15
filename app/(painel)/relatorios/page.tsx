@@ -421,6 +421,7 @@ const valorProdutosSemVendaComEstoque = produtosSemVendaComEstoque.reduce(
                   fontSize: 14,
                 }}
               >
+                
                 Abrir relatório
                 <ArrowRight size={16} />
               </div>
