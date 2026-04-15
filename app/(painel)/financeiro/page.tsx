@@ -19,7 +19,6 @@ import { updateFinancialTransaction } from "@/lib/services/financial/updateFinan
 import { deleteFinancialTransaction } from "@/lib/services/financial/deleteFinancialTransaction"
 import { markFinancialTransactionPaid } from "@/lib/services/financial/markFinancialTransactionPaid"
 
-
 type SalePayment = {
   id: number
   sale_id: number
@@ -29,13 +28,26 @@ type SalePayment = {
   created_at: string
 }
 
+type ServicePayment = {
+  id: number
+  patient_id: number
+  valor: number
+  forma_pagamento: string | null
+  observacao: string | null
+  data_pagamento: string
+  competencia_inicio: string | null
+  competencia_fim: string | null
+  created_at: string
+  patients?: { nome: string } | null
+}
+
 type Loja = {
   nome_loja?: string | null
   logo_url?: string | null
 }
 
 type LinhaFinanceira = {
-  origem: "venda" | "manual"
+  origem: "venda" | "servico" | "manual"
   id: string
   tipo: "entrada" | "saida"
   descricao: string
@@ -97,6 +109,7 @@ export default function Financeiro() {
   const [loadingAccess, setLoadingAccess] = useState(true)
   const [hasAccess, setHasAccess] = useState(false)
   const [pagamentosVendas, setPagamentosVendas] = useState<SalePayment[]>([])
+  const [pagamentosServicos, setPagamentosServicos] = useState<ServicePayment[]>([])
   const [movimentacoes, setMovimentacoes] = useState<FinancialTransaction[]>([])
   const [vendas, setVendas] = useState<SaleResumo[]>([])
   const [mensagem, setMensagem] = useState("")
@@ -165,6 +178,28 @@ export default function Financeiro() {
     return
   }
 
+    const { data: pagamentosServicosData, error: pagamentosServicosError } = await supabase
+    .from("service_payments")
+    .select(`
+      id,
+      patient_id,
+      valor,
+      forma_pagamento,
+      observacao,
+      data_pagamento,
+      competencia_inicio,
+      competencia_fim,
+      created_at,
+      patients (nome)
+    `)
+    .eq("user_id", user.id)
+    .order("data_pagamento", { ascending: false })
+
+  if (pagamentosServicosError) {
+    setMensagem("Erro ao carregar pagamentos de serviços.")
+    return
+  }
+
   const { data: vendasData, error: vendasError } = await supabase
   .from("sales")
   .select(`
@@ -196,16 +231,21 @@ export default function Financeiro() {
   idsVendasAtivas.has(p.sale_id)
 )
 
-  const resultadoMovimentacoes = await getFinancialTransactions(user.id)
+    const resultadoMovimentacoes = await getFinancialTransactions(user.id)
 
   if (!resultadoMovimentacoes.success) {
     setMensagem(resultadoMovimentacoes.message)
     return
   }
 
+  const movimentacoesManuais = resultadoMovimentacoes.transactions.filter(
+    (m) => m.reference_type !== "venda" && m.reference_type !== "servico"
+  )
+
   setPagamentosVendas(pagamentosValidos)
+  setPagamentosServicos((pagamentosServicosData ?? []) as unknown as ServicePayment[])
   setVendas(vendasAtivas)
-  setMovimentacoes(resultadoMovimentacoes.transactions)
+  setMovimentacoes(movimentacoesManuais)
 
 }
 
@@ -375,6 +415,24 @@ export default function Financeiro() {
   }
 })
 
+  const recebimentosServicos: LinhaFinanceira[] = pagamentosServicos.map((p) => {
+    const nomePaciente = p.patients?.nome || "Paciente"
+
+    return {
+      origem: "servico",
+      id: `servico-pagamento-${p.id}`,
+      tipo: "entrada",
+      descricao: `Serviço - ${nomePaciente}`,
+      categoria: "Serviço",
+      valor: Number(p.valor),
+      status: "pago",
+      vencimento: p.data_pagamento,
+      pagamento: p.data_pagamento,
+      criadoEm: p.created_at,
+      formaPagamento: p.forma_pagamento || "",
+    }
+  })
+
   const totalPagoPorVenda = new Map<number, number>()
 
   for (const pagamento of pagamentosVendas) {
@@ -412,23 +470,40 @@ export default function Financeiro() {
   return acc
 }, [])
 
-  const linhasManuais: LinhaFinanceira[] = movimentacoes.map((m) => ({
-    origem: "manual",
-    id: `manual-${m.id}`,
-    tipo: m.type,
-    descricao: m.description,
-    categoria: m.category || "Outros",
-    valor: Number(m.amount),
-    status: m.status,
-    vencimento: m.due_date,
-    pagamento: m.paid_at,
-    criadoEm: m.created_at,
-  }))
+  const servicosAutomaticos: LinhaFinanceira[] = movimentacoes
+    .filter((m) => m.reference_type === "servico")
+    .map((m) => ({
+      origem: "servico",
+      id: `servico-${m.id}`,
+      tipo: m.type,
+      descricao: m.description,
+      categoria: m.category || "Serviço",
+      valor: Number(m.amount),
+      status: m.status,
+      vencimento: m.due_date,
+      pagamento: m.paid_at,
+      criadoEm: m.created_at,
+    }))
 
-  return [...recebimentosVendas, ...vendasPendentes, ...linhasManuais].sort(
+  const linhasManuais: LinhaFinanceira[] = movimentacoes
+    .filter((m) => m.reference_type !== "servico")
+    .map((m) => ({
+      origem: "manual",
+      id: `manual-${m.id}`,
+      tipo: m.type,
+      descricao: m.description,
+      categoria: m.category || "Outros",
+      valor: Number(m.amount),
+      status: m.status,
+      vencimento: m.due_date,
+      pagamento: m.paid_at,
+      criadoEm: m.created_at,
+    }))
+
+    return [...recebimentosVendas, ...recebimentosServicos, ...vendasPendentes, ...linhasManuais].sort(
     (a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()
   )
-}, [pagamentosVendas, vendas, movimentacoes])
+}, [pagamentosVendas, pagamentosServicos, vendas, movimentacoes])
 
   const linhasFiltradas = useMemo(() => {
     const termo = busca.trim().toLowerCase()
@@ -616,7 +691,7 @@ const passouBusca =
 
       <HelpBanner
         title="Como usar o Financeiro"
-        text="Cadastre aqui suas despesas e entradas extras, como marketing, frete, aluguel, energia, internet, fornecedores e retiradas. Os recebimentos das vendas entram automaticamente. O saldo atual mostra o que já entrou e saiu. O saldo previsto considera também pendências."
+        text="Cadastre aqui suas despesas e entradas extras, como marketing, frete, aluguel, energia, internet, fornecedores e retiradas. Os recebimentos das vendas e dos serviços entram automaticamente. O saldo atual mostra o que já entrou e saiu. O saldo previsto considera também pendências."
       />
 
       {mensagem && <p>{mensagem}</p>}
@@ -677,7 +752,7 @@ const passouBusca =
         <div className="section-card">
           <h3 style={tituloComAjuda}>
             Entradas recebidas
-            <HelpTooltip text="Soma dos pagamentos já recebidos das vendas e também das entradas manuais marcadas como pagas." />
+            <HelpTooltip text="Soma dos pagamentos já recebidos das vendas, dos serviços e também das entradas manuais marcadas como pagas." />
           </h3>
           <p>R$ {entradasRecebidas.toFixed(2)}</p>
         </div>
@@ -756,15 +831,15 @@ const passouBusca =
 
               return (
                 <tr key={item.id}>
-  <td style={td}>
+    <td style={td}>
   <span
     className={
-      item.origem === "venda"
-        ? "status-pill status-blue"
-        : "status-pill status-gray"
+      item.origem === "manual"
+        ? "status-pill status-gray"
+        : "status-pill status-blue"
     }
   >
-    {item.origem === "venda" ? "Automática" : "Manual"}
+    {item.origem === "manual" ? "Manual" : "Automática"}
   </span>
 </td>
   <td style={td}>
@@ -786,8 +861,12 @@ const passouBusca =
   </td>
 
   <td style={td}>
-    {item.origem === "venda" && item.descricao.includes("(")
-      ? item.descricao.split("(")[1]?.replace(")", "")
+    {item.origem === "venda"
+      ? item.descricao.includes("(")
+        ? item.descricao.split("(")[1]?.replace(")", "")
+        : "-"
+      : item.origem === "servico"
+      ? item.descricao.replace(/^Recebimento de serviço - /, "")
       : "-"}
   </td>
 
