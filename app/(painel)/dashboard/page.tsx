@@ -414,6 +414,15 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     })
     .reduce((soma, m) => soma + Number(m.amount), 0)
 
+      const servicosRecebidosTotal = movimentacoesLista
+    .filter(
+      (m) =>
+        m.reference_type === "servico" &&
+        m.type === "entrada" &&
+        m.status === "pago"
+    )
+    .reduce((soma, m) => soma + Number(m.amount), 0)
+
   const servicosRecebidosAnterior = movimentacoesLista
     .filter((m) => {
       const dataBase = m.paid_at || m.created_at
@@ -502,9 +511,9 @@ setMovimentacoesFinanceiras(movimentacoesLista)
     .filter((m) => m.type === "saida" && m.status === "pendente")
     .reduce((soma, m) => soma + Number(m.amount), 0)
 
-  const entradasPagasTotal =
+    const entradasPagasTotal =
     pagamentosLista.reduce((soma, p) => soma + Number(p.valor), 0) +
-    servicosRecebidosAtual +
+    servicosRecebidosTotal +
     entradasManuaisPagas
 
   const saldoAtualCalculado = entradasPagasTotal - saidasManuaisPagas
@@ -529,7 +538,30 @@ setMovimentacoesFinanceiras(movimentacoesLista)
   setServicosRecebidosComparacao(servicosRecebidosAnterior)
 
   gerarGraficoVendas(vendasPeriodoAtual, inicioAtual, quantidadeDias)
-  gerarGraficoRecebido(pagamentosAtual, inicioAtual, quantidadeDias)
+    const entradasRecebidasPeriodo = [
+    ...pagamentosAtual.map((p) => ({
+      created_at: p.created_at,
+      valor: Number(p.valor),
+    })),
+    ...movimentacoesLista
+      .filter((m) => {
+        const dataBase = m.paid_at || m.created_at
+        const data = new Date(dataBase)
+        return (
+          m.reference_type === "servico" &&
+          m.type === "entrada" &&
+          m.status === "pago" &&
+          data >= inicioAtual &&
+          data <= fimAtual
+        )
+      })
+      .map((m) => ({
+        created_at: (m.paid_at || m.created_at) as string,
+        valor: Number(m.amount),
+      })),
+  ]
+
+  gerarGraficoRecebido(entradasRecebidasPeriodo, inicioAtual, quantidadeDias)
   gerarUltimasVendas(vendasPeriodoAtual, pagamentosLista, produtosLista, clientesLista)
   gerarProdutoMaisVendido(vendasPeriodoAtual, produtosLista)
   gerarEstoqueBaixo(produtosLista)
