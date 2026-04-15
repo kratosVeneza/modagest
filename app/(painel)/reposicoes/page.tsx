@@ -13,6 +13,7 @@ type Replacement = {
   id: number
   patient_id: number
   data_reposicao: string
+  hora_reposicao: string | null
   motivo: string | null
   observacoes: string | null
   created_at: string
@@ -35,8 +36,10 @@ export default function ReposicoesPage() {
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
 
+    const [idEdicao, setIdEdicao] = useState<number | null>(null)
   const [patientId, setPatientId] = useState("")
   const [dataReposicao, setDataReposicao] = useState(hojeInputDate())
+  const [horaReposicao, setHoraReposicao] = useState("")
   const [motivo, setMotivo] = useState("")
   const [observacoes, setObservacoes] = useState("")
 
@@ -68,12 +71,13 @@ export default function ReposicoesPage() {
       return
     }
 
-    const { data: reposicoesData, error: reposicoesError } = await supabase
+       const { data: reposicoesData, error: reposicoesError } = await supabase
       .from("patient_replacements")
       .select(`
         id,
         patient_id,
         data_reposicao,
+        hora_reposicao,
         motivo,
         observacoes,
         created_at,
@@ -91,7 +95,7 @@ export default function ReposicoesPage() {
     setReposicoes((reposicoesData ?? []) as unknown as Replacement[])
   }
 
-  async function salvarReposicao() {
+    async function salvarReposicao() {
     setMensagem("")
 
     const {
@@ -113,11 +117,36 @@ export default function ReposicoesPage() {
       return
     }
 
+    if (idEdicao) {
+      const { error } = await supabase
+        .from("patient_replacements")
+        .update({
+          patient_id: Number(patientId),
+          data_reposicao: dataReposicao,
+          hora_reposicao: horaReposicao || null,
+          motivo: motivo || null,
+          observacoes: observacoes || null,
+        })
+        .eq("id", idEdicao)
+        .eq("user_id", user.id)
+
+      if (error) {
+        setMensagem(error.message || "Erro ao editar reposição.")
+        return
+      }
+
+      limparFormulario()
+      setMensagem("Reposição atualizada com sucesso.")
+      await carregarDados()
+      return
+    }
+
     const { error } = await supabase.from("patient_replacements").insert([
       {
         user_id: user.id,
         patient_id: Number(patientId),
         data_reposicao: dataReposicao,
+        hora_reposicao: horaReposicao || null,
         motivo: motivo || null,
         observacoes: observacoes || null,
       },
@@ -128,11 +157,57 @@ export default function ReposicoesPage() {
       return
     }
 
+    limparFormulario()
+    setMensagem("Reposição registrada com sucesso.")
+    await carregarDados()
+  }
+
+    function limparFormulario() {
+    setIdEdicao(null)
     setPatientId("")
     setDataReposicao(hojeInputDate())
+    setHoraReposicao("")
     setMotivo("")
     setObservacoes("")
-    setMensagem("Reposição registrada com sucesso.")
+  }
+
+  function editarReposicao(reposicao: Replacement) {
+    setIdEdicao(reposicao.id)
+    setPatientId(String(reposicao.patient_id))
+    setDataReposicao(reposicao.data_reposicao)
+    setHoraReposicao(reposicao.hora_reposicao || "")
+    setMotivo(reposicao.motivo || "")
+    setObservacoes(reposicao.observacoes || "")
+  }
+
+  async function excluirReposicao(id: number) {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const { error } = await supabase
+      .from("patient_replacements")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+
+    if (error) {
+      setMensagem(error.message || "Erro ao excluir reposição.")
+      return
+    }
+
+    if (idEdicao === id) {
+      limparFormulario()
+    }
+
+    setMensagem("Reposição excluída com sucesso.")
     await carregarDados()
   }
 
@@ -174,12 +249,21 @@ export default function ReposicoesPage() {
             </select>
           </div>
 
-          <div>
+                    <div>
             <label>Data da reposição</label>
             <input
               type="date"
               value={dataReposicao}
               onChange={(e) => setDataReposicao(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label>Horário da reposição</label>
+            <input
+              type="time"
+              value={horaReposicao}
+              onChange={(e) => setHoraReposicao(e.target.value)}
             />
           </div>
 
@@ -198,9 +282,17 @@ export default function ReposicoesPage() {
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <button onClick={salvarReposicao} className="btn btn-primary">
-            Registrar reposição
-          </button>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={salvarReposicao} className="btn btn-primary">
+              {idEdicao ? "Salvar alterações" : "Registrar reposição"}
+            </button>
+
+            {idEdicao && (
+              <button onClick={limparFormulario} className="btn btn-secondary">
+                Cancelar edição
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -216,28 +308,47 @@ export default function ReposicoesPage() {
         <div className="data-table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr>
+                            <tr>
                 <th style={th}>Paciente</th>
                 <th style={th}>Data</th>
+                <th style={th}>Horário</th>
                 <th style={th}>Motivo</th>
                 <th style={th}>Observações</th>
+                <th style={th}>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {reposicoesFiltradas.map((r) => (
+                            {reposicoesFiltradas.map((r) => (
                 <tr key={r.id}>
                   <td style={td}>{r.patients?.nome || "-"}</td>
                   <td style={td}>
                     {new Date(`${r.data_reposicao}T12:00:00`).toLocaleDateString("pt-BR")}
                   </td>
+                  <td style={td}>{r.hora_reposicao || "-"}</td>
                   <td style={td}>{r.motivo || "-"}</td>
                   <td style={td}>{r.observacoes || "-"}</td>
+                  <td style={td}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => editarReposicao(r)}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => excluirReposicao(r.id)}
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
 
               {reposicoesFiltradas.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={4}>
+                    <td style={td} colSpan={6}>
                     Nenhuma reposição encontrada.
                   </td>
                 </tr>
