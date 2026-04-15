@@ -32,6 +32,20 @@ type ServiceBilling = {
   } | null
 }
 
+type ServicePayment = {
+  id: number
+  billing_id: number | null
+  patient_id: number
+  servico: string | null
+  valor: number
+  forma_pagamento: string | null
+  observacao: string | null
+  data_pagamento: string
+  competencia_inicio: string | null
+  competencia_fim: string | null
+  created_at: string
+}
+
 function hojeInputDate() {
   const hoje = new Date()
   const ano = hoje.getFullYear()
@@ -73,10 +87,17 @@ function calcularProximoPagamento(
 }
 
 export default function PagamentosServicoPage() {
-  const [pacientes, setPacientes] = useState<Patient[]>([])
-const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
+    const [pacientes, setPacientes] = useState<Patient[]>([])
+  const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
+  const [pagamentos, setPagamentos] = useState<ServicePayment[]>([])
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
+
+  const [billingIdPagamento, setBillingIdPagamento] = useState<number | null>(null)
+  const [valorPagamento, setValorPagamento] = useState("")
+  const [dataPagamento, setDataPagamento] = useState(hojeInputDate())
+  const [formaPagamento, setFormaPagamento] = useState("Pix")
+  const [observacaoPagamento, setObservacaoPagamento] = useState("")
 
     const [patientId, setPatientId] = useState("")
   const [servico, setServico] = useState("Pilates")
@@ -122,7 +143,7 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
       return
     }
 
-        const { data: cobrancasData, error: cobrancasError } = await supabase
+            const { data: cobrancasData, error: cobrancasError } = await supabase
       .from("service_billings")
       .select(`
         id,
@@ -149,8 +170,32 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
       return
     }
 
+    const { data: pagamentosData, error: pagamentosError } = await supabase
+      .from("service_payments")
+      .select(`
+        id,
+        billing_id,
+        patient_id,
+        servico,
+        valor,
+        forma_pagamento,
+        observacao,
+        data_pagamento,
+        competencia_inicio,
+        competencia_fim,
+        created_at
+      `)
+      .eq("user_id", user.id)
+      .order("data_pagamento", { ascending: false })
+
+    if (pagamentosError) {
+      setMensagem("Erro ao carregar pagamentos da cobrança.")
+      return
+    }
+
     setPacientes((pacientesData ?? []) as Patient[])
     setCobrancas((cobrancasData ?? []) as unknown as ServiceBilling[])
+    setPagamentos((pagamentosData ?? []) as unknown as ServicePayment[])
   }
 
     const valorOriginalNumero = Number(valorOriginal || 0)
@@ -331,6 +376,128 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
     await carregarDados()
   }
 
+    async function adicionarPagamento(cobranca: ServiceBilling) {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const valor = Number(valorPagamento || 0)
+
+    if (valor <= 0) {
+      setMensagem("Informe um valor de pagamento válido.")
+      return
+    }
+
+    const totalPagoAtual = totalPagoDaCobranca(cobranca.id)
+    const emAbertoAtual = Math.max(Number(cobranca.valor_total) - totalPagoAtual, 0)
+
+    if (valor > emAbertoAtual) {
+      setMensagem("O pagamento não pode ser maior que o valor em aberto.")
+      return
+    }
+
+    const { data: pagamentoInserido, error: pagamentoError } = await supabase
+      .from("service_payments")
+      .insert([
+        {
+          user_id: user.id,
+          billing_id: cobranca.id,
+          patient_id: cobranca.patient_id,
+          servico: cobranca.servico,
+          valor,
+          forma_pagamento: formaPagamento || null,
+          observacao: observacaoPagamento || null,
+          data_pagamento: dataPagamento,
+          competencia_inicio: cobranca.competencia_inicio || null,
+          competencia_fim: cobranca.competencia_fim || null,
+        },
+      ])
+      .select("id")
+      .single()
+
+    if (pagamentoError || !pagamentoInserido) {
+      setMensagem(pagamentoError?.message || "Erro ao adicionar pagamento.")
+      return
+    }
+
+    const nomePaciente = cobranca.patients?.nome || "Paciente"
+
+    const { error: financeiroError } = await supabase
+      .from("financial_transactions")
+      .insert([
+        {
+          user_id: user.id,
+          type: "entrada",
+          amount: valor,
+          status: "pago",
+          description: `Recebimento de serviço - ${cobranca.servico} - ${nomePaciente}`,
+          category: "Serviço",
+          reference_type: "servico",
+          reference_id: pagamentoInserido.id,
+          created_at: new Date(`${dataPagamento}T12:00:00-03:00`).toISOString(),
+          paid_at: new Date(`${dataPagamento}T12:00:00-03:00`).toISOString(),
+        },
+      ])
+
+    if (financeiroError) {
+      setMensagem("Pagamento adicionado, mas houve erro ao lançar no financeiro.")
+      await carregarDados()
+      return
+    }
+
+    const totalPagoFinal = totalPagoAtual + valor
+    const novoStatus = totalPagoFinal >= Number(cobranca.valor_total) ? "quitada" : "ativa"
+
+    await supabase
+      .from("service_billings")
+      .update({ status: novoStatus })
+      .eq("id", cobranca.id)
+      .eq("user_id", user.id)
+
+    setBillingIdPagamento(null)
+    setValorPagamento("")
+    setDataPagamento(hojeInputDate())
+    setFormaPagamento("Pix")
+    setObservacaoPagamento("")
+
+    setMensagem("Pagamento adicionado com sucesso.")
+    await carregarDados()
+  }
+
+    async function cancelarCobranca(cobrancaId: number) {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const { error } = await supabase
+      .from("service_billings")
+      .update({ status: "cancelada" })
+      .eq("id", cobrancaId)
+      .eq("user_id", user.id)
+
+    if (error) {
+      setMensagem(error.message || "Erro ao cancelar cobrança.")
+      return
+    }
+
+    setMensagem("Cobrança cancelada com sucesso.")
+    await carregarDados()
+  }
+
     const cobrancasFiltradas = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     if (!termo) return cobrancas
@@ -358,6 +525,17 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
       }
     })
   }, [pacientes, cobrancas])
+
+    function totalPagoDaCobranca(billingId: number) {
+    return pagamentos
+      .filter((p) => p.billing_id === billingId)
+      .reduce((soma, p) => soma + Number(p.valor), 0)
+  }
+
+  function valorEmAbertoDaCobranca(cobranca: ServiceBilling) {
+    const pago = totalPagoDaCobranca(cobranca.id)
+    return Math.max(Number(cobranca.valor_total) - pago, 0)
+  }
 
   return (
     <div>
@@ -605,11 +783,14 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
                 <th style={th}>Valor original</th>
                 <th style={th}>Desconto</th>
                 <th style={th}>Valor final</th>
+                <th style={th}>Pago</th>
+                <th style={th}>Em aberto</th>
                 <th style={th}>Vencimento</th>
                 <th style={th}>Restante sugerido</th>
                 <th style={th}>Competência</th>
                 <th style={th}>Status</th>
                 <th style={th}>Observação</th>
+                <th style={th}>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -624,6 +805,8 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
                       : `R$ ${Number(c.desconto_valor || 0).toFixed(2)}`}
                   </td>
                   <td style={td}>R$ {Number(c.valor_total).toFixed(2)}</td>
+                  <td style={td}>R$ {totalPagoDaCobranca(c.id).toFixed(2)}</td>
+                  <td style={td}>R$ {valorEmAbertoDaCobranca(c).toFixed(2)}</td>
                   <td style={td}>
                     {new Date(`${c.data_vencimento}T12:00:00`).toLocaleDateString("pt-BR")}
                   </td>
@@ -641,14 +824,69 @@ const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
                       ? new Date(`${c.competencia_fim}T12:00:00`).toLocaleDateString("pt-BR")
                       : "-"}
                   </td>
-                  <td style={td}>{c.status}</td>
+                                    <td style={td}>{c.status}</td>
                   <td style={td}>{c.observacao || "-"}</td>
+                  <td style={td}>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {c.status !== "cancelada" && valorEmAbertoDaCobranca(c) > 0 && (
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="Valor pagamento"
+                            value={billingIdPagamento === c.id ? valorPagamento : ""}
+                            onChange={(e) => {
+                              setBillingIdPagamento(c.id)
+                              setValorPagamento(e.target.value)
+                            }}
+                          />
+                          <input
+                            type="date"
+                            value={billingIdPagamento === c.id ? dataPagamento : hojeInputDate()}
+                            onChange={(e) => {
+                              setBillingIdPagamento(c.id)
+                              setDataPagamento(e.target.value)
+                            }}
+                          />
+                          <select
+                            value={billingIdPagamento === c.id ? formaPagamento : "Pix"}
+                            onChange={(e) => {
+                              setBillingIdPagamento(c.id)
+                              setFormaPagamento(e.target.value)
+                            }}
+                          >
+                            <option value="Pix">Pix</option>
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Cartão de débito">Cartão de débito</option>
+                            <option value="Cartão de crédito">Cartão de crédito</option>
+                            <option value="Transferência">Transferência</option>
+                            <option value="Outro">Outro</option>
+                          </select>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => adicionarPagamento(c)}
+                          >
+                            Adicionar pagamento
+                          </button>
+                        </div>
+                      )}
+
+                      {c.status !== "cancelada" && (
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => cancelarCobranca(c.id)}
+                        >
+                          Cancelar cobrança
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
 
                 {cobrancasFiltradas.length === 0 && (
                 <tr>
-                    <td style={td} colSpan={10}>
+                    <td style={td} colSpan={13}>
                     Nenhuma cobrança encontrada.
                   </td>
                 </tr>
