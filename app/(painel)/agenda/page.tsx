@@ -65,11 +65,8 @@ export default function AgendaPage() {
   const [observacoes, setObservacoes] = useState("")
   const [dataFiltroDia, setDataFiltroDia] = useState(hojeInputDate())
 
-  useEffect(() => {
-    carregarDados()
-  }, [])
-
-  useEffect(() => {
+    useEffect(() => {
+    if (!dataFiltroDia) return
     sincronizarAgendaDoDia(dataFiltroDia)
   }, [dataFiltroDia])
 
@@ -137,58 +134,64 @@ export default function AgendaPage() {
     setAgendamentos((agendaData ?? []) as unknown as Appointment[])
   }
 
-  async function sincronizarAgendaDoDia(dataReferencia: string) {
+    async function sincronizarAgendaDoDia(dataReferencia: string) {
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user || !dataReferencia) return
 
-    const { data: pacientesData } = await supabase
+    const dataObj = new Date(`${dataReferencia}T12:00:00`)
+    const weekday = dataObj.getDay()
+
+    const { data: pacientesData, error: pacientesError } = await supabase
       .from("patients")
       .select("id, nome, ativo")
       .eq("user_id", user.id)
+
+    if (pacientesError) return
 
     const pacientesLista = (pacientesData ?? []) as Patient[]
     const pacientesAtivosIds = new Set(
       pacientesLista.filter((p) => p.ativo).map((p) => p.id)
     )
 
-    const { data: regrasData } = await supabase
+    const { data: regrasData, error: regrasError } = await supabase
       .from("patient_schedule_rules")
       .select("id, patient_id, weekday, servico, hora_inicio, hora_fim, ativo")
       .eq("user_id", user.id)
       .eq("ativo", true)
 
-    const regrasLista = (regrasData ?? []) as ScheduleRule[]
+    if (regrasError) return
 
-    const dataObj = new Date(`${dataReferencia}T12:00:00`)
-    const weekday = dataObj.getDay()
+    const regrasLista = (regrasData ?? []) as ScheduleRule[]
 
     const regrasDoDia = regrasLista.filter(
       (r) => r.weekday === weekday && pacientesAtivosIds.has(r.patient_id)
     )
 
-    const { data: agendamentosDiaData } = await supabase
+    const { data: agendamentosDiaData, error: agendamentosDiaError } = await supabase
       .from("patient_appointments")
       .select("id, patient_id, servico, data_agendamento, hora_inicio, hora_fim")
       .eq("user_id", user.id)
       .eq("data_agendamento", dataReferencia)
 
+    if (agendamentosDiaError) return
+
     const agendamentosDia = (agendamentosDiaData ?? []) as Appointment[]
 
-    const faltantes = regrasDoDia.filter((regra) => {
-      return !agendamentosDia.some(
-        (a) =>
-          a.patient_id === regra.patient_id &&
-          a.data_agendamento === dataReferencia &&
-          a.servico === regra.servico &&
-          a.hora_inicio === regra.hora_inicio
+    const chavesExistentes = new Set(
+      agendamentosDia.map(
+        (a) => `${a.patient_id}::${a.servico}::${a.data_agendamento}::${a.hora_inicio}`
       )
-    })
+    )
 
-    if (faltantes.length > 0) {
-      const inserts = faltantes.map((regra) => ({
+    const inserts = regrasDoDia
+      .filter((regra) => {
+        const chave = `${regra.patient_id}::${regra.servico}::${dataReferencia}::${regra.hora_inicio}`
+        return !chavesExistentes.has(chave)
+      })
+      .map((regra) => ({
         user_id: user.id,
         patient_id: regra.patient_id,
         servico: regra.servico,
@@ -199,7 +202,15 @@ export default function AgendaPage() {
         observacoes: null,
       }))
 
-      await supabase.from("patient_appointments").insert(inserts)
+    if (inserts.length > 0) {
+      const { error: insertError } = await supabase
+        .from("patient_appointments")
+        .insert(inserts)
+
+      if (insertError) {
+        await carregarDados()
+        return
+      }
     }
 
     await carregarDados()
