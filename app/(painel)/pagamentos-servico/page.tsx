@@ -749,14 +749,16 @@ export default function PagamentosServicoPage() {
   }
 
   function editarPagamentoExistente(cobrancaId: number, pagamento: ServicePayment) {
-    setBillingIdExpandido(cobrancaId)
-    setBillingIdPagamento(cobrancaId)
-    setPaymentIdEdicao(pagamento.id)
-    setValorPagamento(String(Number(pagamento.valor)))
-    setDataPagamento(pagamento.data_pagamento || hojeInputDate())
-    setFormaPagamento(pagamento.forma_pagamento || "Pix")
-    setObservacaoPagamento(pagamento.observacao || "")
-  }
+  setBillingIdExpandido(cobrancaId)
+  setBillingIdPagamento(cobrancaId)
+  setPaymentIdEdicao(pagamento.id)
+  setValorPagamento(String(Number(pagamento.valor)))
+  setDataPagamento(pagamento.data_pagamento || hojeInputDate())
+  setFormaPagamento(pagamento.forma_pagamento || "Pix")
+  setObservacaoPagamento(pagamento.observacao || "")
+
+  setMensagem(`Editando pagamento de R$ ${Number(pagamento.valor).toFixed(2)}.`)
+}
 
   function abrirFormularioPagamento(cobranca: CobrancaComResumo) {
     setBillingIdExpandido((atual) => (atual === cobranca.id ? null : cobranca.id))
@@ -1251,9 +1253,7 @@ export default function PagamentosServicoPage() {
             <tbody>
               {cobrancasFiltradas.map((c) => {
                 const expandido =
-                  billingIdExpandido === c.id ||
-                  billingIdPagamento === c.id ||
-                  c.pagamentosDaCobranca.length > 0
+  billingIdExpandido === c.id || billingIdPagamento === c.id
 
                 return (
                   <Fragment key={c.id}>
@@ -1302,31 +1302,69 @@ export default function PagamentosServicoPage() {
                       </td>
                       <td style={td}>
                         <div style={acoesGridCompacta}>
-                          {c.statusVisual !== "cancelada" && c.valorEmAberto > 0 && (
-                            <>
-                              <button
-                                className="btn btn-primary btn-sm"
-                                onClick={() => abrirFormularioPagamento(c)}
-                              >
-                                {billingIdExpandido === c.id ? "Fechar" : "Receber"}
-                              </button>
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => preencherValorRestante(c)}
-                              >
-                                Restante
-                              </button>
-                            </>
-                          )}
-
                           {c.statusVisual !== "cancelada" && (
-                            <button
-                              className="btn btn-danger btn-sm"
-                              onClick={() => cancelarCobranca(c.id)}
-                            >
-                              Cancelar
-                            </button>
-                          )}
+  <>
+    {c.valorEmAberto > 0 && (
+      <>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => abrirFormularioPagamento(c)}
+        >
+          {billingIdExpandido === c.id && billingIdPagamento === c.id && !paymentIdEdicao
+            ? "Fechar"
+            : "Receber"}
+        </button>
+
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => preencherValorRestante(c)}
+        >
+          Restante
+        </button>
+      </>
+    )}
+
+    {billingIdExpandido === c.id && (
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        onClick={() => {
+          if (billingIdExpandido === c.id) {
+            setBillingIdExpandido(null)
+            limparFormularioPagamento()
+          }
+        }}
+      >
+        Minimizar
+      </button>
+    )}
+  </>
+)}
+{c.pagamentosDaCobranca.length > 0 && (
+  <button
+    type="button"
+    className="btn btn-secondary btn-sm"
+    onClick={() => {
+      if (billingIdExpandido === c.id) {
+        setBillingIdExpandido(null)
+        limparFormularioPagamento()
+      } else {
+        setBillingIdExpandido(c.id)
+      }
+    }}
+  >
+    {billingIdExpandido === c.id ? "Ocultar pagamentos" : "Ver pagamentos"}
+  </button>
+)}
+
+{c.statusVisual !== "cancelada" && (
+  <button
+    className="btn btn-danger btn-sm"
+    onClick={() => cancelarCobranca(c.id)}
+  >
+    Cancelar
+  </button>
+)}
 
                           <button
                             className="btn btn-danger btn-sm"
@@ -1342,11 +1380,14 @@ export default function PagamentosServicoPage() {
                       <tr>
                         <td style={{ ...td, background: "#f8fafc" }} colSpan={10}>
                           <div style={blocoDetalhes}>
-                            {c.statusVisual !== "cancelada" && c.valorEmAberto > 0 && (
-                              <div style={painelPagamento}>
+                            {c.statusVisual !== "cancelada" &&
+  (c.valorEmAberto > 0 || (billingIdPagamento === c.id && !!paymentIdEdicao)) && (
+    <div style={painelPagamento}>
                                 <strong style={{ marginBottom: 8 }}>
-                                  {paymentIdEdicao ? "Editar pagamento" : "Registrar pagamento"}
-                                </strong>
+  {billingIdPagamento === c.id && paymentIdEdicao
+    ? "Editar pagamento"
+    : "Registrar pagamento"}
+</strong>
 
                                 <div style={formPagamentoGrid}>
                                   <input
