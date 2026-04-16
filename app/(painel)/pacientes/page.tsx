@@ -17,6 +17,28 @@ type Patient = {
   created_at: string
 }
 
+type ScheduleRule = {
+  id?: number
+  patient_id?: number
+  weekday: number
+  servico: string
+  hora_inicio: string
+  hora_fim: string
+  ativo?: boolean
+}
+
+const diasSemana = [
+  { value: 0, label: "Domingo" },
+  { value: 1, label: "Segunda" },
+  { value: 2, label: "Terça" },
+  { value: 3, label: "Quarta" },
+  { value: 4, label: "Quinta" },
+  { value: 5, label: "Sexta" },
+  { value: 6, label: "Sábado" },
+]
+
+const servicosPadrao = ["Pilates", "Fisioterapia", "Academia", "Avaliação", "Outro"]
+
 function hojeInputDate() {
   const hoje = new Date()
   const ano = hoje.getFullYear()
@@ -57,6 +79,9 @@ export default function PacientesPage() {
   const [diaBasePagamento, setDiaBasePagamento] = useState("")
   const [valorMensal, setValorMensal] = useState("")
   const [observacoes, setObservacoes] = useState("")
+  const [horarios, setHorarios] = useState<ScheduleRule[]>([
+    { weekday: 1, servico: "Pilates", hora_inicio: "", hora_fim: "", ativo: true },
+  ])
 
   useEffect(() => {
     carregarPacientes()
@@ -81,14 +106,71 @@ export default function PacientesPage() {
       .order("created_at", { ascending: false })
 
     if (error) {
-      setMensagem("Erro ao carregar pacientes.")
+      setMensagem("Erro ao carregar alunos/pacientes.")
       return
     }
 
     setPacientes((data ?? []) as Patient[])
   }
 
-    async function salvarPaciente() {
+  async function carregarHorariosDoPaciente(patientId: number) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from("patient_schedule_rules")
+      .select("id, patient_id, weekday, servico, hora_inicio, hora_fim, ativo")
+      .eq("user_id", user.id)
+      .eq("patient_id", patientId)
+      .order("weekday", { ascending: true })
+      .order("hora_inicio", { ascending: true })
+
+    if (error) {
+      setMensagem("Erro ao carregar horários do aluno/paciente.")
+      return
+    }
+
+    setHorarios(
+      (data as ScheduleRule[]).length > 0
+        ? ((data ?? []) as ScheduleRule[])
+        : [{ weekday: 1, servico: "Pilates", hora_inicio: "", hora_fim: "", ativo: true }]
+    )
+  }
+
+  function adicionarHorario() {
+    setHorarios((anterior) => [
+      ...anterior,
+      { weekday: 1, servico: "Pilates", hora_inicio: "", hora_fim: "", ativo: true },
+    ])
+  }
+
+  function atualizarHorario(index: number, campo: keyof ScheduleRule, valor: string | number | boolean) {
+    setHorarios((anterior) =>
+      anterior.map((item, i) => (i === index ? { ...item, [campo]: valor } : item))
+    )
+  }
+
+  function removerHorario(index: number) {
+    setHorarios((anterior) => anterior.filter((_, i) => i !== index))
+  }
+
+  function limparFormulario() {
+    setIdEdicao(null)
+    setNome("")
+    setTelefone("")
+    setEmail("")
+    setDataNascimento("")
+    setDataInicio(hojeInputDate())
+    setDiaBasePagamento("")
+    setValorMensal("")
+    setObservacoes("")
+    setHorarios([{ weekday: 1, servico: "Pilates", hora_inicio: "", hora_fim: "", ativo: true }])
+  }
+
+  async function salvarPaciente() {
     setMensagem("")
 
     const {
@@ -104,6 +186,15 @@ export default function PacientesPage() {
       setMensagem("Informe o nome do aluno/paciente.")
       return
     }
+
+    const horariosValidos = horarios.filter((h) => h.hora_inicio)
+
+    if (horariosValidos.length === 0) {
+      setMensagem("Cadastre pelo menos um dia/horário.")
+      return
+    }
+
+    let patientIdFinal = idEdicao
 
     if (idEdicao) {
       const { error } = await supabase
@@ -125,66 +216,91 @@ export default function PacientesPage() {
         setMensagem(error.message || "Erro ao editar aluno/paciente.")
         return
       }
+    } else {
+      const { data, error } = await supabase
+        .from("patients")
+        .insert([
+          {
+            user_id: user.id,
+            nome: nome.trim(),
+            telefone: telefone || null,
+            email: email || null,
+            data_nascimento: dataNascimento || null,
+            data_inicio: dataInicio,
+            dia_base_pagamento: diaBasePagamento ? Number(diaBasePagamento) : null,
+            valor_mensal: valorMensal ? Number(valorMensal) : 0,
+            observacoes: observacoes || null,
+            ativo: true,
+          },
+        ])
+        .select("id")
+        .single()
 
-      limparFormulario()
-      setMensagem("Aluno/Paciente atualizado com sucesso.")
+      if (error || !data) {
+        setMensagem(error?.message || "Erro ao cadastrar aluno/paciente.")
+        return
+      }
+
+      patientIdFinal = data.id
+    }
+
+    if (!patientIdFinal) {
+      setMensagem("Não foi possível determinar o aluno/paciente salvo.")
+      return
+    }
+
+    const { error: deleteRulesError } = await supabase
+      .from("patient_schedule_rules")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("patient_id", patientIdFinal)
+
+    if (deleteRulesError) {
+      setMensagem("Aluno/Paciente salvo, mas houve erro ao atualizar horários.")
       await carregarPacientes()
       return
     }
 
-    const { error } = await supabase.from("patients").insert([
-      {
-        user_id: user.id,
-        nome: nome.trim(),
-        telefone: telefone || null,
-        email: email || null,
-        data_nascimento: dataNascimento || null,
-        data_inicio: dataInicio,
-        dia_base_pagamento: diaBasePagamento ? Number(diaBasePagamento) : null,
-        valor_mensal: valorMensal ? Number(valorMensal) : 0,
-        observacoes: observacoes || null,
-        ativo: true,
-      },
-    ])
+    const linhasHorarios = horariosValidos.map((h) => ({
+      user_id: user.id,
+      patient_id: patientIdFinal,
+      weekday: Number(h.weekday),
+      servico: h.servico || "Pilates",
+      hora_inicio: h.hora_inicio,
+      hora_fim: h.hora_fim || null,
+      ativo: true,
+    }))
 
-    if (error) {
-      setMensagem(error.message || "Erro ao cadastrar aluno/paciente.")
+    const { error: insertRulesError } = await supabase
+      .from("patient_schedule_rules")
+      .insert(linhasHorarios)
+
+    if (insertRulesError) {
+      setMensagem("Aluno/Paciente salvo, mas houve erro ao salvar dias e horários.")
+      await carregarPacientes()
       return
     }
 
     limparFormulario()
-    setMensagem("Aluno/Paciente cadastrado com sucesso.")
+    setMensagem(idEdicao ? "Aluno/Paciente atualizado com sucesso." : "Aluno/Paciente cadastrado com sucesso.")
     await carregarPacientes()
   }
 
-    function limparFormulario() {
-    setIdEdicao(null)
-    setNome("")
-    setTelefone("")
-    setEmail("")
-    setDataNascimento("")
-    setDataInicio(hojeInputDate())
-    setDiaBasePagamento("")
-    setValorMensal("")
-    setObservacoes("")
-  }
-
-  function editarPaciente(paciente: Patient) {
+  async function editarPaciente(paciente: Patient) {
     setIdEdicao(paciente.id)
     setNome(paciente.nome)
     setTelefone(paciente.telefone || "")
     setEmail(paciente.email || "")
     setDataNascimento(paciente.data_nascimento || "")
     setDataInicio(paciente.data_inicio || hojeInputDate())
-    setDiaBasePagamento(
-      paciente.dia_base_pagamento ? String(paciente.dia_base_pagamento) : ""
-    )
+    setDiaBasePagamento(paciente.dia_base_pagamento ? String(paciente.dia_base_pagamento) : "")
     setValorMensal(
       paciente.valor_mensal !== null && paciente.valor_mensal !== undefined
         ? String(paciente.valor_mensal)
         : ""
     )
     setObservacoes(paciente.observacoes || "")
+    await carregarHorariosDoPaciente(paciente.id)
   }
 
   async function alternarStatusPaciente(paciente: Patient) {
@@ -226,9 +342,7 @@ export default function PacientesPage() {
     }
 
     setMensagem(
-      novoStatus
-        ? "Aluno/Paciente reativado com sucesso."
-        : "Aluno/Paciente inativado com sucesso."
+      novoStatus ? "Aluno/Paciente reativado com sucesso." : "Aluno/Paciente inativado com sucesso."
     )
     await carregarPacientes()
   }
@@ -279,7 +393,7 @@ export default function PacientesPage() {
 
   return (
     <div>
-        <h2 className="page-title">Alunos/Pacientes</h2>
+      <h2 className="page-title">Alunos/Pacientes</h2>
       <p className="page-subtitle">
         Cadastre alunos/pacientes, acompanhe status, data de entrada, retorno e próximo pagamento.
       </p>
@@ -287,7 +401,7 @@ export default function PacientesPage() {
       {mensagem && <p>{mensagem}</p>}
 
       <div className="section-card" style={{ marginBottom: 20 }}>
-                <h3 style={{ marginBottom: 12 }}>
+        <h3 style={{ marginBottom: 12 }}>
           {idEdicao ? "Editar aluno/paciente" : "Novo aluno/paciente"}
         </h3>
 
@@ -313,7 +427,7 @@ export default function PacientesPage() {
           </div>
 
           <div>
-            <label>Data de entrada</label>
+            <label>Data de entrada/retorno</label>
             <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
           </div>
 
@@ -345,7 +459,87 @@ export default function PacientesPage() {
           </div>
         </div>
 
-                <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 20, marginBottom: 12 }}>
+          <strong>Dias e horários fixos</strong>
+        </div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {horarios.map((h, index) => (
+            <div
+              key={index}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.2fr 1.2fr 1fr 1fr auto",
+                gap: 10,
+                alignItems: "end",
+              }}
+            >
+              <div>
+                <label>Dia da semana</label>
+                <select
+                  value={h.weekday}
+                  onChange={(e) => atualizarHorario(index, "weekday", Number(e.target.value))}
+                >
+                  {diasSemana.map((dia) => (
+                    <option key={dia.value} value={dia.value}>
+                      {dia.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label>Serviço</label>
+                <select
+                  value={h.servico}
+                  onChange={(e) => atualizarHorario(index, "servico", e.target.value)}
+                >
+                  {servicosPadrao.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label>Hora início</label>
+                <input
+                  type="time"
+                  value={h.hora_inicio}
+                  onChange={(e) => atualizarHorario(index, "hora_inicio", e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label>Hora fim</label>
+                <input
+                  type="time"
+                  value={h.hora_fim}
+                  onChange={(e) => atualizarHorario(index, "hora_fim", e.target.value)}
+                />
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  onClick={() => removerHorario(index)}
+                >
+                  Remover
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <button type="button" className="btn btn-secondary" onClick={adicionarHorario}>
+            Adicionar dia/horário
+          </button>
+        </div>
+
+        <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={salvarPaciente} className="btn btn-primary">
             {idEdicao ? "Salvar alterações" : "Cadastrar aluno/paciente"}
           </button>
@@ -361,7 +555,7 @@ export default function PacientesPage() {
       <div className="section-card">
         <div style={{ marginBottom: 12 }}>
           <input
-            placeholder="Buscar paciente"
+            placeholder="Buscar aluno/paciente"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
@@ -370,7 +564,7 @@ export default function PacientesPage() {
         <div className="data-table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-                <tr>
+              <tr>
                 <th style={th}>Nome</th>
                 <th style={th}>Telefone</th>
                 <th style={th}>Entrada/Retorno</th>
@@ -381,7 +575,7 @@ export default function PacientesPage() {
               </tr>
             </thead>
             <tbody>
-                            {pacientesFiltrados.map((p) => (
+              {pacientesFiltrados.map((p) => (
                 <tr
                   key={p.id}
                   style={{
@@ -429,7 +623,7 @@ export default function PacientesPage() {
 
               {pacientesFiltrados.length === 0 && (
                 <tr>
-                    <td style={td} colSpan={7}>Nenhum aluno/paciente encontrado.</td>
+                  <td style={td} colSpan={7}>Nenhum aluno/paciente encontrado.</td>
                 </tr>
               )}
             </tbody>

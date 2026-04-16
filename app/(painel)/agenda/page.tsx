@@ -27,6 +27,16 @@ type Appointment = {
   } | null
 }
 
+type ScheduleRule = {
+  id: number
+  patient_id: number
+  weekday: number
+  servico: string
+  hora_inicio: string
+  hora_fim: string | null
+  ativo: boolean
+}
+
 function hojeInputDate() {
   const hoje = new Date()
   const ano = hoje.getFullYear()
@@ -41,10 +51,11 @@ const servicosPadrao = ["Pilates", "Fisioterapia", "Academia", "Avaliação", "O
 export default function AgendaPage() {
   const [pacientes, setPacientes] = useState<Patient[]>([])
   const [agendamentos, setAgendamentos] = useState<Appointment[]>([])
+  const [regras, setRegras] = useState<ScheduleRule[]>([])
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
 
-    const [idEdicao, setIdEdicao] = useState<number | null>(null)
+  const [idEdicao, setIdEdicao] = useState<number | null>(null)
   const [patientId, setPatientId] = useState("")
   const [servico, setServico] = useState("Pilates")
   const [dataAgendamento, setDataAgendamento] = useState(hojeInputDate())
@@ -58,6 +69,10 @@ export default function AgendaPage() {
     carregarDados()
   }, [])
 
+  useEffect(() => {
+    sincronizarAgendaDoDia(dataFiltroDia)
+  }, [dataFiltroDia])
+
   async function carregarDados() {
     setMensagem("")
 
@@ -70,7 +85,7 @@ export default function AgendaPage() {
       return
     }
 
-        const { data: pacientesData, error: pacientesError } = await supabase
+    const { data: pacientesData, error: pacientesError } = await supabase
       .from("patients")
       .select("id, nome, ativo, data_inicio, dia_base_pagamento, valor_mensal")
       .eq("user_id", user.id)
@@ -78,6 +93,19 @@ export default function AgendaPage() {
 
     if (pacientesError) {
       setMensagem("Erro ao carregar pacientes.")
+      return
+    }
+
+    const { data: regrasData, error: regrasError } = await supabase
+      .from("patient_schedule_rules")
+      .select("id, patient_id, weekday, servico, hora_inicio, hora_fim, ativo")
+      .eq("user_id", user.id)
+      .eq("ativo", true)
+      .order("weekday", { ascending: true })
+      .order("hora_inicio", { ascending: true })
+
+    if (regrasError) {
+      setMensagem("Erro ao carregar horários fixos.")
       return
     }
 
@@ -105,10 +133,79 @@ export default function AgendaPage() {
     }
 
     setPacientes((pacientesData ?? []) as Patient[])
+    setRegras((regrasData ?? []) as ScheduleRule[])
     setAgendamentos((agendaData ?? []) as unknown as Appointment[])
   }
 
-    async function salvarAgendamento() {
+  async function sincronizarAgendaDoDia(dataReferencia: string) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user || !dataReferencia) return
+
+    const { data: pacientesData } = await supabase
+      .from("patients")
+      .select("id, nome, ativo")
+      .eq("user_id", user.id)
+
+    const pacientesLista = (pacientesData ?? []) as Patient[]
+    const pacientesAtivosIds = new Set(
+      pacientesLista.filter((p) => p.ativo).map((p) => p.id)
+    )
+
+    const { data: regrasData } = await supabase
+      .from("patient_schedule_rules")
+      .select("id, patient_id, weekday, servico, hora_inicio, hora_fim, ativo")
+      .eq("user_id", user.id)
+      .eq("ativo", true)
+
+    const regrasLista = (regrasData ?? []) as ScheduleRule[]
+
+    const dataObj = new Date(`${dataReferencia}T12:00:00`)
+    const weekday = dataObj.getDay()
+
+    const regrasDoDia = regrasLista.filter(
+      (r) => r.weekday === weekday && pacientesAtivosIds.has(r.patient_id)
+    )
+
+    const { data: agendamentosDiaData } = await supabase
+      .from("patient_appointments")
+      .select("id, patient_id, servico, data_agendamento, hora_inicio, hora_fim")
+      .eq("user_id", user.id)
+      .eq("data_agendamento", dataReferencia)
+
+    const agendamentosDia = (agendamentosDiaData ?? []) as Appointment[]
+
+    const faltantes = regrasDoDia.filter((regra) => {
+      return !agendamentosDia.some(
+        (a) =>
+          a.patient_id === regra.patient_id &&
+          a.data_agendamento === dataReferencia &&
+          a.servico === regra.servico &&
+          a.hora_inicio === regra.hora_inicio
+      )
+    })
+
+    if (faltantes.length > 0) {
+      const inserts = faltantes.map((regra) => ({
+        user_id: user.id,
+        patient_id: regra.patient_id,
+        servico: regra.servico,
+        data_agendamento: dataReferencia,
+        hora_inicio: regra.hora_inicio,
+        hora_fim: regra.hora_fim || null,
+        status: "agendado",
+        observacoes: null,
+      }))
+
+      await supabase.from("patient_appointments").insert(inserts)
+    }
+
+    await carregarDados()
+  }
+
+  async function salvarAgendamento() {
     setMensagem("")
 
     const {
@@ -189,7 +286,7 @@ export default function AgendaPage() {
     await carregarDados()
   }
 
-    function limparFormulario() {
+  function limparFormulario() {
     setIdEdicao(null)
     setPatientId("")
     setServico("Pilates")
@@ -282,14 +379,14 @@ export default function AgendaPage() {
   }, [agendamentos, busca])
 
   const agendaDoDia = useMemo(() => {
-  return agendamentos
-    .filter((a) => a.data_agendamento === dataFiltroDia)
-    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))
-}, [agendamentos, dataFiltroDia])
+    return agendamentos
+      .filter((a) => a.data_agendamento === dataFiltroDia)
+      .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))
+  }, [agendamentos, dataFiltroDia])
 
   return (
     <div>
-        <h2 className="page-title">Agenda</h2>
+      <h2 className="page-title">Agenda</h2>
       <p className="page-subtitle">
         Organize horários, acompanhe presença do dia e visualize alunos/pacientes ativos e inativos.
       </p>
@@ -297,7 +394,7 @@ export default function AgendaPage() {
       {mensagem && <p>{mensagem}</p>}
 
       <div className="section-card" style={{ marginBottom: 20 }}>
-                <h3 style={{ marginBottom: 12 }}>
+        <h3 style={{ marginBottom: 12 }}>
           {idEdicao ? "Editar agendamento" : "Novo agendamento"}
         </h3>
 
@@ -306,7 +403,7 @@ export default function AgendaPage() {
             <label>Paciente</label>
             <select value={patientId} onChange={(e) => setPatientId(e.target.value)}>
               <option value="">Selecione</option>
-                            {pacientes.map((p) => (
+              {pacientes.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nome} {p.ativo ? "(Ativo)" : "(Inativo)"}
                 </option>
@@ -373,7 +470,7 @@ export default function AgendaPage() {
           </div>
         </div>
 
-                <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={salvarAgendamento} className="btn btn-primary">
             {idEdicao ? "Salvar alterações" : "Cadastrar agendamento"}
           </button>
@@ -386,7 +483,7 @@ export default function AgendaPage() {
         </div>
       </div>
 
-            <div className="section-card" style={{ marginBottom: 20 }}>
+      <div className="section-card" style={{ marginBottom: 20 }}>
         <h3 style={{ marginBottom: 12 }}>Presença do dia</h3>
 
         <div style={{ marginBottom: 12 }}>
@@ -417,7 +514,7 @@ export default function AgendaPage() {
                   <td style={td}>{a.servico}</td>
                   <td style={td}>{a.hora_inicio}</td>
                   <td style={td}>{a.hora_fim || "-"}</td>
-                  <td style={td}>{a.status}</td>
+                  <td style={td}>{a.status === "agendado" ? "-" : a.status}</td>
                   <td style={td}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button
@@ -461,7 +558,7 @@ export default function AgendaPage() {
         <div className="data-table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-                <tr>
+              <tr>
                 <th style={th}>Paciente</th>
                 <th style={th}>Status do paciente</th>
                 <th style={th}>Serviço</th>
@@ -474,7 +571,7 @@ export default function AgendaPage() {
               </tr>
             </thead>
             <tbody>
-                            {agendamentosFiltrados.map((a) => {
+              {agendamentosFiltrados.map((a) => {
                 const paciente = pacientes.find((p) => p.id === a.patient_id)
 
                 return (
@@ -546,7 +643,7 @@ export default function AgendaPage() {
 
               {agendamentosFiltrados.length === 0 && (
                 <tr>
-                    <td style={td} colSpan={9}>
+                  <td style={td} colSpan={9}>
                     Nenhum agendamento encontrado.
                   </td>
                 </tr>
