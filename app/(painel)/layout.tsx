@@ -60,7 +60,6 @@ const menuGroups = [
     { href: "/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/evolucao", label: "Evolução", icon: Activity },
     { href: "/pagamentos-servico", label: "Pagamentos", icon: Wallet },
-    { href: "/reposicoes", label: "Reposições", icon: ClipboardList },
   ],
 },
   {

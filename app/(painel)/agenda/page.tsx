@@ -37,6 +37,19 @@ type ScheduleRule = {
   ativo: boolean
 }
 
+type Replacement = {
+  id: number
+  patient_id: number
+  data_reposicao: string
+  hora_reposicao: string | null
+  motivo: string | null
+  observacoes: string | null
+  created_at: string
+  patients?: {
+    nome: string
+  } | null
+}
+
 type AgendaDoDiaItem = {
   appointment_id: number | null
   patient_id: number
@@ -62,9 +75,10 @@ const statusOptions = ["agendado", "realizado", "faltou", "cancelado"]
 const servicosPadrao = ["Pilates", "Fisioterapia", "Academia", "Avaliação", "Outro"]
 
 export default function AgendaPage() {
-  const [pacientes, setPacientes] = useState<Patient[]>([])
+ const [pacientes, setPacientes] = useState<Patient[]>([])
   const [agendamentos, setAgendamentos] = useState<Appointment[]>([])
   const [regras, setRegras] = useState<ScheduleRule[]>([])
+  const [reposicoes, setReposicoes] = useState<Replacement[]>([])
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
 
@@ -77,6 +91,13 @@ export default function AgendaPage() {
   const [status, setStatus] = useState("agendado")
   const [observacoes, setObservacoes] = useState("")
   const [dataFiltroDia, setDataFiltroDia] = useState(hojeInputDate())
+
+  const [idReposicaoEdicao, setIdReposicaoEdicao] = useState<number | null>(null)
+  const [reposicaoPatientId, setReposicaoPatientId] = useState("")
+  const [dataReposicao, setDataReposicao] = useState(hojeInputDate())
+  const [horaReposicao, setHoraReposicao] = useState("")
+  const [motivoReposicao, setMotivoReposicao] = useState("")
+  const [observacoesReposicao, setObservacoesReposicao] = useState("")
 
   useEffect(() => {
     carregarDados()
@@ -141,9 +162,31 @@ export default function AgendaPage() {
       return
     }
 
+    const { data: reposicoesData, error: reposicoesError } = await supabase
+      .from("patient_replacements")
+      .select(`
+        id,
+        patient_id,
+        data_reposicao,
+        hora_reposicao,
+        motivo,
+        observacoes,
+        created_at,
+        patients (nome)
+      `)
+      .eq("user_id", user.id)
+      .order("data_reposicao", { ascending: false })
+
+    if (reposicoesError) {
+      setMensagem("Erro ao carregar reposições.")
+      return
+    }
+
     setPacientes((pacientesData ?? []) as Patient[])
     setRegras((regrasData ?? []) as ScheduleRule[])
     setAgendamentos((agendaData ?? []) as unknown as Appointment[])
+    setReposicoes((reposicoesData ?? []) as unknown as Replacement[])
+
   }
 
   async function salvarAgendamento() {
@@ -354,6 +397,133 @@ export default function AgendaPage() {
       return
     }
 
+    await carregarDados()
+  }
+
+  function preencherReposicaoAPartirDaFalta(item: AgendaDoDiaItem) {
+    setIdReposicaoEdicao(null)
+    setReposicaoPatientId(String(item.patient_id))
+    setDataReposicao(item.data_agendamento)
+    setHoraReposicao(item.hora_inicio || "")
+    setMotivoReposicao("Reposição por falta")
+    setObservacoesReposicao(
+      `Reposição gerada a partir de falta em ${new Date(`${item.data_agendamento}T12:00:00`).toLocaleDateString("pt-BR")}`
+    )
+  }
+
+  function limparFormularioReposicao() {
+    setIdReposicaoEdicao(null)
+    setReposicaoPatientId("")
+    setDataReposicao(hojeInputDate())
+    setHoraReposicao("")
+    setMotivoReposicao("")
+    setObservacoesReposicao("")
+  }
+
+  function editarReposicao(reposicao: Replacement) {
+    setIdReposicaoEdicao(reposicao.id)
+    setReposicaoPatientId(String(reposicao.patient_id))
+    setDataReposicao(reposicao.data_reposicao)
+    setHoraReposicao(reposicao.hora_reposicao || "")
+    setMotivoReposicao(reposicao.motivo || "")
+    setObservacoesReposicao(reposicao.observacoes || "")
+  }
+
+  async function salvarReposicao() {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    if (!reposicaoPatientId) {
+      setMensagem("Selecione um aluno/paciente para a reposição.")
+      return
+    }
+
+    if (!dataReposicao) {
+      setMensagem("Informe a data da reposição.")
+      return
+    }
+
+    if (idReposicaoEdicao) {
+      const { error } = await supabase
+        .from("patient_replacements")
+        .update({
+          patient_id: Number(reposicaoPatientId),
+          data_reposicao: dataReposicao,
+          hora_reposicao: horaReposicao || null,
+          motivo: motivoReposicao || null,
+          observacoes: observacoesReposicao || null,
+        })
+        .eq("id", idReposicaoEdicao)
+        .eq("user_id", user.id)
+
+      if (error) {
+        setMensagem(error.message || "Erro ao editar reposição.")
+        return
+      }
+
+      limparFormularioReposicao()
+      setMensagem("Reposição atualizada com sucesso.")
+      await carregarDados()
+      return
+    }
+
+    const { error } = await supabase.from("patient_replacements").insert([
+      {
+        user_id: user.id,
+        patient_id: Number(reposicaoPatientId),
+        data_reposicao: dataReposicao,
+        hora_reposicao: horaReposicao || null,
+        motivo: motivoReposicao || null,
+        observacoes: observacoesReposicao || null,
+      },
+    ])
+
+    if (error) {
+      setMensagem(error.message || "Erro ao registrar reposição.")
+      return
+    }
+
+    limparFormularioReposicao()
+    setMensagem("Reposição registrada com sucesso.")
+    await carregarDados()
+  }
+
+  async function excluirReposicao(id: number) {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const { error } = await supabase
+      .from("patient_replacements")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+
+    if (error) {
+      setMensagem(error.message || "Erro ao excluir reposição.")
+      return
+    }
+
+    if (idReposicaoEdicao === id) {
+      limparFormularioReposicao()
+    }
+
+    setMensagem("Reposição excluída com sucesso.")
     await carregarDados()
   }
 
@@ -589,6 +759,12 @@ export default function AgendaPage() {
                       >
                         Faltou
                       </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => preencherReposicaoAPartirDaFalta(a)}
+                      >
+                        Gerar reposição
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -598,6 +774,131 @@ export default function AgendaPage() {
                 <tr>
                   <td style={td} colSpan={6}>
                     Nenhum agendamento para esta data.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="section-card" style={{ marginBottom: 20 }}>
+        <h3 style={{ marginBottom: 12 }}>
+          {idReposicaoEdicao ? "Editar reposição" : "Reposição avulsa"}
+        </h3>
+        <p style={{ marginTop: 0, marginBottom: 12, color: "#6b7280" }}>
+          Use para remarcar faltas, encaixes e ajustes fora da rotina.
+        </p>
+
+        <div className="grid-2">
+          <div>
+            <label>Aluno/Paciente</label>
+            <select
+              value={reposicaoPatientId}
+              onChange={(e) => setReposicaoPatientId(e.target.value)}
+            >
+              <option value="">Selecione</option>
+              {pacientes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome} {p.ativo ? "(Ativo)" : "(Inativo)"}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label>Data da reposição</label>
+            <input
+              type="date"
+              value={dataReposicao}
+              onChange={(e) => setDataReposicao(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label>Horário da reposição</label>
+            <input
+              type="time"
+              value={horaReposicao}
+              onChange={(e) => setHoraReposicao(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label>Motivo</label>
+            <input
+              value={motivoReposicao}
+              onChange={(e) => setMotivoReposicao(e.target.value)}
+            />
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label>Observações</label>
+            <textarea
+              rows={3}
+              value={observacoesReposicao}
+              onChange={(e) => setObservacoesReposicao(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={salvarReposicao} className="btn btn-primary">
+            {idReposicaoEdicao ? "Salvar reposição" : "Registrar reposição"}
+          </button>
+
+          {(idReposicaoEdicao || reposicaoPatientId || motivoReposicao || observacoesReposicao || horaReposicao) && (
+            <button onClick={limparFormularioReposicao} className="btn btn-secondary">
+              Cancelar
+            </button>
+          )}
+        </div>
+
+        <div className="data-table-wrap" style={{ marginTop: 20 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={th}>Paciente</th>
+                <th style={th}>Data</th>
+                <th style={th}>Horário</th>
+                <th style={th}>Motivo</th>
+                <th style={th}>Observações</th>
+                <th style={th}>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reposicoes.map((r) => (
+                <tr key={r.id}>
+                  <td style={td}>{r.patients?.nome || "-"}</td>
+                  <td style={td}>
+                    {new Date(`${r.data_reposicao}T12:00:00`).toLocaleDateString("pt-BR")}
+                  </td>
+                  <td style={td}>{r.hora_reposicao || "-"}</td>
+                  <td style={td}>{r.motivo || "-"}</td>
+                  <td style={td}>{r.observacoes || "-"}</td>
+                  <td style={td}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => editarReposicao(r)}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => excluirReposicao(r.id)}
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {reposicoes.length === 0 && (
+                <tr>
+                  <td style={td} colSpan={6}>
+                    Nenhuma reposição registrada.
                   </td>
                 </tr>
               )}
