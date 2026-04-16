@@ -37,6 +37,19 @@ type ScheduleRule = {
   ativo: boolean
 }
 
+type AgendaDoDiaItem = {
+  appointment_id: number | null
+  patient_id: number
+  nome: string
+  ativo: boolean
+  servico: string
+  data_agendamento: string
+  hora_inicio: string
+  hora_fim: string | null
+  status: string
+  observacoes: string | null
+}
+
 function hojeInputDate() {
   const hoje = new Date()
   const ano = hoje.getFullYear()
@@ -65,10 +78,9 @@ export default function AgendaPage() {
   const [observacoes, setObservacoes] = useState("")
   const [dataFiltroDia, setDataFiltroDia] = useState(hojeInputDate())
 
-    useEffect(() => {
-    if (!dataFiltroDia) return
-    sincronizarAgendaDoDia(dataFiltroDia)
-  }, [dataFiltroDia])
+  useEffect(() => {
+    carregarDados()
+  }, [])
 
   async function carregarDados() {
     setMensagem("")
@@ -132,88 +144,6 @@ export default function AgendaPage() {
     setPacientes((pacientesData ?? []) as Patient[])
     setRegras((regrasData ?? []) as ScheduleRule[])
     setAgendamentos((agendaData ?? []) as unknown as Appointment[])
-  }
-
-    async function sincronizarAgendaDoDia(dataReferencia: string) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user || !dataReferencia) return
-
-    const dataObj = new Date(`${dataReferencia}T12:00:00`)
-    const weekday = dataObj.getDay()
-
-    const { data: pacientesData, error: pacientesError } = await supabase
-      .from("patients")
-      .select("id, nome, ativo")
-      .eq("user_id", user.id)
-
-    if (pacientesError) return
-
-    const pacientesLista = (pacientesData ?? []) as Patient[]
-    const pacientesAtivosIds = new Set(
-      pacientesLista.filter((p) => p.ativo).map((p) => p.id)
-    )
-
-    const { data: regrasData, error: regrasError } = await supabase
-      .from("patient_schedule_rules")
-      .select("id, patient_id, weekday, servico, hora_inicio, hora_fim, ativo")
-      .eq("user_id", user.id)
-      .eq("ativo", true)
-
-    if (regrasError) return
-
-    const regrasLista = (regrasData ?? []) as ScheduleRule[]
-
-    const regrasDoDia = regrasLista.filter(
-      (r) => r.weekday === weekday && pacientesAtivosIds.has(r.patient_id)
-    )
-
-    const { data: agendamentosDiaData, error: agendamentosDiaError } = await supabase
-      .from("patient_appointments")
-      .select("id, patient_id, servico, data_agendamento, hora_inicio, hora_fim")
-      .eq("user_id", user.id)
-      .eq("data_agendamento", dataReferencia)
-
-    if (agendamentosDiaError) return
-
-    const agendamentosDia = (agendamentosDiaData ?? []) as Appointment[]
-
-    const chavesExistentes = new Set(
-      agendamentosDia.map(
-        (a) => `${a.patient_id}::${a.servico}::${a.data_agendamento}::${a.hora_inicio}`
-      )
-    )
-
-    const inserts = regrasDoDia
-      .filter((regra) => {
-        const chave = `${regra.patient_id}::${regra.servico}::${dataReferencia}::${regra.hora_inicio}`
-        return !chavesExistentes.has(chave)
-      })
-      .map((regra) => ({
-        user_id: user.id,
-        patient_id: regra.patient_id,
-        servico: regra.servico,
-        data_agendamento: dataReferencia,
-        hora_inicio: regra.hora_inicio,
-        hora_fim: regra.hora_fim || null,
-        status: "agendado",
-        observacoes: null,
-      }))
-
-    if (inserts.length > 0) {
-      const { error: insertError } = await supabase
-        .from("patient_appointments")
-        .insert(inserts)
-
-      if (insertError) {
-        await carregarDados()
-        return
-      }
-    }
-
-    await carregarDados()
   }
 
   async function salvarAgendamento() {
@@ -376,6 +306,57 @@ export default function AgendaPage() {
     await carregarDados()
   }
 
+  async function marcarPresencaDoDia(item: AgendaDoDiaItem, novoStatus: "realizado" | "faltou") {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    if (item.appointment_id) {
+      const { error } = await supabase
+        .from("patient_appointments")
+        .update({ status: novoStatus })
+        .eq("id", item.appointment_id)
+        .eq("user_id", user.id)
+
+      if (error) {
+        setMensagem(error.message || "Erro ao marcar presença.")
+        return
+      }
+
+      await carregarDados()
+      return
+    }
+
+    const { error } = await supabase
+      .from("patient_appointments")
+      .insert([
+        {
+          user_id: user.id,
+          patient_id: item.patient_id,
+          servico: item.servico,
+          data_agendamento: item.data_agendamento,
+          hora_inicio: item.hora_inicio,
+          hora_fim: item.hora_fim || null,
+          status: novoStatus,
+          observacoes: item.observacoes || null,
+        },
+      ])
+
+    if (error) {
+      setMensagem(error.message || "Erro ao registrar presença do dia.")
+      return
+    }
+
+    await carregarDados()
+  }
+
   const agendamentosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     if (!termo) return agendamentos
@@ -390,10 +371,78 @@ export default function AgendaPage() {
   }, [agendamentos, busca])
 
   const agendaDoDia = useMemo(() => {
-    return agendamentos
-      .filter((a) => a.data_agendamento === dataFiltroDia)
-      .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))
-  }, [agendamentos, dataFiltroDia])
+    if (!dataFiltroDia) return []
+
+    const dataObj = new Date(`${dataFiltroDia}T12:00:00`)
+    const weekday = dataObj.getDay()
+
+    const pacientesAtivos = pacientes.filter((p) => p.ativo)
+    const ativosIds = new Set(pacientesAtivos.map((p) => p.id))
+
+    const regrasDoDia = regras.filter(
+      (r) => r.ativo && r.weekday === weekday && ativosIds.has(r.patient_id)
+    )
+
+    const agendamentosDoDia = agendamentos.filter(
+      (a) => a.data_agendamento === dataFiltroDia
+    )
+
+    const itensDasRegras: AgendaDoDiaItem[] = regrasDoDia.map((regra) => {
+      const existente = agendamentosDoDia.find(
+        (a) =>
+          a.patient_id === regra.patient_id &&
+          a.servico === regra.servico &&
+          a.hora_inicio === regra.hora_inicio
+      )
+
+      const paciente = pacientes.find((p) => p.id === regra.patient_id)
+
+      return {
+        appointment_id: existente?.id ?? null,
+        patient_id: regra.patient_id,
+        nome: existente?.patients?.nome || paciente?.nome || "-",
+        ativo: paciente?.ativo ?? false,
+        servico: regra.servico,
+        data_agendamento: dataFiltroDia,
+        hora_inicio: regra.hora_inicio,
+        hora_fim: regra.hora_fim || null,
+        status: existente?.status || "agendado",
+        observacoes: existente?.observacoes || null,
+      }
+    })
+
+    const chavesDasRegras = new Set(
+      itensDasRegras.map(
+        (i) => `${i.patient_id}::${i.servico}::${i.hora_inicio}`
+      )
+    )
+
+    const itensExtras: AgendaDoDiaItem[] = agendamentosDoDia
+      .filter((a) => {
+        const chave = `${a.patient_id}::${a.servico}::${a.hora_inicio}`
+        return !chavesDasRegras.has(chave)
+      })
+      .map((a) => {
+        const paciente = pacientes.find((p) => p.id === a.patient_id)
+
+        return {
+          appointment_id: a.id,
+          patient_id: a.patient_id,
+          nome: a.patients?.nome || paciente?.nome || "-",
+          ativo: paciente?.ativo ?? false,
+          servico: a.servico,
+          data_agendamento: a.data_agendamento,
+          hora_inicio: a.hora_inicio,
+          hora_fim: a.hora_fim || null,
+          status: a.status,
+          observacoes: a.observacoes || null,
+        }
+      })
+
+    return [...itensDasRegras, ...itensExtras].sort((a, b) =>
+      a.hora_inicio.localeCompare(b.hora_inicio)
+    )
+  }, [agendamentos, regras, pacientes, dataFiltroDia])
 
   return (
     <div>
@@ -520,8 +569,8 @@ export default function AgendaPage() {
             </thead>
             <tbody>
               {agendaDoDia.map((a) => (
-                <tr key={`dia-${a.id}`}>
-                  <td style={td}>{a.patients?.nome || "-"}</td>
+                <tr key={`${a.patient_id}-${a.servico}-${a.hora_inicio}-${a.data_agendamento}`}>
+                  <td style={td}>{a.nome}</td>
                   <td style={td}>{a.servico}</td>
                   <td style={td}>{a.hora_inicio}</td>
                   <td style={td}>{a.hora_fim || "-"}</td>
@@ -530,13 +579,13 @@ export default function AgendaPage() {
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button
                         className="btn btn-secondary btn-sm"
-                        onClick={() => atualizarStatus(a.id, "realizado")}
+                        onClick={() => marcarPresencaDoDia(a, "realizado")}
                       >
                         Presente
                       </button>
                       <button
                         className="btn btn-secondary btn-sm"
-                        onClick={() => atualizarStatus(a.id, "faltou")}
+                        onClick={() => marcarPresencaDoDia(a, "faltou")}
                       >
                         Faltou
                       </button>
@@ -611,7 +660,9 @@ export default function AgendaPage() {
                     <td style={td}>{a.hora_inicio}</td>
                     <td style={td}>{a.hora_fim || "-"}</td>
                     <td style={td}>
-                      <span className="status-pill status-blue">{a.status}</span>
+                      <span className="status-pill status-blue">
+                        {a.status === "agendado" ? "-" : a.status}
+                      </span>
                     </td>
                     <td style={td}>{a.observacoes || "-"}</td>
                     <td style={td}>
