@@ -7,6 +7,9 @@ type Patient = {
   id: number
   nome: string
   ativo: boolean
+  data_inicio?: string | null
+  dia_base_pagamento?: number | null
+  valor_mensal?: number | null
 }
 
 type Appointment = {
@@ -41,6 +44,7 @@ export default function AgendaPage() {
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
 
+    const [idEdicao, setIdEdicao] = useState<number | null>(null)
   const [patientId, setPatientId] = useState("")
   const [servico, setServico] = useState("Pilates")
   const [dataAgendamento, setDataAgendamento] = useState(hojeInputDate())
@@ -48,6 +52,7 @@ export default function AgendaPage() {
   const [horaFim, setHoraFim] = useState("")
   const [status, setStatus] = useState("agendado")
   const [observacoes, setObservacoes] = useState("")
+  const [dataFiltroDia, setDataFiltroDia] = useState(hojeInputDate())
 
   useEffect(() => {
     carregarDados()
@@ -65,11 +70,10 @@ export default function AgendaPage() {
       return
     }
 
-    const { data: pacientesData, error: pacientesError } = await supabase
+        const { data: pacientesData, error: pacientesError } = await supabase
       .from("patients")
-      .select("id, nome, ativo")
+      .select("id, nome, ativo, data_inicio, dia_base_pagamento, valor_mensal")
       .eq("user_id", user.id)
-      .eq("ativo", true)
       .order("nome", { ascending: true })
 
     if (pacientesError) {
@@ -104,7 +108,7 @@ export default function AgendaPage() {
     setAgendamentos((agendaData ?? []) as unknown as Appointment[])
   }
 
-  async function cadastrarAgendamento() {
+    async function salvarAgendamento() {
     setMensagem("")
 
     const {
@@ -117,7 +121,7 @@ export default function AgendaPage() {
     }
 
     if (!patientId) {
-      setMensagem("Selecione um paciente.")
+      setMensagem("Selecione um aluno/paciente.")
       return
     }
 
@@ -133,6 +137,32 @@ export default function AgendaPage() {
 
     if (!horaInicio) {
       setMensagem("Informe a hora de início.")
+      return
+    }
+
+    if (idEdicao) {
+      const { error } = await supabase
+        .from("patient_appointments")
+        .update({
+          patient_id: Number(patientId),
+          servico: servico.trim(),
+          data_agendamento: dataAgendamento,
+          hora_inicio: horaInicio,
+          hora_fim: horaFim || null,
+          status,
+          observacoes: observacoes || null,
+        })
+        .eq("id", idEdicao)
+        .eq("user_id", user.id)
+
+      if (error) {
+        setMensagem(error.message || "Erro ao editar agendamento.")
+        return
+      }
+
+      limparFormulario()
+      setMensagem("Agendamento atualizado com sucesso.")
+      await carregarDados()
       return
     }
 
@@ -154,6 +184,13 @@ export default function AgendaPage() {
       return
     }
 
+    limparFormulario()
+    setMensagem("Agendamento cadastrado com sucesso.")
+    await carregarDados()
+  }
+
+    function limparFormulario() {
+    setIdEdicao(null)
     setPatientId("")
     setServico("Pilates")
     setDataAgendamento(hojeInputDate())
@@ -161,7 +198,47 @@ export default function AgendaPage() {
     setHoraFim("")
     setStatus("agendado")
     setObservacoes("")
-    setMensagem("Agendamento cadastrado com sucesso.")
+  }
+
+  function editarAgendamento(agendamento: Appointment) {
+    setIdEdicao(agendamento.id)
+    setPatientId(String(agendamento.patient_id))
+    setServico(agendamento.servico)
+    setDataAgendamento(agendamento.data_agendamento)
+    setHoraInicio(agendamento.hora_inicio)
+    setHoraFim(agendamento.hora_fim || "")
+    setStatus(agendamento.status)
+    setObservacoes(agendamento.observacoes || "")
+  }
+
+  async function excluirAgendamento(id: number) {
+    setMensagem("")
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
+
+    const { error } = await supabase
+      .from("patient_appointments")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+
+    if (error) {
+      setMensagem(error.message || "Erro ao excluir agendamento.")
+      return
+    }
+
+    if (idEdicao === id) {
+      limparFormulario()
+    }
+
+    setMensagem("Agendamento excluído com sucesso.")
     await carregarDados()
   }
 
@@ -204,26 +281,34 @@ export default function AgendaPage() {
     })
   }, [agendamentos, busca])
 
+  const agendaDoDia = useMemo(() => {
+  return agendamentos
+    .filter((a) => a.data_agendamento === dataFiltroDia)
+    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))
+}, [agendamentos, dataFiltroDia])
+
   return (
     <div>
-      <h2 className="page-title">Agenda</h2>
+        <h2 className="page-title">Agenda</h2>
       <p className="page-subtitle">
-        Organize horários, sessões e status dos atendimentos.
+        Organize horários, acompanhe presença do dia e visualize alunos/pacientes ativos e inativos.
       </p>
 
       {mensagem && <p>{mensagem}</p>}
 
       <div className="section-card" style={{ marginBottom: 20 }}>
-        <h3 style={{ marginBottom: 12 }}>Novo agendamento</h3>
+                <h3 style={{ marginBottom: 12 }}>
+          {idEdicao ? "Editar agendamento" : "Novo agendamento"}
+        </h3>
 
         <div className="grid-2">
           <div>
             <label>Paciente</label>
             <select value={patientId} onChange={(e) => setPatientId(e.target.value)}>
               <option value="">Selecione</option>
-              {pacientes.map((p) => (
+                            {pacientes.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.nome}
+                  {p.nome} {p.ativo ? "(Ativo)" : "(Inativo)"}
                 </option>
               ))}
             </select>
@@ -288,10 +373,79 @@ export default function AgendaPage() {
           </div>
         </div>
 
-        <div style={{ marginTop: 14 }}>
-          <button onClick={cadastrarAgendamento} className="btn btn-primary">
-            Cadastrar agendamento
+                <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={salvarAgendamento} className="btn btn-primary">
+            {idEdicao ? "Salvar alterações" : "Cadastrar agendamento"}
           </button>
+
+          {idEdicao && (
+            <button onClick={limparFormulario} className="btn btn-secondary">
+              Cancelar edição
+            </button>
+          )}
+        </div>
+      </div>
+
+            <div className="section-card" style={{ marginBottom: 20 }}>
+        <h3 style={{ marginBottom: 12 }}>Presença do dia</h3>
+
+        <div style={{ marginBottom: 12 }}>
+          <label>Data</label>
+          <input
+            type="date"
+            value={dataFiltroDia}
+            onChange={(e) => setDataFiltroDia(e.target.value)}
+          />
+        </div>
+
+        <div className="data-table-wrap">
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={th}>Paciente</th>
+                <th style={th}>Serviço</th>
+                <th style={th}>Início</th>
+                <th style={th}>Fim</th>
+                <th style={th}>Status</th>
+                <th style={th}>Presença</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agendaDoDia.map((a) => (
+                <tr key={`dia-${a.id}`}>
+                  <td style={td}>{a.patients?.nome || "-"}</td>
+                  <td style={td}>{a.servico}</td>
+                  <td style={td}>{a.hora_inicio}</td>
+                  <td style={td}>{a.hora_fim || "-"}</td>
+                  <td style={td}>{a.status}</td>
+                  <td style={td}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => atualizarStatus(a.id, "realizado")}
+                      >
+                        Presente
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => atualizarStatus(a.id, "faltou")}
+                      >
+                        Faltou
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {agendaDoDia.length === 0 && (
+                <tr>
+                  <td style={td} colSpan={6}>
+                    Nenhum agendamento para esta data.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -307,8 +461,9 @@ export default function AgendaPage() {
         <div className="data-table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr>
+                <tr>
                 <th style={th}>Paciente</th>
+                <th style={th}>Status do paciente</th>
                 <th style={th}>Serviço</th>
                 <th style={th}>Data</th>
                 <th style={th}>Início</th>
@@ -319,47 +474,79 @@ export default function AgendaPage() {
               </tr>
             </thead>
             <tbody>
-              {agendamentosFiltrados.map((a) => (
-                <tr key={a.id}>
-                  <td style={td}>{a.patients?.nome || "-"}</td>
-                  <td style={td}>{a.servico}</td>
-                  <td style={td}>
-                    {new Date(`${a.data_agendamento}T12:00:00`).toLocaleDateString("pt-BR")}
-                  </td>
-                  <td style={td}>{a.hora_inicio}</td>
-                  <td style={td}>{a.hora_fim || "-"}</td>
-                  <td style={td}>
-                    <span className="status-pill status-blue">{a.status}</span>
-                  </td>
-                  <td style={td}>{a.observacoes || "-"}</td>
-                  <td style={td}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => atualizarStatus(a.id, "realizado")}
+                            {agendamentosFiltrados.map((a) => {
+                const paciente = pacientes.find((p) => p.id === a.patient_id)
+
+                return (
+                  <tr
+                    key={a.id}
+                    style={{
+                      background: paciente?.ativo ? "#f0fdf4" : "#f8fafc",
+                    }}
+                  >
+                    <td style={td}>{a.patients?.nome || "-"}</td>
+                    <td style={td}>
+                      <span
+                        className={
+                          paciente?.ativo
+                            ? "status-pill status-green"
+                            : "status-pill status-gray"
+                        }
                       >
-                        Realizado
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => atualizarStatus(a.id, "faltou")}
-                      >
-                        Faltou
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => atualizarStatus(a.id, "cancelado")}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        {paciente?.ativo ? "Ativo" : "Inativo"}
+                      </span>
+                    </td>
+                    <td style={td}>{a.servico}</td>
+                    <td style={td}>
+                      {new Date(`${a.data_agendamento}T12:00:00`).toLocaleDateString("pt-BR")}
+                    </td>
+                    <td style={td}>{a.hora_inicio}</td>
+                    <td style={td}>{a.hora_fim || "-"}</td>
+                    <td style={td}>
+                      <span className="status-pill status-blue">{a.status}</span>
+                    </td>
+                    <td style={td}>{a.observacoes || "-"}</td>
+                    <td style={td}>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => editarAgendamento(a)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => atualizarStatus(a.id, "realizado")}
+                        >
+                          Realizado
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => atualizarStatus(a.id, "faltou")}
+                        >
+                          Faltou
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => atualizarStatus(a.id, "cancelado")}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => excluirAgendamento(a.id)}
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
 
               {agendamentosFiltrados.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={8}>
+                    <td style={td} colSpan={9}>
                     Nenhum agendamento encontrado.
                   </td>
                 </tr>
