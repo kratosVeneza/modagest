@@ -46,12 +46,38 @@ type ServicePayment = {
   created_at: string
 }
 
+type CobrancaComResumo = ServiceBilling & {
+  valorPago: number
+  valorEmAberto: number
+  statusVisual: "quitada" | "parcial" | "ativa" | "vencida" | "cancelada"
+  proximoPagamentoPaciente: string
+  valorMensalPaciente: number
+  dataEntradaPaciente: string | null
+  pagamentosDaCobranca: ServicePayment[]
+}
+
 function hojeInputDate() {
   const hoje = new Date()
   const ano = hoje.getFullYear()
   const mes = String(hoje.getMonth() + 1).padStart(2, "0")
   const dia = String(hoje.getDate()).padStart(2, "0")
   return `${ano}-${mes}-${dia}`
+}
+
+function formatarData(data?: string | null) {
+  if (!data) return "-"
+  return new Date(`${data}T12:00:00`).toLocaleDateString("pt-BR")
+}
+
+function formatarDataHoraIso(dataIso?: string | null) {
+  if (!dataIso) return "-"
+  return new Date(dataIso).toLocaleString("pt-BR")
+}
+
+function formatarCompetencia(inicio?: string | null, fim?: string | null) {
+  if (!inicio && !fim) return "-"
+  if (inicio && fim) return `${formatarData(inicio)} até ${formatarData(fim)}`
+  return inicio ? formatarData(inicio) : formatarData(fim)
 }
 
 function calcularProximoPagamento(
@@ -63,7 +89,7 @@ function calcularProximoPagamento(
 
   const base = diaBasePagamento || new Date(`${dataInicio}T12:00:00`).getDate()
 
-      const ultimaCobranca = cobrancas
+  const ultimaCobranca = cobrancas
     .slice()
     .sort(
       (a, b) =>
@@ -86,21 +112,80 @@ function calcularProximoPagamento(
   return proximo.toLocaleDateString("pt-BR")
 }
 
+function competenciaMes(chaveData?: string | null) {
+  if (!chaveData) return ""
+  const data = new Date(`${chaveData}T12:00:00`)
+  const ano = data.getFullYear()
+  const mes = String(data.getMonth() + 1).padStart(2, "0")
+  return `${ano}-${mes}`
+}
+
+function statusVisualDaCobranca(
+  cobranca: ServiceBilling,
+  valorPago: number,
+  valorEmAberto: number
+): CobrancaComResumo["statusVisual"] {
+  if (cobranca.status === "cancelada") return "cancelada"
+  if (valorEmAberto <= 0) return "quitada"
+  if (valorPago > 0 && valorEmAberto > 0) return "parcial"
+
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+
+  const vencimento = new Date(`${cobranca.data_vencimento}T12:00:00`)
+  if (vencimento.getTime() < hoje.getTime()) return "vencida"
+
+  return "ativa"
+}
+
+function labelStatus(status: CobrancaComResumo["statusVisual"]) {
+  switch (status) {
+    case "quitada":
+      return "Quitada"
+    case "parcial":
+      return "Parcial"
+    case "vencida":
+      return "Vencida"
+    case "cancelada":
+      return "Cancelada"
+    default:
+      return "Ativa"
+  }
+}
+
+function textoOuNull(valor: string) {
+  const limpo = valor.trim()
+  return limpo ? limpo : null
+}
+
+function formaPagamentoOuNull(valor: string) {
+  const limpo = valor.trim()
+  return limpo ? limpo : null
+}
+
 export default function PagamentosServicoPage() {
-    const [pacientes, setPacientes] = useState<Patient[]>([])
+  const [pacientes, setPacientes] = useState<Patient[]>([])
   const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
   const [pagamentos, setPagamentos] = useState<ServicePayment[]>([])
   const [mensagem, setMensagem] = useState("")
-  const [busca, setBusca] = useState("")
 
-    const [billingIdPagamento, setBillingIdPagamento] = useState<number | null>(null)
+  const [busca, setBusca] = useState("")
+  const [filtroPaciente, setFiltroPaciente] = useState("todos")
+  const [filtroServico, setFiltroServico] = useState("todos")
+  const [filtroStatus, setFiltroStatus] = useState("todos")
+  const [filtroCompetencia, setFiltroCompetencia] = useState("")
+  const [somenteEmAberto, setSomenteEmAberto] = useState(false)
+
+  const [billingIdExpandido, setBillingIdExpandido] = useState<number | null>(null)
+  const [billingIdPagamento, setBillingIdPagamento] = useState<number | null>(null)
   const [paymentIdEdicao, setPaymentIdEdicao] = useState<number | null>(null)
+
   const [valorPagamento, setValorPagamento] = useState("")
   const [dataPagamento, setDataPagamento] = useState(hojeInputDate())
   const [formaPagamento, setFormaPagamento] = useState("Pix")
   const [observacaoPagamento, setObservacaoPagamento] = useState("")
 
-    const [patientId, setPatientId] = useState("")
+  const [patientId, setPatientId] = useState("")
   const [servico, setServico] = useState("Pilates")
   const [valorOriginal, setValorOriginal] = useState("")
   const [descontoPercentual, setDescontoPercentual] = useState("")
@@ -144,7 +229,7 @@ export default function PagamentosServicoPage() {
       return
     }
 
-            const { data: cobrancasData, error: cobrancasError } = await supabase
+    const { data: cobrancasData, error: cobrancasError } = await supabase
       .from("service_billings")
       .select(`
         id,
@@ -164,7 +249,7 @@ export default function PagamentosServicoPage() {
         patients (nome)
       `)
       .eq("user_id", user.id)
-      .order("data_vencimento", { ascending: false })
+      .order("data_vencimento", { ascending: true })
 
     if (cobrancasError) {
       setMensagem("Erro ao carregar cobranças.")
@@ -199,7 +284,7 @@ export default function PagamentosServicoPage() {
     setPagamentos((pagamentosData ?? []) as unknown as ServicePayment[])
   }
 
-    const valorOriginalNumero = Number(valorOriginal || 0)
+  const valorOriginalNumero = Number(valorOriginal || 0)
   const descontoPercentualNumero = Number(descontoPercentual || 0)
   const descontoValorNumeroDigitado = Number(descontoValor || 0)
   const valorPagoInicialNumero = Number(valorPagoInicial || 0)
@@ -212,7 +297,7 @@ export default function PagamentosServicoPage() {
   const valorFinalCalculado = Math.max(valorOriginalNumero - descontoCalculado, 0)
   const valorRestanteCalculado = Math.max(valorFinalCalculado - valorPagoInicialNumero, 0)
 
-    async function registrarCobranca() {
+  async function registrarCobranca() {
     setMensagem("")
 
     const {
@@ -287,9 +372,9 @@ export default function PagamentosServicoPage() {
           servico: servico.trim(),
           competencia_inicio: competenciaInicio || null,
           competencia_fim: competenciaFim || null,
-        data_vencimento: dataVencimento,
-        data_restante_sugerida: dataRestanteSugerida || null,
-        valor_original: valorBase,
+          data_vencimento: dataVencimento,
+          data_restante_sugerida: dataRestanteSugerida || null,
+          valor_original: valorBase,
           desconto_percentual: descontoPct,
           desconto_valor: descontoAbs,
           valor_total: valorFinal,
@@ -326,7 +411,10 @@ export default function PagamentosServicoPage() {
         .single()
 
       if (pagamentoError || !pagamentoInserido) {
-        setMensagem(pagamentoError?.message || "Cobrança criada, mas houve erro ao registrar o pagamento inicial.")
+        setMensagem(
+          pagamentoError?.message ||
+            "Cobrança criada, mas houve erro ao registrar o pagamento inicial."
+        )
         await carregarDados()
         return
       }
@@ -352,7 +440,9 @@ export default function PagamentosServicoPage() {
         ])
 
       if (financeiroError) {
-        setMensagem("Cobrança e pagamento inicial salvos, mas houve erro ao lançar no financeiro.")
+        setMensagem(
+          "Cobrança e pagamento inicial salvos, mas houve erro ao lançar no financeiro."
+        )
         await carregarDados()
         return
       }
@@ -377,7 +467,7 @@ export default function PagamentosServicoPage() {
     await carregarDados()
   }
 
-      async function adicionarPagamento(cobranca: ServiceBilling) {
+  async function adicionarPagamento(cobranca: ServiceBilling) {
     setMensagem("")
 
     const {
@@ -416,8 +506,8 @@ export default function PagamentosServicoPage() {
         .from("service_payments")
         .update({
           valor,
-          forma_pagamento: formaPagamento || null,
-          observacao: observacaoPagamento || null,
+          forma_pagamento: formaPagamentoOuNull(formaPagamento),
+          observacao: textoOuNull(observacaoPagamento),
           data_pagamento: dataPagamento,
         })
         .eq("id", paymentIdEdicao)
@@ -457,8 +547,8 @@ export default function PagamentosServicoPage() {
             patient_id: cobranca.patient_id,
             servico: cobranca.servico,
             valor,
-            forma_pagamento: formaPagamento || null,
-            observacao: observacaoPagamento || null,
+            forma_pagamento: formaPagamentoOuNull(formaPagamento),
+            observacao: textoOuNull(observacaoPagamento),
             data_pagamento: dataPagamento,
             competencia_inicio: cobranca.competencia_inicio || null,
             competencia_fim: cobranca.competencia_fim || null,
@@ -509,18 +599,12 @@ export default function PagamentosServicoPage() {
       .eq("id", cobranca.id)
       .eq("user_id", user.id)
 
-    setBillingIdPagamento(null)
-    setPaymentIdEdicao(null)
-    setValorPagamento("")
-    setDataPagamento(hojeInputDate())
-    setFormaPagamento("Pix")
-    setObservacaoPagamento("")
-
+    limparFormularioPagamento()
     setMensagem(paymentIdEdicao ? "Pagamento editado com sucesso." : "Pagamento adicionado com sucesso.")
     await carregarDados()
   }
 
-    async function excluirPagamento(cobranca: ServiceBilling, pagamento: ServicePayment) {
+  async function excluirPagamento(cobranca: ServiceBilling, pagamento: ServicePayment) {
     setMensagem("")
 
     const {
@@ -540,7 +624,9 @@ export default function PagamentosServicoPage() {
       .eq("reference_id", pagamento.id)
 
     if (financeiroDeleteError) {
-      setMensagem(financeiroDeleteError.message || "Erro ao excluir lançamento financeiro do pagamento.")
+      setMensagem(
+        financeiroDeleteError.message || "Erro ao excluir lançamento financeiro do pagamento."
+      )
       return
     }
 
@@ -567,11 +653,12 @@ export default function PagamentosServicoPage() {
       .eq("id", cobranca.id)
       .eq("user_id", user.id)
 
+    limparFormularioPagamento()
     setMensagem("Pagamento excluído com sucesso.")
     await carregarDados()
   }
 
-    async function cancelarCobranca(cobrancaId: number) {
+  async function cancelarCobranca(cobrancaId: number) {
     setMensagem("")
 
     const {
@@ -598,7 +685,7 @@ export default function PagamentosServicoPage() {
     await carregarDados()
   }
 
-    async function excluirCobranca(cobranca: ServiceBilling) {
+  async function excluirCobranca(cobranca: ServiceBilling) {
     setMensagem("")
 
     const {
@@ -622,7 +709,10 @@ export default function PagamentosServicoPage() {
         .in("reference_id", idsPagamentos)
 
       if (financeiroDeleteError) {
-        setMensagem(financeiroDeleteError.message || "Erro ao excluir lançamentos financeiros da cobrança.")
+        setMensagem(
+          financeiroDeleteError.message ||
+            "Erro ao excluir lançamentos financeiros da cobrança."
+        )
         return
       }
 
@@ -649,12 +739,18 @@ export default function PagamentosServicoPage() {
       return
     }
 
+    if (billingIdExpandido === cobranca.id) {
+      setBillingIdExpandido(null)
+    }
+
+    limparFormularioPagamento()
     setMensagem("Cobrança excluída com sucesso.")
     await carregarDados()
   }
 
-    function editarPagamentoExistente(pagamento: ServicePayment) {
-    setBillingIdPagamento(pagamento.billing_id || null)
+  function editarPagamentoExistente(cobrancaId: number, pagamento: ServicePayment) {
+    setBillingIdExpandido(cobrancaId)
+    setBillingIdPagamento(cobrancaId)
     setPaymentIdEdicao(pagamento.id)
     setValorPagamento(String(Number(pagamento.valor)))
     setDataPagamento(pagamento.data_pagamento || hojeInputDate())
@@ -662,21 +758,45 @@ export default function PagamentosServicoPage() {
     setObservacaoPagamento(pagamento.observacao || "")
   }
 
-    const cobrancasFiltradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase()
-    if (!termo) return cobrancas
+  function abrirFormularioPagamento(cobranca: CobrancaComResumo) {
+    setBillingIdExpandido((atual) => (atual === cobranca.id ? null : cobranca.id))
+    setBillingIdPagamento(cobranca.id)
+    setPaymentIdEdicao(null)
+    setValorPagamento("")
+    setDataPagamento(hojeInputDate())
+    setFormaPagamento("Pix")
+    setObservacaoPagamento("")
+  }
 
-    return cobrancas.filter((c) => {
-      return (
-        (c.patients?.nome || "").toLowerCase().includes(termo) ||
-        (c.servico || "").toLowerCase().includes(termo) ||
-        (c.status || "").toLowerCase().includes(termo) ||
-        (c.observacao || "").toLowerCase().includes(termo)
-      )
-    })
-  }, [cobrancas, busca])
+  function preencherValorRestante(cobranca: CobrancaComResumo) {
+    setBillingIdExpandido(cobranca.id)
+    setBillingIdPagamento(cobranca.id)
+    setPaymentIdEdicao(null)
+    setValorPagamento(String(Number(cobranca.valorEmAberto.toFixed(2))))
+    setDataPagamento(hojeInputDate())
+    setFormaPagamento("Pix")
+    setObservacaoPagamento("")
+  }
 
-    const resumoPacientes = useMemo(() => {
+  function limparFormularioPagamento() {
+    setBillingIdPagamento(null)
+    setPaymentIdEdicao(null)
+    setValorPagamento("")
+    setDataPagamento(hojeInputDate())
+    setFormaPagamento("Pix")
+    setObservacaoPagamento("")
+  }
+
+  function limparFiltros() {
+    setBusca("")
+    setFiltroPaciente("todos")
+    setFiltroServico("todos")
+    setFiltroStatus("todos")
+    setFiltroCompetencia("")
+    setSomenteEmAberto(false)
+  }
+
+  const resumoPacientes = useMemo(() => {
     return pacientes.map((p) => {
       const cobrancasPaciente = cobrancas.filter((c) => c.patient_id === p.id)
       return {
@@ -690,28 +810,138 @@ export default function PagamentosServicoPage() {
     })
   }, [pacientes, cobrancas])
 
-    function totalPagoDaCobranca(billingId: number) {
-    return pagamentos
-      .filter((p) => p.billing_id === billingId)
-      .reduce((soma, p) => soma + Number(p.valor), 0)
-  }
+  const servicosDisponiveis = useMemo(() => {
+    return Array.from(new Set(cobrancas.map((c) => c.servico).filter(Boolean))).sort()
+  }, [cobrancas])
 
-  function valorEmAbertoDaCobranca(cobranca: ServiceBilling) {
-    const pago = totalPagoDaCobranca(cobranca.id)
-    return Math.max(Number(cobranca.valor_total) - pago, 0)
-  }
+  const competenciasDisponiveis = useMemo(() => {
+    return Array.from(
+      new Set(
+        cobrancas
+          .map((c) => competenciaMes(c.competencia_inicio || c.data_vencimento))
+          .filter(Boolean)
+      )
+    ).sort()
+  }, [cobrancas])
+
+  const cobrancasComResumo = useMemo<CobrancaComResumo[]>(() => {
+    return cobrancas.map((c) => {
+      const pagamentosDaCobranca = pagamentos.filter((p) => p.billing_id === c.id)
+      const valorPago = pagamentosDaCobranca.reduce((soma, p) => soma + Number(p.valor), 0)
+      const valorEmAberto = Math.max(Number(c.valor_total) - valorPago, 0)
+      const paciente = resumoPacientes.find((p) => p.id === c.patient_id)
+
+      return {
+        ...c,
+        valorPago,
+        valorEmAberto,
+        statusVisual: statusVisualDaCobranca(c, valorPago, valorEmAberto),
+        proximoPagamentoPaciente: paciente?.proximoPagamento || "-",
+        valorMensalPaciente: Number(paciente?.valor_mensal || 0),
+        dataEntradaPaciente: paciente?.data_inicio || null,
+        pagamentosDaCobranca,
+      }
+    })
+  }, [cobrancas, pagamentos, resumoPacientes])
+
+  const cobrancasFiltradas = useMemo(() => {
+    const termo = busca.trim().toLowerCase()
+
+    return cobrancasComResumo.filter((c) => {
+      const bateBusca =
+        !termo ||
+        (c.patients?.nome || "").toLowerCase().includes(termo) ||
+        (c.servico || "").toLowerCase().includes(termo) ||
+        (c.observacao || "").toLowerCase().includes(termo) ||
+        labelStatus(c.statusVisual).toLowerCase().includes(termo)
+
+      const batePaciente = filtroPaciente === "todos" || String(c.patient_id) === filtroPaciente
+      const bateServico = filtroServico === "todos" || c.servico === filtroServico
+      const bateStatus = filtroStatus === "todos" || c.statusVisual === filtroStatus
+
+      const mesCompetencia = competenciaMes(c.competencia_inicio || c.data_vencimento)
+      const bateCompetencia = !filtroCompetencia || mesCompetencia === filtroCompetencia
+
+      const bateEmAberto = !somenteEmAberto || c.valorEmAberto > 0
+
+      return (
+        bateBusca &&
+        batePaciente &&
+        bateServico &&
+        bateStatus &&
+        bateCompetencia &&
+        bateEmAberto
+      )
+    })
+  }, [
+    busca,
+    cobrancasComResumo,
+    filtroPaciente,
+    filtroServico,
+    filtroStatus,
+    filtroCompetencia,
+    somenteEmAberto,
+  ])
+
+  const totais = useMemo(() => {
+    const totalCobrado = cobrancasFiltradas.reduce(
+      (soma, c) => soma + Number(c.valor_total || 0),
+      0
+    )
+    const totalPago = cobrancasFiltradas.reduce((soma, c) => soma + Number(c.valorPago || 0), 0)
+    const totalEmAberto = cobrancasFiltradas.reduce(
+      (soma, c) => soma + Number(c.valorEmAberto || 0),
+      0
+    )
+    const vencidas = cobrancasFiltradas.filter((c) => c.statusVisual === "vencida").length
+    const parciais = cobrancasFiltradas.filter((c) => c.statusVisual === "parcial").length
+    const inadimplentes = new Set(
+      cobrancasFiltradas
+        .filter((c) => c.statusVisual === "vencida" || c.statusVisual === "parcial")
+        .map((c) => c.patient_id)
+    ).size
+
+    return {
+      totalCobrado,
+      totalPago,
+      totalEmAberto,
+      vencidas,
+      parciais,
+      inadimplentes,
+    }
+  }, [cobrancasFiltradas])
+
+  const leituraRapida = useMemo(() => {
+    if (cobrancasFiltradas.length === 0) {
+      return "Nenhuma cobrança encontrada com os filtros atuais."
+    }
+
+    if (totais.vencidas > 0) {
+      return `Existem ${totais.vencidas} cobrança(s) vencida(s) e R$ ${totais.totalEmAberto.toFixed(2)} em aberto no filtro atual.`
+    }
+
+    if (totais.parciais > 0) {
+      return `Há ${totais.parciais} cobrança(s) com pagamento parcial. Use o botão \"Restante\" para acelerar a baixa.`
+    }
+
+    if (totais.totalEmAberto <= 0) {
+      return "Todas as cobranças filtradas estão quitadas."
+    }
+
+    return `Você tem R$ ${totais.totalPago.toFixed(2)} recebidos e R$ ${totais.totalEmAberto.toFixed(2)} em aberto no filtro atual.`
+  }, [cobrancasFiltradas, totais])
 
   return (
     <div>
-            <h2 className="page-title">Cobranças de Serviço</h2>
+      <h2 className="page-title">Pagamentos de serviços</h2>
       <p className="page-subtitle">
-        Cadastre cobranças dos pacientes, controle vencimento, desconto e acompanhe o próximo pagamento.
+        Controle cobranças, competência, inadimplência e recebimentos com uma visão mais compacta, no estilo do histórico de vendas.
       </p>
 
-      {mensagem && <p>{mensagem}</p>}
+      {mensagem && <div style={mensagemBox}>{mensagem}</div>}
 
       <div className="section-card" style={{ marginBottom: 20 }}>
-                <h3 style={{ marginBottom: 12 }}>Nova cobrança</h3>
+        <h3 style={{ marginBottom: 12 }}>Nova cobrança</h3>
 
         <div className="grid-2">
           <div>
@@ -726,7 +956,7 @@ export default function PagamentosServicoPage() {
             </select>
           </div>
 
-                    <div>
+          <div>
             <label>Serviço</label>
             <select value={servico} onChange={(e) => setServico(e.target.value)}>
               <option value="Pilates">Pilates</option>
@@ -737,7 +967,7 @@ export default function PagamentosServicoPage() {
             </select>
           </div>
 
-                    <div>
+          <div>
             <label>Valor original</label>
             <input
               type="number"
@@ -794,16 +1024,7 @@ export default function PagamentosServicoPage() {
             />
           </div>
 
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label>Observação</label>
-            <textarea
-              rows={3}
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
-            />
-          </div>
-
-                    <div>
+          <div>
             <label>Pagamento inicial (opcional)</label>
             <input
               type="number"
@@ -848,6 +1069,15 @@ export default function PagamentosServicoPage() {
           </div>
 
           <div style={{ gridColumn: "1 / -1" }}>
+            <label>Observação</label>
+            <textarea
+              rows={3}
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+            />
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
             <label>Observação do pagamento inicial</label>
             <textarea
               rows={2}
@@ -858,17 +1088,7 @@ export default function PagamentosServicoPage() {
           </div>
         </div>
 
-                <div
-          style={{
-            marginTop: 16,
-            padding: 14,
-            border: "1px solid #d1d5db",
-            borderRadius: 10,
-            background: "#f8fafc",
-            display: "grid",
-            gap: 6,
-          }}
-        >
+        <div style={resumoCobrancaBox}>
           <strong>Resumo da cobrança</strong>
           <span>Valor original: R$ {valorOriginalNumero.toFixed(2)}</span>
           <span>Desconto aplicado: R$ {descontoCalculado.toFixed(2)}</span>
@@ -891,173 +1111,220 @@ export default function PagamentosServicoPage() {
       </div>
 
       <div className="section-card" style={{ marginBottom: 20 }}>
-        <h3 style={{ marginBottom: 12 }}>Resumo por paciente</h3>
+        <div style={toolbarGrid}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <input
+              placeholder="Buscar por paciente, serviço, observação ou status"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
 
+          <div>
+            <label>Paciente</label>
+            <select value={filtroPaciente} onChange={(e) => setFiltroPaciente(e.target.value)}>
+              <option value="todos">Todos</option>
+              {pacientes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label>Serviço</label>
+            <select value={filtroServico} onChange={(e) => setFiltroServico(e.target.value)}>
+              <option value="todos">Todos</option>
+              {servicosDisponiveis.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label>Status</label>
+            <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
+              <option value="todos">Todos</option>
+              <option value="ativa">Ativa</option>
+              <option value="parcial">Parcial</option>
+              <option value="quitada">Quitada</option>
+              <option value="vencida">Vencida</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Competência</label>
+            <select
+              value={filtroCompetencia}
+              onChange={(e) => setFiltroCompetencia(e.target.value)}
+            >
+              <option value="">Todas</option>
+              {competenciasDisponiveis.map((item) => (
+                <option key={item} value={item}>
+                  {item.split("-").reverse().join("/")}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={checkboxWrap}>
+            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={somenteEmAberto}
+                onChange={(e) => setSomenteEmAberto(e.target.checked)}
+              />
+              Somente em aberto
+            </label>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={limparFiltros}>
+            Limpar filtros
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setFiltroStatus("vencida")
+              setSomenteEmAberto(true)
+            }}
+          >
+            Ver inadimplentes
+          </button>
+        </div>
+
+        <div style={cardsGrid}>
+          <div style={miniCard}>
+            <span style={cardMiniLabel}>Total cobrado</span>
+            <strong style={cardMiniValue}>R$ {totais.totalCobrado.toFixed(2)}</strong>
+          </div>
+          <div style={miniCard}>
+            <span style={cardMiniLabel}>Total pago</span>
+            <strong style={cardMiniValue}>R$ {totais.totalPago.toFixed(2)}</strong>
+          </div>
+          <div style={miniCard}>
+            <span style={cardMiniLabel}>Em aberto</span>
+            <strong style={cardMiniValue}>R$ {totais.totalEmAberto.toFixed(2)}</strong>
+          </div>
+          <div style={miniCard}>
+            <span style={cardMiniLabel}>Vencidas</span>
+            <strong style={cardMiniValue}>{totais.vencidas}</strong>
+          </div>
+          <div style={miniCard}>
+            <span style={cardMiniLabel}>Parciais</span>
+            <strong style={cardMiniValue}>{totais.parciais}</strong>
+          </div>
+          <div style={miniCard}>
+            <span style={cardMiniLabel}>Pacientes em atenção</span>
+            <strong style={cardMiniValue}>{totais.inadimplentes}</strong>
+          </div>
+        </div>
+
+        <div style={leituraRapidaBox}>
+          <strong>Leitura rápida:</strong> {leituraRapida}
+        </div>
+      </div>
+
+      <div className="section-card">
         <div className="data-table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 <th style={th}>Paciente</th>
-                <th style={th}>Valor mensal</th>
-                <th style={th}>Data de entrada</th>
-                <th style={th}>Próximo pagamento</th>
-              </tr>
-            </thead>
-            <tbody>
-              {resumoPacientes.map((p) => (
-                <tr key={p.id}>
-                  <td style={td}>{p.nome}</td>
-                  <td style={td}>R$ {Number(p.valor_mensal || 0).toFixed(2)}</td>
-                  <td style={td}>
-                    {p.data_inicio
-                      ? new Date(`${p.data_inicio}T12:00:00`).toLocaleDateString("pt-BR")
-                      : "-"}
-                  </td>
-                  <td style={td}>{p.proximoPagamento}</td>
-                </tr>
-              ))}
-
-              {resumoPacientes.length === 0 && (
-                <tr>
-                  <td style={td} colSpan={4}>
-                    Nenhum paciente encontrado.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="section-card">
-        <div style={{ marginBottom: 12 }}>
-          <input
-            placeholder="Buscar cobrança"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
-        </div>
-
-        <div className="data-table-wrap">
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-                <tr>
-                <th style={th}>Paciente</th>
                 <th style={th}>Serviço</th>
-                <th style={th}>Valor original</th>
-                <th style={th}>Desconto</th>
                 <th style={th}>Valor final</th>
                 <th style={th}>Pago</th>
                 <th style={th}>Em aberto</th>
-                <th style={th}>Vencimento</th>
-                <th style={th}>Restante sugerido</th>
                 <th style={th}>Competência</th>
+                <th style={th}>Vencimento</th>
+                <th style={th}>Próximo pagto</th>
                 <th style={th}>Status</th>
-                <th style={th}>Observação</th>
                 <th style={th}>Ações</th>
               </tr>
             </thead>
             <tbody>
-                {cobrancasFiltradas.map((c) => {
-                const pagamentosDaCobranca = pagamentos.filter((p) => p.billing_id === c.id)
+              {cobrancasFiltradas.map((c) => {
+                const expandido =
+                  billingIdExpandido === c.id ||
+                  billingIdPagamento === c.id ||
+                  c.pagamentosDaCobranca.length > 0
 
-                 return (
+                return (
                   <Fragment key={c.id}>
-                    <tr key={c.id}>
-                      <td style={td}>{c.patients?.nome || "-"}</td>
-                      <td style={td}>{c.servico || "-"}</td>
-                      <td style={td}>R$ {Number(c.valor_original).toFixed(2)}</td>
+                    <tr
+                      style={
+                        c.statusVisual === "vencida"
+                          ? linhaVencida
+                          : c.statusVisual === "parcial"
+                          ? linhaParcial
+                          : undefined
+                      }
+                    >
                       <td style={td}>
-                        {Number(c.desconto_percentual || 0) > 0
-                          ? `${Number(c.desconto_percentual).toFixed(2)}%`
-                          : `R$ ${Number(c.desconto_valor || 0).toFixed(2)}`}
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <strong>{c.patients?.nome || "-"}</strong>
+                          <span style={subInfo}>
+                            Mensal: R$ {Number(c.valorMensalPaciente || 0).toFixed(2)}
+                          </span>
+                          <span style={subInfo}>
+                            Entrada: {formatarData(c.dataEntradaPaciente)}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={td}>
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <strong>{c.servico || "-"}</strong>
+                          <span style={subInfo}>
+                            Original: R$ {Number(c.valor_original).toFixed(2)}
+                          </span>
+                          <span style={subInfo}>
+                            Desconto:{" "}
+                            {Number(c.desconto_percentual || 0) > 0
+                              ? `${Number(c.desconto_percentual).toFixed(2)}%`
+                              : `R$ ${Number(c.desconto_valor || 0).toFixed(2)}`}
+                          </span>
+                        </div>
                       </td>
                       <td style={td}>R$ {Number(c.valor_total).toFixed(2)}</td>
-                      <td style={td}>R$ {totalPagoDaCobranca(c.id).toFixed(2)}</td>
-                      <td style={td}>R$ {valorEmAbertoDaCobranca(c).toFixed(2)}</td>
+                      <td style={td}>R$ {Number(c.valorPago).toFixed(2)}</td>
+                      <td style={td}>R$ {Number(c.valorEmAberto).toFixed(2)}</td>
+                      <td style={td}>{formatarCompetencia(c.competencia_inicio, c.competencia_fim)}</td>
+                      <td style={td}>{formatarData(c.data_vencimento)}</td>
+                      <td style={td}>{c.proximoPagamentoPaciente}</td>
                       <td style={td}>
-                        {new Date(`${c.data_vencimento}T12:00:00`).toLocaleDateString("pt-BR")}
+                        <span style={badgeStatus(c.statusVisual)}>{labelStatus(c.statusVisual)}</span>
                       </td>
                       <td style={td}>
-                        {c.data_restante_sugerida
-                          ? new Date(`${c.data_restante_sugerida}T12:00:00`).toLocaleDateString("pt-BR")
-                          : "-"}
-                      </td>
-                      <td style={td}>
-                        {c.competencia_inicio
-                          ? new Date(`${c.competencia_inicio}T12:00:00`).toLocaleDateString("pt-BR")
-                          : "-"}{" "}
-                        até{" "}
-                        {c.competencia_fim
-                          ? new Date(`${c.competencia_fim}T12:00:00`).toLocaleDateString("pt-BR")
-                          : "-"}
-                      </td>
-                      <td style={td}>{c.status}</td>
-                      <td style={td}>{c.observacao || "-"}</td>
-                      <td style={td}>
-                        <div style={{ display: "grid", gap: 8 }}>
-                          {c.status !== "cancelada" && valorEmAbertoDaCobranca(c) > 0 && (
-                            <div style={{ display: "grid", gap: 6 }}>
-                              <input
-                                type="number"
-                                step="0.01"
-                                placeholder="Valor pagamento"
-                                value={billingIdPagamento === c.id ? valorPagamento : ""}
-                                onChange={(e) => {
-                                  setBillingIdPagamento(c.id)
-                                  setPaymentIdEdicao(null)
-                                  setValorPagamento(e.target.value)
-                                }}
-                              />
-                              <input
-                                type="date"
-                                value={billingIdPagamento === c.id ? dataPagamento : hojeInputDate()}
-                                onChange={(e) => {
-                                  setBillingIdPagamento(c.id)
-                                  setPaymentIdEdicao(null)
-                                  setDataPagamento(e.target.value)
-                                }}
-                              />
-                              <select
-                                value={billingIdPagamento === c.id ? formaPagamento : "Pix"}
-                                onChange={(e) => {
-                                  setBillingIdPagamento(c.id)
-                                  setPaymentIdEdicao(null)
-                                  setFormaPagamento(e.target.value)
-                                }}
-                              >
-                                <option value="Pix">Pix</option>
-                                <option value="Dinheiro">Dinheiro</option>
-                                <option value="Cartão de débito">Cartão de débito</option>
-                                <option value="Cartão de crédito">Cartão de crédito</option>
-                                <option value="Transferência">Transferência</option>
-                                <option value="Outro">Outro</option>
-                              </select>
-                              <input
-                                type="text"
-                                placeholder="Observação do pagamento"
-                                value={billingIdPagamento === c.id ? observacaoPagamento : ""}
-                                onChange={(e) => {
-                                  setBillingIdPagamento(c.id)
-                                  setPaymentIdEdicao(null)
-                                  setObservacaoPagamento(e.target.value)
-                                }}
-                              />
+                        <div style={acoesGridCompacta}>
+                          {c.statusVisual !== "cancelada" && c.valorEmAberto > 0 && (
+                            <>
                               <button
                                 className="btn btn-primary btn-sm"
-                                onClick={() => adicionarPagamento(c)}
+                                onClick={() => abrirFormularioPagamento(c)}
                               >
-                                {billingIdPagamento === c.id && paymentIdEdicao ? "Salvar edição" : "Adicionar pagamento"}
+                                {billingIdExpandido === c.id ? "Fechar" : "Receber"}
                               </button>
-                            </div>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => preencherValorRestante(c)}
+                              >
+                                Restante
+                              </button>
+                            </>
                           )}
 
-                            {c.status !== "cancelada" && (
+                          {c.statusVisual !== "cancelada" && (
                             <button
                               className="btn btn-danger btn-sm"
                               onClick={() => cancelarCobranca(c.id)}
                             >
-                              Cancelar cobrança
+                              Cancelar
                             </button>
                           )}
 
@@ -1065,67 +1332,149 @@ export default function PagamentosServicoPage() {
                             className="btn btn-danger btn-sm"
                             onClick={() => excluirCobranca(c)}
                           >
-                            Excluir cobrança
+                            Excluir
                           </button>
                         </div>
                       </td>
                     </tr>
 
-                    {pagamentosDaCobranca.length > 0 && (
-                      <tr key={`pagamentos-${c.id}`}>
-                        <td style={{ ...td, background: "#f8fafc" }} colSpan={13}>
-                          <div style={{ display: "grid", gap: 8 }}>
-                            <strong>Pagamentos da cobrança</strong>
+                    {expandido && (
+                      <tr>
+                        <td style={{ ...td, background: "#f8fafc" }} colSpan={10}>
+                          <div style={blocoDetalhes}>
+                            {c.statusVisual !== "cancelada" && c.valorEmAberto > 0 && (
+                              <div style={painelPagamento}>
+                                <strong style={{ marginBottom: 8 }}>
+                                  {paymentIdEdicao ? "Editar pagamento" : "Registrar pagamento"}
+                                </strong>
 
-                            {pagamentosDaCobranca.map((p) => (
-                              <div
-                                key={p.id}
-                                style={{
-                                  display: "flex",
-                                  gap: 8,
-                                  flexWrap: "wrap",
-                                  alignItems: "center",
-                                  justifyContent: "space-between",
-                                  border: "1px solid #e5e7eb",
-                                  borderRadius: 8,
-                                  padding: 10,
-                                  background: "#fff",
-                                }}
-                              >
-                                <div style={{ display: "grid", gap: 4 }}>
-                                  <span>Valor: R$ {Number(p.valor).toFixed(2)}</span>
-                                  <span>Data: {new Date(`${p.data_pagamento}T12:00:00`).toLocaleDateString("pt-BR")}</span>
-                                  <span>Forma: {p.forma_pagamento || "-"}</span>
-                                  <span>Obs.: {p.observacao || "-"}</span>
+                                <div style={formPagamentoGrid}>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Valor do pagamento"
+                                    value={billingIdPagamento === c.id ? valorPagamento : ""}
+                                    onChange={(e) => {
+                                      setBillingIdPagamento(c.id)
+                                      setValorPagamento(e.target.value)
+                                    }}
+                                  />
+                                  <input
+                                    type="date"
+                                    value={billingIdPagamento === c.id ? dataPagamento : hojeInputDate()}
+                                    onChange={(e) => {
+                                      setBillingIdPagamento(c.id)
+                                      setDataPagamento(e.target.value)
+                                    }}
+                                  />
+                                  <select
+                                    value={billingIdPagamento === c.id ? formaPagamento : "Pix"}
+                                    onChange={(e) => {
+                                      setBillingIdPagamento(c.id)
+                                      setFormaPagamento(e.target.value)
+                                    }}
+                                  >
+                                    <option value="Pix">Pix</option>
+                                    <option value="Dinheiro">Dinheiro</option>
+                                    <option value="Cartão de débito">Cartão de débito</option>
+                                    <option value="Cartão de crédito">Cartão de crédito</option>
+                                    <option value="Transferência">Transferência</option>
+                                    <option value="Outro">Outro</option>
+                                  </select>
+                                  <input
+                                    type="text"
+                                    placeholder="Observação"
+                                    value={billingIdPagamento === c.id ? observacaoPagamento : ""}
+                                    onChange={(e) => {
+                                      setBillingIdPagamento(c.id)
+                                      setObservacaoPagamento(e.target.value)
+                                    }}
+                                  />
                                 </div>
 
-                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                  <button
-                                    className="btn btn-secondary btn-sm"
-                                    onClick={() => editarPagamentoExistente(p)}
-                                  >
-                                    Editar pagamento
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                                  <button className="btn btn-primary btn-sm" onClick={() => adicionarPagamento(c)}>
+                                    {paymentIdEdicao ? "Salvar edição" : "Adicionar pagamento"}
                                   </button>
                                   <button
-                                    className="btn btn-danger btn-sm"
-                                    onClick={() => excluirPagamento(c, p)}
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => {
+                                      limparFormularioPagamento()
+                                      setBillingIdExpandido(null)
+                                    }}
                                   >
-                                    Excluir pagamento
+                                    Fechar painel
                                   </button>
                                 </div>
                               </div>
-                            ))}
+                            )}
+
+                            <div style={painelHistorico}>
+                              <strong style={{ marginBottom: 8 }}>Pagamentos da cobrança</strong>
+
+                              {c.pagamentosDaCobranca.length > 0 ? (
+                                <div style={{ display: "grid", gap: 8 }}>
+                                  {c.pagamentosDaCobranca.map((p) => (
+                                    <div key={p.id} style={pagamentoItem}>
+                                      <div style={{ display: "grid", gap: 4 }}>
+                                        <span>
+                                          <strong>Valor:</strong> R$ {Number(p.valor).toFixed(2)}
+                                        </span>
+                                        <span>
+                                          <strong>Data:</strong> {formatarData(p.data_pagamento)}
+                                        </span>
+                                        <span>
+                                          <strong>Forma:</strong> {p.forma_pagamento || "-"}
+                                        </span>
+                                        <span>
+                                          <strong>Obs.:</strong> {p.observacao || "-"}
+                                        </span>
+                                        <span style={subInfo}>
+                                          Registrado em {formatarDataHoraIso(p.created_at)}
+                                        </span>
+                                      </div>
+
+                                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                        <button
+                                          className="btn btn-secondary btn-sm"
+                                          onClick={() => editarPagamentoExistente(c.id, p)}
+                                        >
+                                          Editar pagamento
+                                        </button>
+                                        <button
+                                          className="btn btn-danger btn-sm"
+                                          onClick={() => excluirPagamento(c, p)}
+                                        >
+                                          Excluir pagamento
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p style={{ margin: 0, color: "#64748b" }}>
+                                  Ainda não há pagamentos nessa cobrança.
+                                </p>
+                              )}
+
+                              {c.observacao && (
+                                <div style={observacaoBox}>
+                                  <strong>Observação da cobrança:</strong> {c.observacao}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
                     )}
-                </Fragment>
+                  </Fragment>
                 )
               })}
 
-                {cobrancasFiltradas.length === 0 && (
+              {cobrancasFiltradas.length === 0 && (
                 <tr>
-                    <td style={td} colSpan={13}>
+                  <td style={td} colSpan={10}>
                     Nenhuma cobrança encontrada.
                   </td>
                 </tr>
@@ -1142,10 +1491,199 @@ const th = {
   textAlign: "left" as const,
   borderBottom: "1px solid #d1d5db",
   padding: "12px",
+  fontSize: 13,
+  color: "#475569",
+  whiteSpace: "nowrap" as const,
 }
 
 const td = {
   borderBottom: "1px solid #e5e7eb",
   padding: "12px",
   verticalAlign: "top" as const,
+  fontSize: 14,
+}
+
+const linhaVencida = {
+  background: "#fff7ed",
+}
+
+const linhaParcial = {
+  background: "#f8fafc",
+}
+
+const subInfo = {
+  fontSize: 12,
+  color: "#64748b",
+}
+
+const mensagemBox: React.CSSProperties = {
+  marginBottom: 16,
+  padding: 12,
+  borderRadius: 10,
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  border: "1px solid #bfdbfe",
+}
+
+const resumoCobrancaBox: React.CSSProperties = {
+  marginTop: 16,
+  padding: 14,
+  border: "1px solid #d1d5db",
+  borderRadius: 10,
+  background: "#f8fafc",
+  display: "grid",
+  gap: 6,
+}
+
+const toolbarGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 12,
+}
+
+const checkboxWrap: React.CSSProperties = {
+  display: "flex",
+  alignItems: "end",
+}
+
+const cardsGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 12,
+  marginTop: 16,
+}
+
+const miniCard: React.CSSProperties = {
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 14,
+}
+
+const cardMiniLabel: React.CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  color: "#64748b",
+  marginBottom: 6,
+}
+
+const cardMiniValue: React.CSSProperties = {
+  fontSize: 22,
+  color: "#0f172a",
+}
+
+const leituraRapidaBox: React.CSSProperties = {
+  marginTop: 14,
+  padding: 12,
+  borderRadius: 12,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  color: "#334155",
+  fontSize: 14,
+}
+
+const acoesGridCompacta: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+}
+
+const blocoDetalhes: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(300px, 420px) minmax(320px, 1fr)",
+  gap: 16,
+}
+
+const painelPagamento: React.CSSProperties = {
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: 14,
+  minWidth: 0,
+}
+
+const painelHistorico: React.CSSProperties = {
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: 14,
+  minWidth: 0,
+}
+
+const formPagamentoGrid: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+}
+
+const pagamentoItem: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap",
+  border: "1px solid #e5e7eb",
+  borderRadius: 10,
+  padding: 10,
+  background: "#fff",
+}
+
+const observacaoBox: React.CSSProperties = {
+  marginTop: 10,
+  padding: 10,
+  borderRadius: 10,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  color: "#334155",
+  fontSize: 14,
+}
+
+function badgeStatus(status: CobrancaComResumo["statusVisual"]): React.CSSProperties {
+  const base: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "6px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  }
+
+  if (status === "quitada") {
+    return {
+      ...base,
+      background: "#dcfce7",
+      color: "#166534",
+    }
+  }
+
+  if (status === "parcial") {
+    return {
+      ...base,
+      background: "#dbeafe",
+      color: "#1d4ed8",
+    }
+  }
+
+  if (status === "vencida") {
+    return {
+      ...base,
+      background: "#fee2e2",
+      color: "#b91c1c",
+    }
+  }
+
+  if (status === "cancelada") {
+    return {
+      ...base,
+      background: "#e5e7eb",
+      color: "#374151",
+    }
+  }
+
+  return {
+    ...base,
+    background: "#fef3c7",
+    color: "#92400e",
+  }
 }
