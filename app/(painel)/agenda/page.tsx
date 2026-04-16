@@ -52,6 +52,7 @@ type Replacement = {
 
 type AgendaDoDiaItem = {
   appointment_id: number | null
+  replacement_id: number | null
   patient_id: number
   nome: string
   ativo: boolean
@@ -61,6 +62,7 @@ type AgendaDoDiaItem = {
   hora_fim: string | null
   status: string
   observacoes: string | null
+  origem: "fixo" | "avulso" | "reposicao"
 }
 
 function hojeInputDate() {
@@ -350,55 +352,63 @@ export default function AgendaPage() {
   }
 
   async function marcarPresencaDoDia(item: AgendaDoDiaItem, novoStatus: "realizado" | "faltou") {
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
 
-    if (item.appointment_id) {
-      const { error } = await supabase
-        .from("patient_appointments")
-        .update({ status: novoStatus })
-        .eq("id", item.appointment_id)
-        .eq("user_id", user.id)
-
-      if (error) {
-        setMensagem(error.message || "Erro ao marcar presença.")
-        return
-      }
-
-      await carregarDados()
-      return
-    }
-
+  if (item.appointment_id) {
     const { error } = await supabase
       .from("patient_appointments")
-      .insert([
-        {
-          user_id: user.id,
-          patient_id: item.patient_id,
-          servico: item.servico,
-          data_agendamento: item.data_agendamento,
-          hora_inicio: item.hora_inicio,
-          hora_fim: item.hora_fim || null,
-          status: novoStatus,
-          observacoes: item.observacoes || null,
-        },
-      ])
+      .update({ status: novoStatus })
+      .eq("id", item.appointment_id)
+      .eq("user_id", user.id)
 
     if (error) {
-      setMensagem(error.message || "Erro ao registrar presença do dia.")
+      setMensagem(error.message || "Erro ao marcar presença.")
       return
     }
 
     await carregarDados()
+    return
   }
+
+  const observacoesBase = item.observacoes?.trim() || null
+  const observacoesFinais =
+    item.origem === "reposicao"
+      ? observacoesBase
+        ? `${observacoesBase} | Gerado por reposição`
+        : "Gerado por reposição"
+      : observacoesBase
+
+  const { error } = await supabase
+    .from("patient_appointments")
+    .insert([
+      {
+        user_id: user.id,
+        patient_id: item.patient_id,
+        servico: item.servico,
+        data_agendamento: item.data_agendamento,
+        hora_inicio: item.hora_inicio,
+        hora_fim: item.hora_fim || null,
+        status: novoStatus,
+        observacoes: observacoesFinais,
+      },
+    ])
+
+  if (error) {
+    setMensagem(error.message || "Erro ao registrar presença do dia.")
+    return
+  }
+
+  await carregarDados()
+}
 
   function preencherReposicaoAPartirDaFalta(item: AgendaDoDiaItem) {
     setIdReposicaoEdicao(null)
@@ -535,84 +545,121 @@ export default function AgendaPage() {
       return (
         (a.patients?.nome || "").toLowerCase().includes(termo) ||
         a.servico.toLowerCase().includes(termo) ||
-        a.status.toLowerCase().includes(termo)
+        a.status.toLowerCase().includes(termo) ||
+        (a.observacoes || "").toLowerCase().includes(termo)
       )
     })
   }, [agendamentos, busca])
 
   const agendaDoDia = useMemo(() => {
-    if (!dataFiltroDia) return []
+  if (!dataFiltroDia) return []
 
-    const dataObj = new Date(`${dataFiltroDia}T12:00:00`)
-    const weekday = dataObj.getDay()
+  const dataObj = new Date(`${dataFiltroDia}T12:00:00`)
+  const weekday = dataObj.getDay()
 
-    const pacientesAtivos = pacientes.filter((p) => p.ativo)
-    const ativosIds = new Set(pacientesAtivos.map((p) => p.id))
+  const pacientesAtivos = pacientes.filter((p) => p.ativo)
+  const ativosIds = new Set(pacientesAtivos.map((p) => p.id))
 
-    const regrasDoDia = regras.filter(
-      (r) => r.ativo && r.weekday === weekday && ativosIds.has(r.patient_id)
+  const regrasDoDia = regras.filter(
+    (r) => r.ativo && r.weekday === weekday && ativosIds.has(r.patient_id)
+  )
+
+  const agendamentosDoDia = agendamentos.filter(
+    (a) => a.data_agendamento === dataFiltroDia
+  )
+
+  const reposicoesDoDia = reposicoes.filter(
+    (r) => r.data_reposicao === dataFiltroDia
+  )
+
+  const itensDasRegras: AgendaDoDiaItem[] = regrasDoDia.map((regra) => {
+    const existente = agendamentosDoDia.find(
+      (a) =>
+        a.patient_id === regra.patient_id &&
+        a.servico === regra.servico &&
+        a.hora_inicio === regra.hora_inicio
     )
 
-    const agendamentosDoDia = agendamentos.filter(
-      (a) => a.data_agendamento === dataFiltroDia
+    const paciente = pacientes.find((p) => p.id === regra.patient_id)
+
+    return {
+      appointment_id: existente?.id ?? null,
+      replacement_id: null,
+      patient_id: regra.patient_id,
+      nome: existente?.patients?.nome || paciente?.nome || "-",
+      ativo: paciente?.ativo ?? false,
+      servico: regra.servico,
+      data_agendamento: dataFiltroDia,
+      hora_inicio: regra.hora_inicio,
+      hora_fim: regra.hora_fim || null,
+      status: existente?.status || "agendado",
+      observacoes: existente?.observacoes || null,
+      origem: existente ? "avulso" : "fixo",
+    }
+  })
+
+  const chavesBase = new Set(
+    itensDasRegras.map(
+      (i) => `${i.patient_id}::${i.servico}::${i.hora_inicio}`
+    )
+  )
+
+  const itensReposicao: AgendaDoDiaItem[] = reposicoesDoDia.map((r) => {
+    const paciente = pacientes.find((p) => p.id === r.patient_id)
+
+    const existente = agendamentosDoDia.find(
+      (a) =>
+        a.patient_id === r.patient_id &&
+        a.hora_inicio === (r.hora_reposicao || "") &&
+        (a.observacoes || "").toLowerCase().includes("reposição")
     )
 
-    const itensDasRegras: AgendaDoDiaItem[] = regrasDoDia.map((regra) => {
-      const existente = agendamentosDoDia.find(
-        (a) =>
-          a.patient_id === regra.patient_id &&
-          a.servico === regra.servico &&
-          a.hora_inicio === regra.hora_inicio
-      )
+    return {
+      appointment_id: existente?.id ?? null,
+      replacement_id: r.id,
+      patient_id: r.patient_id,
+      nome: existente?.patients?.nome || paciente?.nome || "-",
+      ativo: paciente?.ativo ?? false,
+      servico: "Reposição",
+      data_agendamento: dataFiltroDia,
+      hora_inicio: r.hora_reposicao || "",
+      hora_fim: null,
+      status: existente?.status || "agendado",
+      observacoes: r.observacoes || "Gerado por reposição",
+      origem: "reposicao",
+    }
+  })
 
-      const paciente = pacientes.find((p) => p.id === regra.patient_id)
+  const itensExtras: AgendaDoDiaItem[] = agendamentosDoDia
+    .filter((a) => {
+      const chave = `${a.patient_id}::${a.servico}::${a.hora_inicio}`
+      const ehReposicao = (a.observacoes || "").toLowerCase().includes("reposição")
+      return !chavesBase.has(chave) && !ehReposicao
+    })
+    .map((a) => {
+      const paciente = pacientes.find((p) => p.id === a.patient_id)
 
       return {
-        appointment_id: existente?.id ?? null,
-        patient_id: regra.patient_id,
-        nome: existente?.patients?.nome || paciente?.nome || "-",
+        appointment_id: a.id,
+        replacement_id: null,
+        patient_id: a.patient_id,
+        nome: a.patients?.nome || paciente?.nome || "-",
         ativo: paciente?.ativo ?? false,
-        servico: regra.servico,
-        data_agendamento: dataFiltroDia,
-        hora_inicio: regra.hora_inicio,
-        hora_fim: regra.hora_fim || null,
-        status: existente?.status || "agendado",
-        observacoes: existente?.observacoes || null,
+        servico: a.servico,
+        data_agendamento: a.data_agendamento,
+        hora_inicio: a.hora_inicio,
+        hora_fim: a.hora_fim || null,
+        status: a.status,
+        observacoes: a.observacoes || null,
+        origem: "avulso",
       }
     })
 
-    const chavesDasRegras = new Set(
-      itensDasRegras.map(
-        (i) => `${i.patient_id}::${i.servico}::${i.hora_inicio}`
-      )
-    )
+  return [...itensDasRegras, ...itensReposicao, ...itensExtras].sort((a, b) =>
+    a.hora_inicio.localeCompare(b.hora_inicio)
+  )
+}, [agendamentos, regras, pacientes, reposicoes, dataFiltroDia])
 
-    const itensExtras: AgendaDoDiaItem[] = agendamentosDoDia
-      .filter((a) => {
-        const chave = `${a.patient_id}::${a.servico}::${a.hora_inicio}`
-        return !chavesDasRegras.has(chave)
-      })
-      .map((a) => {
-        const paciente = pacientes.find((p) => p.id === a.patient_id)
-
-        return {
-          appointment_id: a.id,
-          patient_id: a.patient_id,
-          nome: a.patients?.nome || paciente?.nome || "-",
-          ativo: paciente?.ativo ?? false,
-          servico: a.servico,
-          data_agendamento: a.data_agendamento,
-          hora_inicio: a.hora_inicio,
-          hora_fim: a.hora_fim || null,
-          status: a.status,
-          observacoes: a.observacoes || null,
-        }
-      })
-
-    return [...itensDasRegras, ...itensExtras].sort((a, b) =>
-      a.hora_inicio.localeCompare(b.hora_inicio)
-    )
-  }, [agendamentos, regras, pacientes, dataFiltroDia])
 
   return (
     <div>
@@ -729,50 +776,54 @@ export default function AgendaPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                <th style={th}>Paciente</th>
-                <th style={th}>Serviço</th>
-                <th style={th}>Início</th>
-                <th style={th}>Fim</th>
-                <th style={th}>Status</th>
-                <th style={th}>Presença</th>
-              </tr>
+  <th style={th}>Paciente</th>
+  <th style={th}>Serviço</th>
+  <th style={th}>Origem</th>
+  <th style={th}>Início</th>
+  <th style={th}>Fim</th>
+  <th style={th}>Status</th>
+  <th style={th}>Presença</th>
+</tr>
+
             </thead>
             <tbody>
-              {agendaDoDia.map((a) => (
-                <tr key={`${a.patient_id}-${a.servico}-${a.hora_inicio}-${a.data_agendamento}`}>
-                  <td style={td}>{a.nome}</td>
-                  <td style={td}>{a.servico}</td>
-                  <td style={td}>{a.hora_inicio}</td>
-                  <td style={td}>{a.hora_fim || "-"}</td>
-                  <td style={td}>{a.status === "agendado" ? "-" : a.status}</td>
-                  <td style={td}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => marcarPresencaDoDia(a, "realizado")}
-                      >
-                        Presente
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => marcarPresencaDoDia(a, "faltou")}
-                      >
-                        Faltou
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => preencherReposicaoAPartirDaFalta(a)}
-                      >
-                        Gerar reposição
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
+             {agendaDoDia.map((a) => (
+  <tr key={`${a.patient_id}-${a.servico}-${a.hora_inicio}-${a.data_agendamento}-${a.origem}`}>
+    <td style={td}>{a.nome}</td>
+    <td style={td}>{a.servico}</td>
+    <td style={td}>
+      {a.origem === "reposicao" ? (
+        <span className="status-pill status-blue">Reposição</span>
+      ) : a.origem === "avulso" ? (
+        <span className="status-pill status-gray">Avulso</span>
+      ) : (
+        <span className="status-pill status-green">Fixo</span>
+      )}
+    </td>
+    <td style={td}>{a.hora_inicio || "-"}</td>
+    <td style={td}>{a.hora_fim || "-"}</td>
+    <td style={td}>{a.status === "agendado" ? "-" : a.status}</td>
+    <td style={td}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => marcarPresencaDoDia(a, "realizado")}
+        >
+          Presente
+        </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => marcarPresencaDoDia(a, "faltou")}
+        >
+          Faltou
+        </button>
+      </div>
+    </td>
+  </tr>
+))}
               {agendaDoDia.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={6}>
+                  <td style={td} colSpan={7}>
                     Nenhum agendamento para esta data.
                   </td>
                 </tr>
