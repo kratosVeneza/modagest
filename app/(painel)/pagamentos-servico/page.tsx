@@ -136,22 +136,39 @@ function ultimoDiaDoMes(ano: number, mesIndex: number) {
   return new Date(ano, mesIndex + 1, 0).getDate()
 }
 
-function montarDataSugeridaPorDiaBase(
-  competenciaInicio?: string | null,
-  diaBasePagamento?: number | null
-) {
-  const referencia = competenciaInicio || hojeInputDate()
-  const dataBase = new Date(`${referencia}T12:00:00`)
-  const ano = dataBase.getFullYear()
-  const mesIndex = dataBase.getMonth()
-
-  const diaBase = Number(diaBasePagamento || dataBase.getDate() || 1)
+function montarDataBaseNoMes(ano: number, mesIndex: number, diaBase: number) {
   const diaFinal = Math.min(diaBase, ultimoDiaDoMes(ano, mesIndex))
-
   const mes = String(mesIndex + 1).padStart(2, "0")
   const dia = String(diaFinal).padStart(2, "0")
-
   return `${ano}-${mes}-${dia}`
+}
+
+function montarCompetenciaAutomaticaPorDiaBase(
+  referenciaMes?: string | null,
+  diaBasePagamento?: number | null
+) {
+  const referencia = referenciaMes || hojeInputDate()
+  const dataRef = new Date(`${referencia}T12:00:00`)
+
+  const anoAtual = dataRef.getFullYear()
+  const mesAtual = dataRef.getMonth()
+
+  const diaBase = Number(diaBasePagamento || dataRef.getDate() || 1)
+
+  const dataVencimento = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
+
+  const dataAnterior = new Date(anoAtual, mesAtual - 1, 1, 12, 0, 0)
+  const anoAnterior = dataAnterior.getFullYear()
+  const mesAnterior = dataAnterior.getMonth()
+
+  const competenciaInicio = montarDataBaseNoMes(anoAnterior, mesAnterior, diaBase)
+  const competenciaFim = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
+
+  return {
+    competenciaInicio,
+    competenciaFim,
+    dataVencimento,
+  }
 }
 
 function statusVisualDaCobranca(
@@ -235,9 +252,8 @@ export default function PagamentosServicoPage() {
   const [observacaoPagamentoInicial, setObservacaoPagamentoInicial] = useState("")
   const [dataRestanteSugerida, setDataRestanteSugerida] = useState(hojeInputDate())
 
-  const [servicoLote, setServicoLote] = useState("Pilates")
-const [competenciaInicioLote, setCompetenciaInicioLote] = useState("")
-const [competenciaFimLote, setCompetenciaFimLote] = useState("")
+ const [servicoLote, setServicoLote] = useState("Pilates")
+const [referenciaMesLote, setReferenciaMesLote] = useState(hojeInputDate())
 const [pacientesLote, setPacientesLote] = useState<PacienteLote[]>([])
 const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
 
@@ -246,23 +262,27 @@ const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
   }, [])
 
   useEffect(() => {
-  const lista = pacientes.map((p) => ({
-    patient_id: p.id,
-    nome: p.nome,
-    valor_mensal: Number(p.valor_mensal || 0),
-    dia_base_pagamento: p.dia_base_pagamento,
-    competencia_inicio: competenciaInicioLote || null,
-    competencia_fim: competenciaFimLote || null,
-    data_vencimento: montarDataSugeridaPorDiaBase(
-      competenciaInicioLote || null,
+  const lista = pacientes.map((p) => {
+    const automatico = montarCompetenciaAutomaticaPorDiaBase(
+      referenciaMesLote,
       p.dia_base_pagamento
-    ),
-    servico: servicoLote,
-    selecionado: selecionarTodosLote,
-  }))
+    )
+
+    return {
+      patient_id: p.id,
+      nome: p.nome,
+      valor_mensal: Number(p.valor_mensal || 0),
+      dia_base_pagamento: p.dia_base_pagamento,
+      competencia_inicio: automatico.competenciaInicio,
+      competencia_fim: automatico.competenciaFim,
+      data_vencimento: automatico.dataVencimento,
+      servico: servicoLote,
+      selecionado: selecionarTodosLote,
+    }
+  })
 
   setPacientesLote(lista)
-}, [pacientes, servicoLote, competenciaInicioLote, competenciaFimLote, selecionarTodosLote])
+}, [pacientes, servicoLote, referenciaMesLote, selecionarTodosLote])
 
   async function carregarDados() {
     setMensagem("")
@@ -863,10 +883,10 @@ async function gerarCobrancasEmLote() {
     return
   }
 
-  if (!competenciaInicioLote) {
-    setMensagem("Informe a competência início do lote.")
-    return
-  }
+  if (!referenciaMesLote) {
+  setMensagem("Informe o mês de referência do lote.")
+  return
+}
 
   const pacientesIds = selecionados.map((p) => p.patient_id)
 
@@ -1169,24 +1189,6 @@ async function gerarCobrancasEmLote() {
           </div>
 
           <div>
-            <label>Competência início</label>
-            <input
-              type="date"
-              value={competenciaInicio}
-              onChange={(e) => setCompetenciaInicio(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label>Competência fim</label>
-            <input
-              type="date"
-              value={competenciaFim}
-              onChange={(e) => setCompetenciaFim(e.target.value)}
-            />
-          </div>
-
-          <div>
             <label>Pagamento inicial (opcional)</label>
             <input
               type="number"
@@ -1302,22 +1304,32 @@ async function gerarCobrancasEmLote() {
     </div>
 
     <div>
-      <label>Competência início</label>
-      <input
-        type="date"
-        value={competenciaInicioLote}
-        onChange={(e) => setCompetenciaInicioLote(e.target.value)}
-      />
-    </div>
+  <label>Mês de referência do lote</label>
+  <input
+    type="date"
+    value={referenciaMesLote}
+    onChange={(e) => setReferenciaMesLote(e.target.value)}
+  />
+</div>
 
-    <div>
-      <label>Competência fim</label>
-      <input
-        type="date"
-        value={competenciaFimLote}
-        onChange={(e) => setCompetenciaFimLote(e.target.value)}
-      />
-    </div>
+<div>
+  <label>Regra automática</label>
+  <div
+    style={{
+      minHeight: 42,
+      display: "flex",
+      alignItems: "center",
+      padding: "10px 12px",
+      border: "1px solid #d1d5db",
+      borderRadius: 8,
+      background: "#f8fafc",
+      color: "#475569",
+      fontSize: 14,
+    }}
+  >
+    Competência: dia base do mês anterior até o mesmo dia base do mês atual
+  </div>
+</div>
   </div>
 
   <div style={{ marginTop: 16 }}>
@@ -1328,14 +1340,15 @@ async function gerarCobrancasEmLote() {
     <table style={{ width: "100%", borderCollapse: "collapse" }}>
       <thead>
         <tr>
-          <th style={th}>Sel.</th>
-          <th style={th}>Paciente</th>
-          <th style={th}>Serviço</th>
-          <th style={th}>Valor</th>
-          <th style={th}>Dia base</th>
-          <th style={th}>Competência</th>
-          <th style={th}>Vencimento sugerido</th>
-        </tr>
+  <th style={th}>Sel.</th>
+  <th style={th}>Paciente</th>
+  <th style={th}>Serviço</th>
+  <th style={th}>Valor</th>
+  <th style={th}>Dia base</th>
+  <th style={th}>Competência início</th>
+  <th style={th}>Competência fim</th>
+  <th style={th}>Vencimento sugerido</th>
+</tr>
       </thead>
       <tbody>
         {pacientesLote.map((item) => (
@@ -1378,14 +1391,24 @@ async function gerarCobrancasEmLote() {
             </td>
             <td style={td}>{item.dia_base_pagamento || "-"}</td>
             <td style={td}>
-              {item.competencia_inicio
-                ? formatarData(item.competencia_inicio)
-                : "-"}{" "}
-              até{" "}
-              {item.competencia_fim
-                ? formatarData(item.competencia_fim)
-                : "-"}
-            </td>
+  <input
+    type="date"
+    value={item.competencia_inicio || ""}
+    onChange={(e) =>
+      atualizarCampoPacienteLote(item.patient_id, "competencia_inicio", e.target.value)
+    }
+  />
+</td>
+
+<td style={td}>
+  <input
+    type="date"
+    value={item.competencia_fim || ""}
+    onChange={(e) =>
+      atualizarCampoPacienteLote(item.patient_id, "competencia_fim", e.target.value)
+    }
+  />
+</td>
             <td style={td}>
               <input
                 type="date"
@@ -1400,7 +1423,7 @@ async function gerarCobrancasEmLote() {
 
         {pacientesLote.length === 0 && (
           <tr>
-            <td style={td} colSpan={7}>
+            <td style={td} colSpan={8}>
               Nenhum paciente ativo encontrado.
             </td>
           </tr>
