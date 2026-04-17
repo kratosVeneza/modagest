@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 type Patient = {
   id: number
@@ -35,6 +37,16 @@ const diasSemana = [
   { value: 4, label: "Quinta" },
   { value: 5, label: "Sexta" },
   { value: 6, label: "Sábado" },
+]
+
+const DIAS_SEMANA_RELATORIO = [
+  "Domingo",
+  "Segunda",
+  "Terça",
+  "Quarta",
+  "Quinta",
+  "Sexta",
+  "Sábado",
 ]
 
 const servicosPadrao = ["Pilates", "Fisioterapia", "Academia", "Avaliação", "Outro"]
@@ -243,6 +255,88 @@ export default function PacientesPage() {
       )
     )
   }
+
+  function gerarRelatorioPacientesPdf() {
+  const doc = new jsPDF("landscape")
+
+  doc.setFontSize(16)
+  doc.text("Relatório de alunos e horários", 14, 16)
+
+  doc.setFontSize(10)
+  doc.text(`Gerado em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 22)
+
+  const ocupacaoMap = new Map<string, number>()
+
+  todasRegras.forEach((regra) => {
+    if (!regra.ativo || regra.servico !== "Pilates") return
+
+    const chave = `${regra.weekday}-${normalizarHora(regra.hora_inicio)}-${normalizarHora(regra.hora_fim)}`
+    ocupacaoMap.set(chave, (ocupacaoMap.get(chave) || 0) + 1)
+  })
+
+  const linhas: Array<[string, string, string, string, string]> = []
+
+  pacientes.forEach((paciente) => {
+    const horariosPaciente = todasRegras
+      .filter((r) => r.patient_id === paciente.id && r.ativo)
+      .sort((a, b) => {
+        if (a.weekday !== b.weekday) return a.weekday - b.weekday
+        return normalizarHora(a.hora_inicio).localeCompare(normalizarHora(b.hora_inicio))
+      })
+
+    if (horariosPaciente.length === 0) {
+      linhas.push([paciente.nome, "-", "-", "-", "-"])
+      return
+    }
+
+    horariosPaciente.forEach((h) => {
+      const horaInicio = normalizarHora(h.hora_inicio)
+      const horaFim = normalizarHora(h.hora_fim)
+      const chave = `${h.weekday}-${horaInicio}-${horaFim}`
+      const ocupados = ocupacaoMap.get(chave) || 0
+      const vagas = Math.max(LIMITE_PILATES_POR_HORARIO - ocupados, 0)
+
+      linhas.push([
+        paciente.nome,
+        DIAS_SEMANA_RELATORIO[h.weekday],
+        `${horaInicio} às ${horaFim}`,
+        `${ocupados}/${LIMITE_PILATES_POR_HORARIO}`,
+        `${vagas} vaga(s)`,
+      ])
+    })
+  })
+
+  autoTable(doc, {
+    startY: 28,
+    head: [[
+      "Aluno/Paciente",
+      "Dia da semana",
+      "Horário",
+      "Ocupação",
+      "Vagas disponíveis",
+    ]],
+    body: linhas.length ? linhas : [["Nenhum dado", "-", "-", "-", "-"]],
+    styles: {
+      fontSize: 9,
+      cellPadding: 3,
+      overflow: "linebreak",
+      valign: "middle",
+    },
+    headStyles: {
+      fillColor: [37, 99, 235],
+    },
+    columnStyles: {
+      0: { cellWidth: 70 },
+      1: { cellWidth: 40 },
+      2: { cellWidth: 45 },
+      3: { cellWidth: 32 },
+      4: { cellWidth: 40 },
+    },
+  })
+
+  doc.save("relatorio_pacientes_horarios.pdf")
+}
+
 
   function limparFormulario() {
     setIdEdicao(null)
@@ -479,13 +573,24 @@ export default function PacientesPage() {
   }, [pacientes, busca])
 
   return (
-    <div>
-      <h2 className="page-title">Alunos/Pacientes</h2>
-      <p className="page-subtitle">
-        Cadastre alunos/pacientes, acompanhe status, data de entrada, retorno e próximo pagamento.
-      </p>
+  <div>
+    <h2 className="page-title">Alunos/Pacientes</h2>
+    <p className="page-subtitle">
+      Cadastre alunos/pacientes, acompanhe status, data de entrada, retorno e próximo pagamento.
+    </p>
 
-      {mensagem && <p>{mensagem}</p>}
+    <div style={{ marginBottom: 16 }}>
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={gerarRelatorioPacientesPdf}
+      >
+        Gerar relatório PDF de alunos e horários
+      </button>
+    </div>
+
+    {mensagem && <p>{mensagem}</p>}
+
 
       <div className="section-card" style={{ marginBottom: 20 }}>
         <h3 style={{ marginBottom: 12 }}>
