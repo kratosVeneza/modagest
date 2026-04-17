@@ -44,6 +44,7 @@ const SLOTS_PILATES = [
   { hora_inicio: "09:00", hora_fim: "10:00" },
   { hora_inicio: "10:00", hora_fim: "11:00" },
   { hora_inicio: "11:00", hora_fim: "12:00" },
+  { hora_inicio: "15:00", hora_fim: "16:00" },
   { hora_inicio: "16:00", hora_fim: "17:00" },
   { hora_inicio: "17:00", hora_fim: "18:00" },
   { hora_inicio: "18:00", hora_fim: "19:00" },
