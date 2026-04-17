@@ -56,7 +56,7 @@ function normalizarHora(hora?: string | null) {
   return hora.slice(0, 5)
 }
 
-const LIMITE_PILATES_POR_HORARIO = 3
+const LIMITE_PILATES_POR_HORARIO = 4
 
 function hojeInputDate() {
   const hoje = new Date()
