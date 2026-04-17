@@ -39,6 +39,24 @@ const diasSemana = [
 
 const servicosPadrao = ["Pilates", "Fisioterapia", "Academia", "Avaliação", "Outro"]
 
+const SLOTS_PILATES = [
+  { hora_inicio: "08:00", hora_fim: "09:00" },
+  { hora_inicio: "09:00", hora_fim: "10:00" },
+  { hora_inicio: "10:00", hora_fim: "11:00" },
+  { hora_inicio: "11:00", hora_fim: "12:00" },
+  { hora_inicio: "16:00", hora_fim: "17:00" },
+  { hora_inicio: "17:00", hora_fim: "18:00" },
+  { hora_inicio: "18:00", hora_fim: "19:00" },
+  { hora_inicio: "19:00", hora_fim: "20:00" },
+]
+
+function normalizarHora(hora?: string | null) {
+  if (!hora) return ""
+  return hora.slice(0, 5)
+}
+
+const LIMITE_PILATES_POR_HORARIO = 3
+
 function hojeInputDate() {
   const hoje = new Date()
   const ano = hoje.getFullYear()
@@ -79,6 +97,7 @@ export default function PacientesPage() {
   const [diaBasePagamento, setDiaBasePagamento] = useState("")
   const [valorMensal, setValorMensal] = useState("")
   const [observacoes, setObservacoes] = useState("")
+  const [todasRegras, setTodasRegras] = useState<ScheduleRule[]>([])
   const [horarios, setHorarios] = useState<ScheduleRule[]>([
     { weekday: 1, servico: "Pilates", hora_inicio: "", hora_fim: "", ativo: true },
   ])
@@ -110,7 +129,19 @@ export default function PacientesPage() {
       return
     }
 
-    setPacientes((data ?? []) as Patient[])
+    const { data: regrasData, error: regrasError } = await supabase
+      .from("patient_schedule_rules")
+      .select("id, patient_id, weekday, servico, hora_inicio, hora_fim, ativo")
+      .eq("user_id", user.id)
+      .eq("ativo", true)
+
+    if (regrasError) {
+      setMensagem("Erro ao carregar horários cadastrados.")
+      return
+    }
+
+        setPacientes((data ?? []) as Patient[])
+    setTodasRegras((regrasData ?? []) as ScheduleRule[])
   }
 
   async function carregarHorariosDoPaciente(patientId: number) {
@@ -155,6 +186,61 @@ export default function PacientesPage() {
 
   function removerHorario(index: number) {
     setHorarios((anterior) => anterior.filter((_, i) => i !== index))
+  }
+
+  function obterSugestoesPilates(index: number) {
+    const linha = horarios[index]
+
+    if (!linha || linha.servico !== "Pilates") return []
+
+    return SLOTS_PILATES.map((slot) => {
+      const ocupadosNoBanco = todasRegras.filter((regra) => {
+        const mesmaSemana = Number(regra.weekday) === Number(linha.weekday)
+        const mesmoServico = regra.servico === "Pilates"
+        const mesmaHoraInicio = normalizarHora(regra.hora_inicio) === slot.hora_inicio
+        const mesmaHoraFim = normalizarHora(regra.hora_fim) === slot.hora_fim
+
+        const ignorarRegraAtualEmEdicao =
+          idEdicao &&
+          regra.patient_id === idEdicao &&
+          normalizarHora(regra.hora_inicio) === normalizarHora(linha.hora_inicio) &&
+          normalizarHora(regra.hora_fim) === normalizarHora(linha.hora_fim) &&
+          Number(regra.weekday) === Number(linha.weekday)
+
+        return mesmaSemana && mesmoServico && mesmaHoraInicio && mesmaHoraFim && !ignorarRegraAtualEmEdicao
+      }).length
+
+      const ocupadosNoFormulario = horarios.filter((h, i) => {
+        if (i === index) return false
+
+        return (
+          h.servico === "Pilates" &&
+          Number(h.weekday) === Number(linha.weekday) &&
+          normalizarHora(h.hora_inicio) === slot.hora_inicio &&
+          normalizarHora(h.hora_fim) === slot.hora_fim
+        )
+      }).length
+
+      const ocupacao = ocupadosNoBanco + ocupadosNoFormulario
+      const vagasRestantes = Math.max(LIMITE_PILATES_POR_HORARIO - ocupacao, 0)
+
+      return {
+        ...slot,
+        ocupacao,
+        vagasRestantes,
+        disponivel: vagasRestantes > 0,
+      }
+    })
+  }
+
+  function aplicarSugestaoHorario(index: number, horaInicio: string, horaFim: string) {
+    setHorarios((anterior) =>
+      anterior.map((item, i) =>
+        i === index
+          ? { ...item, hora_inicio: horaInicio, hora_fim: horaFim }
+          : item
+      )
+    )
   }
 
   function limparFormulario() {
@@ -464,16 +550,30 @@ export default function PacientesPage() {
         </div>
 
         <div style={{ display: "grid", gap: 10 }}>
-          {horarios.map((h, index) => (
-            <div
-              key={index}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.2fr 1.2fr 1fr 1fr auto",
-                gap: 10,
-                alignItems: "end",
-              }}
-            >
+          {horarios.map((h, index) => {
+            const sugestoesPilates = obterSugestoesPilates(index)
+
+            return (
+              <div
+                key={index}
+                style={{
+                  display: "grid",
+                  gap: 10,
+                  padding: "12px",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 10,
+                  background: "#f9fafb",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1.2fr 1.2fr 1fr 1fr auto",
+                    gap: 10,
+                    alignItems: "end",
+                  }}
+                >
+
               <div>
                 <label>Dia da semana</label>
                 <select
@@ -521,16 +621,48 @@ export default function PacientesPage() {
               </div>
 
               <div>
-                <button
-                  type="button"
-                  className="btn btn-danger btn-sm"
-                  onClick={() => removerHorario(index)}
-                >
-                  Remover
-                </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      onClick={() => removerHorario(index)}
+                    >
+                      Remover
+                    </button>
+                  </div>
+                </div>
+
+                {h.servico === "Pilates" && (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <strong style={{ fontSize: 14 }}>Sugestões de horários disponíveis</strong>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {sugestoesPilates.map((sugestao) => (
+                        <button
+                          key={`${sugestao.hora_inicio}-${sugestao.hora_fim}`}
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          disabled={!sugestao.disponivel}
+                          onClick={() =>
+                            aplicarSugestaoHorario(index, sugestao.hora_inicio, sugestao.hora_fim)
+                          }
+                          style={{
+                            opacity: sugestao.disponivel ? 1 : 0.5,
+                            cursor: sugestao.disponivel ? "pointer" : "not-allowed",
+                          }}
+                        >
+                          {sugestao.hora_inicio} às {sugestao.hora_fim}{" "}
+                          {sugestao.disponivel
+                            ? `(${sugestao.vagasRestantes} vaga(s))`
+                            : "(lotado)"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
+
         </div>
 
         <div style={{ marginTop: 12 }}>
