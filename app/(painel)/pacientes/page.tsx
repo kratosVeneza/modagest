@@ -260,83 +260,82 @@ export default function PacientesPage() {
   const doc = new jsPDF("landscape")
 
   doc.setFontSize(16)
-  doc.text("Relatório de alunos e horários", 14, 16)
+  doc.text("Relatório de horários e vagas", 14, 16)
 
   doc.setFontSize(10)
   doc.text(`Gerado em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 22)
 
-  const ocupacaoMap = new Map<string, number>()
+  const pacientesAtivosIds = new Set(
+    pacientes.filter((p) => p.ativo).map((p) => p.id)
+  )
 
-  todasRegras.forEach((regra) => {
-    if (!regra.ativo || regra.servico !== "Pilates") return
+  const regrasPilatesAtivas = todasRegras.filter(
+    (regra) =>
+      regra.ativo &&
+      regra.servico === "Pilates" &&
+      !!regra.patient_id &&
+      pacientesAtivosIds.has(regra.patient_id)
+  )
 
-    const chave = `${regra.weekday}-${normalizarHora(regra.hora_inicio)}-${normalizarHora(regra.hora_fim)}`
-    ocupacaoMap.set(chave, (ocupacaoMap.get(chave) || 0) + 1)
-  })
+  const linhas: Array<[string, string, string, string]> = []
 
-  const linhas: Array<[string, string, string, string, string]> = []
-
-  pacientes.forEach((paciente) => {
-    const horariosPaciente = todasRegras
-      .filter((r) => r.patient_id === paciente.id && r.ativo)
-      .sort((a, b) => {
-        if (a.weekday !== b.weekday) return a.weekday - b.weekday
-        return normalizarHora(a.hora_inicio).localeCompare(normalizarHora(b.hora_inicio))
+  for (let weekday = 0; weekday <= 6; weekday++) {
+    for (const slot of SLOTS_PILATES) {
+      const regrasDoHorario = regrasPilatesAtivas.filter((regra) => {
+        return (
+          Number(regra.weekday) === weekday &&
+          normalizarHora(regra.hora_inicio) === slot.hora_inicio &&
+          normalizarHora(regra.hora_fim) === slot.hora_fim
+        )
       })
 
-    if (horariosPaciente.length === 0) {
-      linhas.push([paciente.nome, "-", "-", "-", "-"])
-      return
-    }
+      const nomesPacientes = regrasDoHorario
+        .map((regra) => {
+          const paciente = pacientes.find((p) => p.id === regra.patient_id)
+          return paciente?.nome || "Paciente não encontrado"
+        })
+        .sort((a, b) => a.localeCompare(b))
 
-    horariosPaciente.forEach((h) => {
-      const horaInicio = normalizarHora(h.hora_inicio)
-      const horaFim = normalizarHora(h.hora_fim)
-      const chave = `${h.weekday}-${horaInicio}-${horaFim}`
-      const ocupados = ocupacaoMap.get(chave) || 0
+      const ocupados = nomesPacientes.length
       const vagas = Math.max(LIMITE_PILATES_POR_HORARIO - ocupados, 0)
 
       linhas.push([
-        paciente.nome,
-        DIAS_SEMANA_RELATORIO[h.weekday],
-        `${horaInicio} às ${horaFim}`,
-        `${ocupados}/${LIMITE_PILATES_POR_HORARIO}`,
-        `${vagas} vaga(s)`,
+        DIAS_SEMANA_RELATORIO[weekday],
+        `${slot.hora_inicio} às ${slot.hora_fim}`,
+        nomesPacientes.length > 0 ? nomesPacientes.join("\n") : "Sem alunos/pacientes",
+        `${vagas} vaga(s) disponível(is)`,
       ])
-    })
-  })
+    }
+  }
 
   autoTable(doc, {
     startY: 28,
     head: [[
-      "Aluno/Paciente",
       "Dia da semana",
       "Horário",
-      "Ocupação",
+      "Alunos/Pacientes no horário",
       "Vagas disponíveis",
     ]],
-    body: linhas.length ? linhas : [["Nenhum dado", "-", "-", "-", "-"]],
+    body: linhas.length ? linhas : [["-", "-", "Nenhum dado", "-"]],
     styles: {
       fontSize: 9,
       cellPadding: 3,
       overflow: "linebreak",
-      valign: "middle",
+      valign: "top",
     },
     headStyles: {
       fillColor: [37, 99, 235],
     },
     columnStyles: {
-      0: { cellWidth: 70 },
-      1: { cellWidth: 40 },
-      2: { cellWidth: 45 },
-      3: { cellWidth: 32 },
-      4: { cellWidth: 40 },
+      0: { cellWidth: 35 },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 130 },
+      3: { cellWidth: 40 },
     },
   })
 
-  doc.save("relatorio_pacientes_horarios.pdf")
+  doc.save("relatorio_horarios_vagas.pdf")
 }
-
 
   function limparFormulario() {
     setIdEdicao(null)
