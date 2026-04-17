@@ -56,6 +56,18 @@ type CobrancaComResumo = ServiceBilling & {
   pagamentosDaCobranca: ServicePayment[]
 }
 
+type PacienteLote = {
+  patient_id: number
+  nome: string
+  valor_mensal: number
+  dia_base_pagamento: number | null
+  competencia_inicio: string | null
+  competencia_fim: string | null
+  data_vencimento: string
+  servico: string
+  selecionado: boolean
+}
+
 function hojeInputDate() {
   const hoje = new Date()
   const ano = hoje.getFullYear()
@@ -118,6 +130,28 @@ function competenciaMes(chaveData?: string | null) {
   const ano = data.getFullYear()
   const mes = String(data.getMonth() + 1).padStart(2, "0")
   return `${ano}-${mes}`
+}
+
+function ultimoDiaDoMes(ano: number, mesIndex: number) {
+  return new Date(ano, mesIndex + 1, 0).getDate()
+}
+
+function montarDataSugeridaPorDiaBase(
+  competenciaInicio?: string | null,
+  diaBasePagamento?: number | null
+) {
+  const referencia = competenciaInicio || hojeInputDate()
+  const dataBase = new Date(`${referencia}T12:00:00`)
+  const ano = dataBase.getFullYear()
+  const mesIndex = dataBase.getMonth()
+
+  const diaBase = Number(diaBasePagamento || dataBase.getDate() || 1)
+  const diaFinal = Math.min(diaBase, ultimoDiaDoMes(ano, mesIndex))
+
+  const mes = String(mesIndex + 1).padStart(2, "0")
+  const dia = String(diaFinal).padStart(2, "0")
+
+  return `${ano}-${mes}-${dia}`
 }
 
 function statusVisualDaCobranca(
@@ -201,9 +235,34 @@ export default function PagamentosServicoPage() {
   const [observacaoPagamentoInicial, setObservacaoPagamentoInicial] = useState("")
   const [dataRestanteSugerida, setDataRestanteSugerida] = useState(hojeInputDate())
 
+  const [servicoLote, setServicoLote] = useState("Pilates")
+const [competenciaInicioLote, setCompetenciaInicioLote] = useState("")
+const [competenciaFimLote, setCompetenciaFimLote] = useState("")
+const [pacientesLote, setPacientesLote] = useState<PacienteLote[]>([])
+const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
+
   useEffect(() => {
     carregarDados()
   }, [])
+
+  useEffect(() => {
+  const lista = pacientes.map((p) => ({
+    patient_id: p.id,
+    nome: p.nome,
+    valor_mensal: Number(p.valor_mensal || 0),
+    dia_base_pagamento: p.dia_base_pagamento,
+    competencia_inicio: competenciaInicioLote || null,
+    competencia_fim: competenciaFimLote || null,
+    data_vencimento: montarDataSugeridaPorDiaBase(
+      competenciaInicioLote || null,
+      p.dia_base_pagamento
+    ),
+    servico: servicoLote,
+    selecionado: selecionarTodosLote,
+  }))
+
+  setPacientesLote(lista)
+}, [pacientes, servicoLote, competenciaInicioLote, competenciaFimLote, selecionarTodosLote])
 
   async function carregarDados() {
     setMensagem("")
@@ -760,6 +819,107 @@ export default function PagamentosServicoPage() {
   setMensagem(`Editando pagamento de R$ ${Number(pagamento.valor).toFixed(2)}.`)
 }
 
+function alternarPacienteLote(patientId: number, checked: boolean) {
+  setPacientesLote((atual) =>
+    atual.map((item) =>
+      item.patient_id === patientId ? { ...item, selecionado: checked } : item
+    )
+  )
+}
+
+function atualizarCampoPacienteLote(
+  patientId: number,
+  campo: keyof PacienteLote,
+  valor: string | boolean | number | null
+) {
+  setPacientesLote((atual) =>
+    atual.map((item) =>
+      item.patient_id === patientId
+        ? {
+            ...item,
+            [campo]: valor,
+          }
+        : item
+    )
+  )
+}
+
+async function gerarCobrancasEmLote() {
+  setMensagem("")
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
+
+  const selecionados = pacientesLote.filter((p) => p.selecionado)
+
+  if (selecionados.length === 0) {
+    setMensagem("Selecione pelo menos um paciente ativo.")
+    return
+  }
+
+  if (!competenciaInicioLote) {
+    setMensagem("Informe a competência início do lote.")
+    return
+  }
+
+  const pacientesIds = selecionados.map((p) => p.patient_id)
+
+  const { data: pacientesAtivosBanco, error: pacientesAtivosError } = await supabase
+    .from("patients")
+    .select("id, ativo")
+    .eq("user_id", user.id)
+    .in("id", pacientesIds)
+    .eq("ativo", true)
+
+  if (pacientesAtivosError) {
+    setMensagem("Erro ao validar pacientes ativos do lote.")
+    return
+  }
+
+  const idsAtivos = new Set((pacientesAtivosBanco || []).map((p: any) => Number(p.id)))
+
+  const cobrancasParaInserir = selecionados
+    .filter((p) => idsAtivos.has(Number(p.patient_id)))
+    .map((p) => ({
+      user_id: user.id,
+      patient_id: p.patient_id,
+      servico: p.servico,
+      competencia_inicio: p.competencia_inicio || null,
+      competencia_fim: p.competencia_fim || null,
+      data_vencimento: p.data_vencimento,
+      data_restante_sugerida: null,
+      valor_original: Number(p.valor_mensal || 0),
+      desconto_percentual: 0,
+      desconto_valor: 0,
+      valor_total: Number(p.valor_mensal || 0),
+      status: "ativa",
+      observacao: "Cobrança gerada em lote",
+    }))
+
+  if (cobrancasParaInserir.length === 0) {
+    setMensagem("Nenhum paciente ativo válido encontrado para gerar cobranças.")
+    return
+  }
+
+  const { error: insertError } = await supabase
+    .from("service_billings")
+    .insert(cobrancasParaInserir)
+
+  if (insertError) {
+    setMensagem(insertError.message || "Erro ao gerar cobranças em lote.")
+    return
+  }
+
+  setMensagem(`${cobrancasParaInserir.length} cobrança(s) gerada(s) com sucesso.`)
+  await carregarDados()
+}
+
   function abrirFormularioPagamento(cobranca: CobrancaComResumo) {
     setBillingIdExpandido((atual) => (atual === cobranca.id ? null : cobranca.id))
     setBillingIdPagamento(cobranca.id)
@@ -1111,6 +1271,150 @@ export default function PagamentosServicoPage() {
           </button>
         </div>
       </div>
+
+      <div className="section-card" style={{ marginBottom: 20 }}>
+  <h3 style={{ marginBottom: 12 }}>Gerar cobranças em lote</h3>
+  <p style={{ marginTop: 0, color: "#64748b", fontSize: 14 }}>
+    Gere cobranças para pacientes ativos com competência e vencimento sugerido pelo dia base de pagamento.
+  </p>
+
+  <div className="grid-2">
+    <div>
+      <label>Serviço do lote</label>
+      <select value={servicoLote} onChange={(e) => setServicoLote(e.target.value)}>
+        <option value="Pilates">Pilates</option>
+        <option value="Fisioterapia">Fisioterapia</option>
+        <option value="Academia">Academia</option>
+        <option value="Avaliação">Avaliação</option>
+        <option value="Outro">Outro</option>
+      </select>
+    </div>
+
+    <div>
+      <label>Selecionar todos os ativos</label>
+      <select
+        value={selecionarTodosLote ? "sim" : "nao"}
+        onChange={(e) => setSelecionarTodosLote(e.target.value === "sim")}
+      >
+        <option value="sim">Sim</option>
+        <option value="nao">Não</option>
+      </select>
+    </div>
+
+    <div>
+      <label>Competência início</label>
+      <input
+        type="date"
+        value={competenciaInicioLote}
+        onChange={(e) => setCompetenciaInicioLote(e.target.value)}
+      />
+    </div>
+
+    <div>
+      <label>Competência fim</label>
+      <input
+        type="date"
+        value={competenciaFimLote}
+        onChange={(e) => setCompetenciaFimLote(e.target.value)}
+      />
+    </div>
+  </div>
+
+  <div style={{ marginTop: 16 }}>
+    <strong>Pacientes ativos do lote</strong>
+  </div>
+
+  <div className="data-table-wrap" style={{ marginTop: 10 }}>
+    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <thead>
+        <tr>
+          <th style={th}>Sel.</th>
+          <th style={th}>Paciente</th>
+          <th style={th}>Serviço</th>
+          <th style={th}>Valor</th>
+          <th style={th}>Dia base</th>
+          <th style={th}>Competência</th>
+          <th style={th}>Vencimento sugerido</th>
+        </tr>
+      </thead>
+      <tbody>
+        {pacientesLote.map((item) => (
+          <tr key={item.patient_id}>
+            <td style={td}>
+              <input
+                type="checkbox"
+                checked={item.selecionado}
+                onChange={(e) => alternarPacienteLote(item.patient_id, e.target.checked)}
+              />
+            </td>
+            <td style={td}>{item.nome}</td>
+            <td style={td}>
+              <select
+                value={item.servico}
+                onChange={(e) =>
+                  atualizarCampoPacienteLote(item.patient_id, "servico", e.target.value)
+                }
+              >
+                <option value="Pilates">Pilates</option>
+                <option value="Fisioterapia">Fisioterapia</option>
+                <option value="Academia">Academia</option>
+                <option value="Avaliação">Avaliação</option>
+                <option value="Outro">Outro</option>
+              </select>
+            </td>
+            <td style={td}>
+              <input
+                type="number"
+                step="0.01"
+                value={item.valor_mensal}
+                onChange={(e) =>
+                  atualizarCampoPacienteLote(
+                    item.patient_id,
+                    "valor_mensal",
+                    Number(e.target.value || 0)
+                  )
+                }
+              />
+            </td>
+            <td style={td}>{item.dia_base_pagamento || "-"}</td>
+            <td style={td}>
+              {item.competencia_inicio
+                ? formatarData(item.competencia_inicio)
+                : "-"}{" "}
+              até{" "}
+              {item.competencia_fim
+                ? formatarData(item.competencia_fim)
+                : "-"}
+            </td>
+            <td style={td}>
+              <input
+                type="date"
+                value={item.data_vencimento}
+                onChange={(e) =>
+                  atualizarCampoPacienteLote(item.patient_id, "data_vencimento", e.target.value)
+                }
+              />
+            </td>
+          </tr>
+        ))}
+
+        {pacientesLote.length === 0 && (
+          <tr>
+            <td style={td} colSpan={7}>
+              Nenhum paciente ativo encontrado.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+
+  <div style={{ marginTop: 14 }}>
+    <button className="btn btn-primary" onClick={gerarCobrancasEmLote}>
+      Gerar cobranças em lote
+    </button>
+  </div>
+</div>
 
       <div className="section-card" style={{ marginBottom: 20 }}>
         <div style={toolbarGrid}>
