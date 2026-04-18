@@ -557,11 +557,20 @@ export default function AgendaPage() {
   const dataObj = new Date(`${dataFiltroDia}T12:00:00`)
   const weekday = dataObj.getDay()
 
-  const pacientesAtivos = pacientes.filter((p) => p.ativo)
-  const ativosIds = new Set(pacientesAtivos.map((p) => p.id))
+    const pacientesElegiveis = pacientes.filter((p) => {
+    if (!p.ativo) return false
+    if (!p.data_inicio) return false
+
+    const dataInicioPaciente = new Date(`${p.data_inicio}T00:00:00`)
+    const dataSelecionada = new Date(`${dataFiltroDia}T00:00:00`)
+
+    return dataSelecionada >= dataInicioPaciente
+  })
+
+  const elegiveisIds = new Set(pacientesElegiveis.map((p) => p.id))
 
   const regrasDoDia = regras.filter(
-    (r) => r.ativo && r.weekday === weekday && ativosIds.has(r.patient_id)
+    (r) => r.ativo && r.weekday === weekday && elegiveisIds.has(r.patient_id)
   )
 
   const agendamentosDoDia = agendamentos.filter(
