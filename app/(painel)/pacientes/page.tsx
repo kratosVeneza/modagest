@@ -342,6 +342,21 @@ export default function PacientesPage() {
         pacientesAtivosNoPeriodo.has(regra.patient_id)
     )
 
+    function pacienteEstavaAtivoNaData(patientId: number, dataIso: string) {
+      const dataRef = new Date(`${dataIso}T12:00:00`)
+
+      return historicoLista.some((item) => {
+        if (item.patient_id !== patientId) return false
+        if (item.status !== "ativo") return false
+
+        const inicio = new Date(`${item.start_date}T00:00:00`)
+        const fim = item.end_date ? new Date(`${item.end_date}T23:59:59`) : null
+
+        return dataRef >= inicio && (!fim || dataRef <= fim)
+      })
+    }
+
+
     const doc = new jsPDF("landscape")
     doc.setFontSize(16)
     doc.text("Relatório de horários e vagas", 14, 16)
@@ -400,13 +415,28 @@ export default function PacientesPage() {
 
         for (let weekday = 1; weekday <= 6; weekday++) {
           for (const slot of SLOTS_PILATES) {
-            const regrasDoHorario = regrasValidas.filter((regra) => {
-              return (
-                Number(regra.weekday) === weekday &&
-                normalizarHora(regra.hora_inicio) === slot.hora_inicio &&
-                normalizarHora(regra.hora_fim) === slot.hora_fim
-              )
-            })
+            const dataDaSemana = new Date(semanaInicio)
+            dataDaSemana.setDate(semanaInicio.getDate() + (weekday - 1))
+
+            const dataDaSemanaIso = `${dataDaSemana.getFullYear()}-${String(
+              dataDaSemana.getMonth() + 1
+            ).padStart(2, "0")}-${String(dataDaSemana.getDate()).padStart(2, "0")}`
+
+            const foraDoPeriodo =
+              dataDaSemana < inicioFiltro || dataDaSemana > fimFiltro
+
+            const regrasDoHorario = foraDoPeriodo
+              ? []
+              : regrasValidas.filter((regra) => {
+                  return (
+                    Number(regra.weekday) === weekday &&
+                    normalizarHora(regra.hora_inicio) === slot.hora_inicio &&
+                    normalizarHora(regra.hora_fim) === slot.hora_fim &&
+                    !!regra.patient_id &&
+                    pacienteEstavaAtivoNaData(regra.patient_id, dataDaSemanaIso)
+                  )
+                })
+
 
             const nomesPacientes = regrasDoHorario
               .map((regra) => {
@@ -426,8 +456,12 @@ export default function PacientesPage() {
             linhasSemana.push([
               DIAS_SEMANA_RELATORIO[weekday - 1],
               `${slot.hora_inicio} às ${slot.hora_fim}`,
-              nomesPacientes.length > 0 ? nomesPacientes.join("\n") : "Sem alunos/pacientes",
-              `${vagas} vaga(s) disponível(is)`,
+              foraDoPeriodo
+                ? "-"
+                : nomesPacientes.length > 0
+                  ? nomesPacientes.join("\n")
+                  : "Sem alunos/pacientes",
+              foraDoPeriodo ? "-" : `${vagas} vaga(s) disponível(is)`,
             ])
           }
         }
@@ -1012,7 +1046,9 @@ if (error || !data) {
                     {new Date(`${p.data_inicio}T12:00:00`).toLocaleDateString("pt-BR")}
                   </td>
                   <td style={td}>
-                    {calcularProximoPagamento(p.data_inicio, p.dia_base_pagamento)}
+                    {p.ativo
+                      ? calcularProximoPagamento(p.data_inicio, p.dia_base_pagamento)
+                      : "-"}
                   </td>
                   <td style={td}>R$ {Number(p.valor_mensal || 0).toFixed(2)}</td>
                   <td style={td}>
