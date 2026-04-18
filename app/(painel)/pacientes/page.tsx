@@ -267,17 +267,19 @@ export default function PacientesPage() {
     pacientes.filter((p) => p.ativo).map((p) => p.id)
   )
 
-  const regrasPilatesAtivas = todasRegras.filter(
+  const regrasAtivas = todasRegras.filter(
     (regra) =>
       regra.ativo &&
-      regra.servico === "Pilates" &&
       !!regra.patient_id &&
       pacientesAtivosIds.has(regra.patient_id)
   )
 
-  const linhas: Array<[string, string, string, string]> = []
+  const linhas: Array<[string, string, string, string, string]> = []
 
-  for (let weekday = 1; weekday <= 6; weekday++) { 
+  // 1) Pilates: mostrar todos os horários, inclusive vazios
+  const regrasPilatesAtivas = regrasAtivas.filter((regra) => regra.servico === "Pilates")
+
+  for (let weekday = 1; weekday <= 6; weekday++) {
     for (const slot of SLOTS_PILATES) {
       const regrasDoHorario = regrasPilatesAtivas.filter((regra) => {
         return (
@@ -298,6 +300,7 @@ export default function PacientesPage() {
       const vagas = Math.max(LIMITE_PILATES_POR_HORARIO - ocupados, 0)
 
       linhas.push([
+        "Pilates",
         DIAS_SEMANA_RELATORIO[weekday - 1],
         `${slot.hora_inicio} às ${slot.hora_fim}`,
         nomesPacientes.length > 0 ? nomesPacientes.join("\n") : "Sem alunos/pacientes",
@@ -306,15 +309,54 @@ export default function PacientesPage() {
     }
   }
 
+  // 2) Outros serviços: mostrar só os horários que existem
+  const outrosServicos = regrasAtivas
+    .filter((regra) => regra.servico !== "Pilates")
+    .sort((a, b) => {
+      if (a.servico !== b.servico) return a.servico.localeCompare(b.servico)
+      if (a.weekday !== b.weekday) return a.weekday - b.weekday
+      return normalizarHora(a.hora_inicio).localeCompare(normalizarHora(b.hora_inicio))
+    })
+
+  const gruposOutros = new Map<string, string[]>()
+
+  outrosServicos.forEach((regra) => {
+    const dia = DIAS_SEMANA_RELATORIO[Number(regra.weekday) - 1]
+    const horario = `${normalizarHora(regra.hora_inicio)} às ${normalizarHora(regra.hora_fim)}`
+    const chave = `${regra.servico}::${dia}::${horario}`
+
+    const paciente = pacientes.find((p) => p.id === regra.patient_id)
+    const nome = paciente?.nome || "Paciente não encontrado"
+
+    if (!gruposOutros.has(chave)) {
+      gruposOutros.set(chave, [])
+    }
+
+    gruposOutros.get(chave)!.push(nome)
+  })
+
+  Array.from(gruposOutros.entries()).forEach(([chave, nomes]) => {
+    const [servico, dia, horario] = chave.split("::")
+
+    linhas.push([
+      servico,
+      dia,
+      horario,
+      nomes.sort((a, b) => a.localeCompare(b)).join("\n"),
+      "Não se aplica",
+    ])
+  })
+
   autoTable(doc, {
     startY: 28,
     head: [[
+      "Serviço",
       "Dia da semana",
       "Horário",
       "Alunos/Pacientes no horário",
       "Vagas disponíveis",
     ]],
-    body: linhas.length ? linhas : [["-", "-", "Nenhum dado", "-"]],
+    body: linhas.length ? linhas : [["-", "-", "-", "Nenhum dado", "-"]],
     styles: {
       fontSize: 9,
       cellPadding: 3,
@@ -325,10 +367,11 @@ export default function PacientesPage() {
       fillColor: [37, 99, 235],
     },
     columnStyles: {
-      0: { cellWidth: 35 },
-      1: { cellWidth: 35 },
-      2: { cellWidth: 130 },
-      3: { cellWidth: 40 },
+      0: { cellWidth: 28 },
+      1: { cellWidth: 32 },
+      2: { cellWidth: 34 },
+      3: { cellWidth: 120 },
+      4: { cellWidth: 35 },
     },
   })
 
