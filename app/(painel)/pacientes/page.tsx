@@ -1020,7 +1020,43 @@ if (error || !data) {
                       {p.ativo ? "Ativo" : "Inativo"}
                     </span>
                   </td>
-                  {pacientePendenciaInativacao === p.id && (
+                  <td style={td}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => editarPaciente(p)}
+                      >
+                        Editar
+                      </button>
+
+                      {p.ativo ? (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setPacientePendenciaInativacao(p.id)
+                            setDataInativacao("")
+                          }}
+                        >
+                          Inativar
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => confirmarAlteracaoStatusPaciente(p, true)}
+                        >
+                          Reativar
+                        </button>
+                      )}
+
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => excluirPaciente(p.id)}
+                      >
+                        Excluir
+                      </button>
+                    </div>
+
+                    {pacientePendenciaInativacao === p.id && (
                       <div
                         style={{
                           marginTop: 10,
@@ -1057,6 +1093,7 @@ if (error || !data) {
                         </button>
                       </div>
                     )}
+                  </td>
                 </tr>
               ))}
 
