@@ -263,22 +263,24 @@ export default function PacientesPage() {
   doc.setFontSize(10)
   doc.text(`Gerado em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 22)
 
-  const pacientesAtivosIds = new Set(
-    pacientes.filter((p) => p.ativo).map((p) => p.id)
-  )
+  const pacientesAtivos = pacientes.filter((p) => p.ativo)
+  const pacientesAtivosIds = new Set(pacientesAtivos.map((p) => p.id))
 
-  const regrasAtivas = todasRegras.filter(
-    (regra) =>
+  const regrasAtivas = todasRegras.filter((regra) => {
+    const servicoNormalizado = (regra.servico || "").trim()
+    return (
       regra.ativo &&
       !!regra.patient_id &&
-      pacientesAtivosIds.has(regra.patient_id)
-  )
+      pacientesAtivosIds.has(regra.patient_id) &&
+      servicoNormalizado.length > 0
+    )
+  })
 
   const linhas: Array<[string, string, string, string, string]> = []
 
-  // Pilates: mostra todos os horários, inclusive vazios
+  // 1) PILATES - mostra todos os horários, inclusive vazios
   const regrasPilatesAtivas = regrasAtivas.filter(
-    (regra) => regra.servico === "Pilates"
+    (regra) => (regra.servico || "").trim().toLowerCase() === "pilates"
   )
 
   for (let weekday = 1; weekday <= 6; weekday++) {
@@ -311,11 +313,14 @@ export default function PacientesPage() {
     }
   }
 
-  // Outros serviços: mostra só os horários realmente cadastrados
+  // 2) OUTROS SERVIÇOS - mostra tudo que estiver cadastrado em regras
   const outrasRegras = regrasAtivas
-    .filter((regra) => regra.servico !== "Pilates")
+    .filter((regra) => (regra.servico || "").trim().toLowerCase() !== "pilates")
     .sort((a, b) => {
-      if (a.servico !== b.servico) return a.servico.localeCompare(b.servico)
+      const servicoA = (a.servico || "").trim()
+      const servicoB = (b.servico || "").trim()
+
+      if (servicoA !== servicoB) return servicoA.localeCompare(servicoB)
       if (a.weekday !== b.weekday) return a.weekday - b.weekday
       return normalizarHora(a.hora_inicio).localeCompare(normalizarHora(b.hora_inicio))
     })
@@ -323,9 +328,10 @@ export default function PacientesPage() {
   const gruposOutros = new Map<string, string[]>()
 
   outrasRegras.forEach((regra) => {
-    const dia = DIAS_SEMANA_RELATORIO[Number(regra.weekday) - 1]
+    const servico = (regra.servico || "").trim() || "Outro"
+    const dia = DIAS_SEMANA_RELATORIO[Number(regra.weekday) - 1] || "-"
     const horario = `${normalizarHora(regra.hora_inicio)} às ${normalizarHora(regra.hora_fim)}`
-    const chave = `${regra.servico}::${dia}::${horario}`
+    const chave = `${servico}::${dia}::${horario}`
 
     const paciente = pacientes.find((p) => p.id === regra.patient_id)
     const nome = paciente?.nome || "Paciente não encontrado"
@@ -337,17 +343,39 @@ export default function PacientesPage() {
     gruposOutros.get(chave)!.push(nome)
   })
 
-  Array.from(gruposOutros.entries()).forEach(([chave, nomes]) => {
-    const [servico, dia, horario] = chave.split("::")
+  Array.from(gruposOutros.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .forEach(([chave, nomes]) => {
+      const [servico, dia, horario] = chave.split("::")
 
-    linhas.push([
-      servico,
-      dia,
-      horario,
-      nomes.sort((a, b) => a.localeCompare(b)).join("\n"),
-      "Não se aplica",
-    ])
-  })
+      linhas.push([
+        servico,
+        dia,
+        horario,
+        nomes.sort((a, b) => a.localeCompare(b)).join("\n"),
+        "Não se aplica",
+      ])
+    })
+
+  // 3) PACIENTES ATIVOS SEM HORÁRIO FIXO
+  const pacientesComRegras = new Set(
+    regrasAtivas
+      .map((regra) => regra.patient_id)
+      .filter((id): id is number => typeof id === "number")
+  )
+
+  pacientesAtivos
+    .filter((paciente) => !pacientesComRegras.has(paciente.id))
+    .sort((a, b) => a.nome.localeCompare(b.nome))
+    .forEach((paciente) => {
+      linhas.push([
+        "Sem horário fixo",
+        "-",
+        "-",
+        paciente.nome,
+        "Não se aplica",
+      ])
+    })
 
   autoTable(doc, {
     startY: 28,
@@ -369,10 +397,10 @@ export default function PacientesPage() {
       fillColor: [37, 99, 235],
     },
     columnStyles: {
-      0: { cellWidth: 30 },
+      0: { cellWidth: 34 },
       1: { cellWidth: 32 },
       2: { cellWidth: 36 },
-      3: { cellWidth: 120 },
+      3: { cellWidth: 110 },
       4: { cellWidth: 35 },
     },
   })
