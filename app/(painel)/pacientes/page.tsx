@@ -112,9 +112,11 @@ export default function PacientesPage() {
   const [dataInicioRelatorio, setDataInicioRelatorio] = useState("")
   const [dataFimRelatorio, setDataFimRelatorio] = useState("")
   const [dataInativacao, setDataInativacao] = useState("")
+  const [pacientePendenciaInativacao, setPacientePendenciaInativacao] = useState<number | null>(null)
   const [horarios, setHorarios] = useState<ScheduleRule[]>([
     { weekday: 1, servico: "Pilates", hora_inicio: "", hora_fim: "", ativo: true },
   ])
+
 
   useEffect(() => {
     carregarPacientes()
@@ -341,78 +343,132 @@ export default function PacientesPage() {
     )
 
     const doc = new jsPDF("landscape")
-
     doc.setFontSize(16)
     doc.text("Relatório de horários e vagas", 14, 16)
 
     doc.setFontSize(10)
     doc.text(
-      `Período: ${new Date(`${dataInicioRelatorio}T12:00:00`).toLocaleDateString("pt-BR")} até ${new Date(`${dataFimRelatorio}T12:00:00`).toLocaleDateString("pt-BR")}`,
+      `Período filtrado: ${new Date(`${dataInicioRelatorio}T12:00:00`).toLocaleDateString("pt-BR")} até ${new Date(`${dataFimRelatorio}T12:00:00`).toLocaleDateString("pt-BR")}`,
       14,
       22
     )
 
-    const linhas: Array<[string, string, string, string]> = []
+    let currentY = 30
 
-    for (let weekday = 1; weekday <= 6; weekday++) {
-      for (const slot of SLOTS_PILATES) {
-        const regrasDoHorario = regrasValidas.filter((regra) => {
-          return (
-            Number(regra.weekday) === weekday &&
-            normalizarHora(regra.hora_inicio) === slot.hora_inicio &&
-            normalizarHora(regra.hora_fim) === slot.hora_fim
-          )
-        })
+    const mesesNoPeriodo: { ano: number; mes: number }[] = []
+    const cursor = new Date(`${dataInicioRelatorio}T12:00:00`)
+    const fimCursor = new Date(`${dataFimRelatorio}T12:00:00`)
 
-        const nomesPacientes = regrasDoHorario
-          .map((regra) => {
-            const paciente = pacientesLista.find((p) => p.id === regra.patient_id)
-            const nome = paciente?.nome || "Paciente não encontrado"
-            const servico = (regra.servico || "").trim()
+    while (cursor <= fimCursor) {
+      const ano = cursor.getFullYear()
+      const mes = cursor.getMonth()
 
-            return servico && servico.toLowerCase() !== "pilates"
-              ? `${nome} (${servico})`
-              : nome
-          })
-          .sort((a, b) => a.localeCompare(b))
-
-        const ocupados = nomesPacientes.length
-        const vagas = Math.max(LIMITE_PILATES_POR_HORARIO - ocupados, 0)
-
-        linhas.push([
-          DIAS_SEMANA_RELATORIO[weekday - 1],
-          `${slot.hora_inicio} às ${slot.hora_fim}`,
-          nomesPacientes.length > 0 ? nomesPacientes.join("\n") : "Sem alunos/pacientes",
-          `${vagas} vaga(s) disponível(is)`,
-        ])
+      if (!mesesNoPeriodo.some((m) => m.ano === ano && m.mes === mes)) {
+        mesesNoPeriodo.push({ ano, mes })
       }
+
+      cursor.setMonth(cursor.getMonth() + 1)
     }
 
-    autoTable(doc, {
-      startY: 28,
-      head: [[
-        "Dia da semana",
-        "Horário",
-        "Alunos/Pacientes no horário",
-        "Vagas disponíveis",
-      ]],
-      body: linhas.length ? linhas : [["-", "-", "Nenhum dado", "-"]],
-      styles: {
-        fontSize: 9,
-        cellPadding: 3,
-        overflow: "linebreak",
-        valign: "top",
-      },
-      headStyles: {
-        fillColor: [37, 99, 235],
-      },
-      columnStyles: {
-        0: { cellWidth: 35 },
-        1: { cellWidth: 35 },
-        2: { cellWidth: 140 },
-        3: { cellWidth: 40 },
-      },
-    })
+    for (const mesInfo of mesesNoPeriodo) {
+      const nomeMes = new Date(mesInfo.ano, mesInfo.mes, 1).toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric",
+      })
+
+      doc.setFontSize(12)
+      doc.text(`Mês: ${nomeMes}`, 14, currentY)
+      currentY += 6
+
+      const inicioMes = new Date(mesInfo.ano, mesInfo.mes, 1)
+      const fimMes = new Date(mesInfo.ano, mesInfo.mes + 1, 0)
+
+      let semanaInicio = new Date(inicioMes)
+
+      while (semanaInicio <= fimMes) {
+        const semanaFim = new Date(semanaInicio)
+        semanaFim.setDate(semanaInicio.getDate() + 6)
+
+        const semanaInicioFormatada = semanaInicio.toLocaleDateString("pt-BR")
+        const semanaFimFormatada = semanaFim.toLocaleDateString("pt-BR")
+
+        doc.setFontSize(10)
+        doc.text(`Semana: ${semanaInicioFormatada} até ${semanaFimFormatada}`, 14, currentY)
+        currentY += 4
+
+        const linhasSemana: Array<[string, string, string, string]> = []
+
+        for (let weekday = 1; weekday <= 6; weekday++) {
+          for (const slot of SLOTS_PILATES) {
+            const regrasDoHorario = regrasValidas.filter((regra) => {
+              return (
+                Number(regra.weekday) === weekday &&
+                normalizarHora(regra.hora_inicio) === slot.hora_inicio &&
+                normalizarHora(regra.hora_fim) === slot.hora_fim
+              )
+            })
+
+            const nomesPacientes = regrasDoHorario
+              .map((regra) => {
+                const paciente = pacientesLista.find((p) => p.id === regra.patient_id)
+                const nome = paciente?.nome || "Paciente não encontrado"
+                const servico = (regra.servico || "").trim()
+
+                return servico && servico.toLowerCase() !== "pilates"
+                  ? `${nome} (${servico})`
+                  : nome
+              })
+              .sort((a, b) => a.localeCompare(b))
+
+            const ocupados = nomesPacientes.length
+            const vagas = Math.max(LIMITE_PILATES_POR_HORARIO - ocupados, 0)
+
+            linhasSemana.push([
+              DIAS_SEMANA_RELATORIO[weekday - 1],
+              `${slot.hora_inicio} às ${slot.hora_fim}`,
+              nomesPacientes.length > 0 ? nomesPacientes.join("\n") : "Sem alunos/pacientes",
+              `${vagas} vaga(s) disponível(is)`,
+            ])
+          }
+        }
+
+        autoTable(doc, {
+          startY: currentY,
+          head: [[
+            "Dia da semana",
+            "Horário",
+            "Alunos/Pacientes no horário",
+            "Vagas disponíveis",
+          ]],
+          body: linhasSemana.length ? linhasSemana : [["-", "-", "Nenhum dado", "-"]],
+          styles: {
+            fontSize: 8,
+            cellPadding: 2.5,
+            overflow: "linebreak",
+            valign: "top",
+          },
+          headStyles: {
+            fillColor: [37, 99, 235],
+          },
+          columnStyles: {
+            0: { cellWidth: 35 },
+            1: { cellWidth: 35 },
+            2: { cellWidth: 140 },
+            3: { cellWidth: 40 },
+          },
+        })
+
+        currentY = (doc as any).lastAutoTable.finalY + 8
+        semanaInicio.setDate(semanaInicio.getDate() + 7)
+
+        if (currentY > 170) {
+          doc.addPage("landscape")
+          currentY = 20
+        }
+      }
+
+      currentY += 4
+    }
 
     doc.save("relatorio_horarios_vagas.pdf")
   }
@@ -572,30 +628,28 @@ if (error || !data) {
     await carregarHorariosDoPaciente(paciente.id)
   }
 
-  async function alternarStatusPaciente(paciente: Patient) {
-  setMensagem("")
+  async function confirmarAlteracaoStatusPaciente(paciente: Patient, novoStatus: boolean) {
+    setMensagem("")
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) {
-    setMensagem("Você precisa estar logado.")
-    return
-  }
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
+    }
 
-  const novoStatus = !paciente.ativo
-  const hoje = new Date().toISOString().slice(0, 10)
-  const dataNovoPeriodo = novoStatus
-    ? (dataInicio || hoje)
-    : (dataInativacao || hoje)
-
+    const hoje = new Date().toISOString().slice(0, 10)
+    const dataNovoPeriodo = novoStatus
+      ? (dataInicio || hoje)
+      : (dataInativacao || hoje)
 
     const { error } = await supabase
       .from("patients")
       .update({
         ativo: novoStatus,
-        data_inicio: novoStatus ? dataInicio : paciente.data_inicio,
+        data_inicio: novoStatus ? (dataInicio || paciente.data_inicio) : paciente.data_inicio,
         dia_base_pagamento: novoStatus
           ? diaBasePagamento
             ? Number(diaBasePagamento)
@@ -616,22 +670,24 @@ if (error || !data) {
     }
 
     await supabase
-  .from("patient_status_history")
-  .update({ end_date: dataNovoPeriodo })
-  .eq("patient_id", paciente.id)
-  .eq("user_id", user.id)
-  .is("end_date", null)
+      .from("patient_status_history")
+      .update({ end_date: dataNovoPeriodo })
+      .eq("patient_id", paciente.id)
+      .eq("user_id", user.id)
+      .is("end_date", null)
 
     await supabase.from("patient_status_history").insert([
-  {
-    user_id: user.id,
-    patient_id: paciente.id,
-    status: novoStatus ? "ativo" : "inativo",
-    start_date: dataNovoPeriodo,
-    end_date: null,
-  },
-])
+      {
+        user_id: user.id,
+        patient_id: paciente.id,
+        status: novoStatus ? "ativo" : "inativo",
+        start_date: dataNovoPeriodo,
+        end_date: null,
+      },
+    ])
 
+    setPacientePendenciaInativacao(null)
+    setDataInativacao("")
     setMensagem(
       novoStatus ? "Aluno/Paciente reativado com sucesso." : "Aluno/Paciente inativado com sucesso."
     )
@@ -766,14 +822,6 @@ if (error || !data) {
 
           <div>
             <label>Valor mensal</label>
-            <div>
-  <label>Data de inativação</label>
-  <input
-    type="date"
-    value={dataInativacao}
-    onChange={(e) => setDataInativacao(e.target.value)}
-  />
-</div>
             <input
               type="number"
               step="0.01"
@@ -903,6 +951,7 @@ if (error || !data) {
                   </div>
                 )}
               </div>
+              
             )
           })}
 
@@ -971,28 +1020,43 @@ if (error || !data) {
                       {p.ativo ? "Ativo" : "Inativo"}
                     </span>
                   </td>
-                  <td style={td}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => editarPaciente(p)}
+                  {pacientePendenciaInativacao === p.id && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          display: "flex",
+                          gap: 8,
+                          flexWrap: "wrap",
+                          alignItems: "end",
+                        }}
                       >
-                        Editar
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => alternarStatusPaciente(p)}
-                      >
-                        {p.ativo ? "Inativar" : "Reativar"}
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => excluirPaciente(p.id)}
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  </td>
+                        <div>
+                          <label>Data de inativação</label>
+                          <input
+                            type="date"
+                            value={dataInativacao}
+                            onChange={(e) => setDataInativacao(e.target.value)}
+                          />
+                        </div>
+
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => confirmarAlteracaoStatusPaciente(p, false)}
+                        >
+                          Confirmar inativação
+                        </button>
+
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setPacientePendenciaInativacao(null)
+                            setDataInativacao("")
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    )}
                 </tr>
               ))}
 
