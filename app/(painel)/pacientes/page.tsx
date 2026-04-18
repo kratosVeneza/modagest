@@ -277,7 +277,7 @@ export default function PacientesPage() {
 
   const linhas: Array<[string, string, string, string]> = []
 
-  for (let weekday = 0; weekday <= 6; weekday++) {
+  for (let weekday = 1; weekday <= 6; weekday++) { 
     for (const slot of SLOTS_PILATES) {
       const regrasDoHorario = regrasPilatesAtivas.filter((regra) => {
         return (
@@ -298,7 +298,7 @@ export default function PacientesPage() {
       const vagas = Math.max(LIMITE_PILATES_POR_HORARIO - ocupados, 0)
 
       linhas.push([
-        DIAS_SEMANA_RELATORIO[weekday],
+        DIAS_SEMANA_RELATORIO[weekday - 1],
         `${slot.hora_inicio} às ${slot.hora_fim}`,
         nomesPacientes.length > 0 ? nomesPacientes.join("\n") : "Sem alunos/pacientes",
         `${vagas} vaga(s) disponível(is)`,
