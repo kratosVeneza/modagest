@@ -111,6 +111,7 @@ export default function PacientesPage() {
   const [todasRegras, setTodasRegras] = useState<ScheduleRule[]>([])
   const [dataInicioRelatorio, setDataInicioRelatorio] = useState("")
   const [dataFimRelatorio, setDataFimRelatorio] = useState("")
+  const [dataInativacao, setDataInativacao] = useState("")
   const [horarios, setHorarios] = useState<ScheduleRule[]>([
     { weekday: 1, servico: "Pilates", hora_inicio: "", hora_fim: "", ativo: true },
   ])
@@ -572,19 +573,23 @@ if (error || !data) {
   }
 
   async function alternarStatusPaciente(paciente: Patient) {
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
 
-    const novoStatus = !paciente.ativo
-    const hoje = new Date().toISOString().slice(0, 10)
+  const novoStatus = !paciente.ativo
+  const hoje = new Date().toISOString().slice(0, 10)
+  const dataNovoPeriodo = novoStatus
+    ? (dataInicio || hoje)
+    : (dataInativacao || hoje)
+
 
     const { error } = await supabase
       .from("patients")
@@ -611,21 +616,21 @@ if (error || !data) {
     }
 
     await supabase
-      .from("patient_status_history")
-      .update({ end_date: hoje })
-      .eq("patient_id", paciente.id)
-      .eq("user_id", user.id)
-      .is("end_date", null)
+  .from("patient_status_history")
+  .update({ end_date: dataNovoPeriodo })
+  .eq("patient_id", paciente.id)
+  .eq("user_id", user.id)
+  .is("end_date", null)
 
     await supabase.from("patient_status_history").insert([
-      {
-        user_id: user.id,
-        patient_id: paciente.id,
-        status: novoStatus ? "ativo" : "inativo",
-        start_date: hoje,
-        end_date: null,
-      },
-    ])
+  {
+    user_id: user.id,
+    patient_id: paciente.id,
+    status: novoStatus ? "ativo" : "inativo",
+    start_date: dataNovoPeriodo,
+    end_date: null,
+  },
+])
 
     setMensagem(
       novoStatus ? "Aluno/Paciente reativado com sucesso." : "Aluno/Paciente inativado com sucesso."
@@ -761,6 +766,14 @@ if (error || !data) {
 
           <div>
             <label>Valor mensal</label>
+            <div>
+  <label>Data de inativação</label>
+  <input
+    type="date"
+    value={dataInativacao}
+    onChange={(e) => setDataInativacao(e.target.value)}
+  />
+</div>
             <input
               type="number"
               step="0.01"
