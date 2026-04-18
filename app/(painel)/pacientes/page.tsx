@@ -375,6 +375,7 @@ export default function PacientesPage() {
     },
   })
 
+  
   doc.save("relatorio_horarios_vagas.pdf")
 }
 
