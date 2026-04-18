@@ -109,6 +109,8 @@ export default function PacientesPage() {
   const [valorMensal, setValorMensal] = useState("")
   const [observacoes, setObservacoes] = useState("")
   const [todasRegras, setTodasRegras] = useState<ScheduleRule[]>([])
+  const [dataInicioRelatorio, setDataInicioRelatorio] = useState("")
+  const [dataFimRelatorio, setDataFimRelatorio] = useState("")
   const [horarios, setHorarios] = useState<ScheduleRule[]>([
     { weekday: 1, servico: "Pilates", hora_inicio: "", hora_fim: "", ativo: true },
   ])
@@ -254,91 +256,165 @@ export default function PacientesPage() {
     )
   }
 
-  function gerarRelatorioPacientesPdf() {
-  const doc = new jsPDF("landscape")
+  async function gerarRelatorioPacientesPdf() {
+    setMensagem("")
 
-  doc.setFontSize(16)
-  doc.text("Relatório de horários e vagas", 14, 16)
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  doc.setFontSize(10)
-  doc.text(`Gerado em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 22)
-
-  const pacientesAtivosIds = new Set(
-    pacientes.filter((p) => p.ativo).map((p) => p.id)
-  )
-
-  const regrasValidas = todasRegras.filter(
-    (regra) =>
-      regra.ativo &&
-      !!regra.patient_id &&
-      pacientesAtivosIds.has(regra.patient_id)
-  )
-
-  const linhas: Array<[string, string, string, string]> = []
-
-  for (let weekday = 1; weekday <= 6; weekday++) {
-    for (const slot of SLOTS_PILATES) {
-      const regrasDoHorario = regrasValidas.filter((regra) => {
-        return (
-          Number(regra.weekday) === weekday &&
-          normalizarHora(regra.hora_inicio) === slot.hora_inicio &&
-          normalizarHora(regra.hora_fim) === slot.hora_fim
-        )
-      })
-
-      const nomesPacientes = regrasDoHorario
-        .map((regra) => {
-          const paciente = pacientes.find((p) => p.id === regra.patient_id)
-          const nome = paciente?.nome || "Paciente não encontrado"
-          const servico = (regra.servico || "").trim()
-
-          return servico && servico.toLowerCase() !== "pilates"
-            ? `${nome} (${servico})`
-            : nome
-        })
-        .sort((a, b) => a.localeCompare(b))
-
-      const ocupados = nomesPacientes.length
-      const vagas = Math.max(LIMITE_PILATES_POR_HORARIO - ocupados, 0)
-
-      linhas.push([
-        DIAS_SEMANA_RELATORIO[weekday - 1],
-        `${slot.hora_inicio} às ${slot.hora_fim}`,
-        nomesPacientes.length > 0 ? nomesPacientes.join("\n") : "Sem alunos/pacientes",
-        `${vagas} vaga(s) disponível(is)`,
-      ])
+    if (!user) {
+      setMensagem("Você precisa estar logado.")
+      return
     }
+
+    if (!dataInicioRelatorio || !dataFimRelatorio) {
+      setMensagem("Selecione a data inicial e final do relatório.")
+      return
+    }
+
+    const { data: pacientesData, error: pacientesError } = await supabase
+      .from("patients")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("nome", { ascending: true })
+
+    if (pacientesError) {
+      setMensagem("Erro ao buscar pacientes para o relatório.")
+      return
+    }
+
+    const { data: regrasData, error: regrasError } = await supabase
+      .from("patient_schedule_rules")
+      .select("id, patient_id, weekday, servico, hora_inicio, hora_fim, ativo")
+      .eq("user_id", user.id)
+      .eq("ativo", true)
+
+    if (regrasError) {
+      setMensagem("Erro ao buscar horários para o relatório.")
+      return
+    }
+
+    const { data: historicoData, error: historicoError } = await supabase
+      .from("patient_status_history")
+      .select("*")
+      .eq("user_id", user.id)
+
+    if (historicoError) {
+      setMensagem("Erro ao buscar histórico de status.")
+      return
+    }
+
+    const pacientesLista = (pacientesData ?? []) as Patient[]
+    const regrasLista = (regrasData ?? []) as ScheduleRule[]
+    const historicoLista = (historicoData ?? []) as Array<{
+      patient_id: number
+      status: "ativo" | "inativo"
+      start_date: string
+      end_date: string | null
+    }>
+
+    const inicioFiltro = new Date(`${dataInicioRelatorio}T00:00:00`)
+    const fimFiltro = new Date(`${dataFimRelatorio}T23:59:59`)
+
+    const pacientesAtivosNoPeriodo = new Set<number>()
+
+    historicoLista.forEach((item) => {
+      if (item.status !== "ativo") return
+
+      const inicio = new Date(`${item.start_date}T00:00:00`)
+      const fim = item.end_date ? new Date(`${item.end_date}T23:59:59`) : null
+
+      const intersecta = inicio <= fimFiltro && (!fim || fim >= inicioFiltro)
+
+      if (intersecta) {
+        pacientesAtivosNoPeriodo.add(item.patient_id)
+      }
+    })
+
+    const regrasValidas = regrasLista.filter(
+      (regra) =>
+        regra.ativo &&
+        !!regra.patient_id &&
+        pacientesAtivosNoPeriodo.has(regra.patient_id)
+    )
+
+    const doc = new jsPDF("landscape")
+
+    doc.setFontSize(16)
+    doc.text("Relatório de horários e vagas", 14, 16)
+
+    doc.setFontSize(10)
+    doc.text(
+      `Período: ${new Date(`${dataInicioRelatorio}T12:00:00`).toLocaleDateString("pt-BR")} até ${new Date(`${dataFimRelatorio}T12:00:00`).toLocaleDateString("pt-BR")}`,
+      14,
+      22
+    )
+
+    const linhas: Array<[string, string, string, string]> = []
+
+    for (let weekday = 1; weekday <= 6; weekday++) {
+      for (const slot of SLOTS_PILATES) {
+        const regrasDoHorario = regrasValidas.filter((regra) => {
+          return (
+            Number(regra.weekday) === weekday &&
+            normalizarHora(regra.hora_inicio) === slot.hora_inicio &&
+            normalizarHora(regra.hora_fim) === slot.hora_fim
+          )
+        })
+
+        const nomesPacientes = regrasDoHorario
+          .map((regra) => {
+            const paciente = pacientesLista.find((p) => p.id === regra.patient_id)
+            const nome = paciente?.nome || "Paciente não encontrado"
+            const servico = (regra.servico || "").trim()
+
+            return servico && servico.toLowerCase() !== "pilates"
+              ? `${nome} (${servico})`
+              : nome
+          })
+          .sort((a, b) => a.localeCompare(b))
+
+        const ocupados = nomesPacientes.length
+        const vagas = Math.max(LIMITE_PILATES_POR_HORARIO - ocupados, 0)
+
+        linhas.push([
+          DIAS_SEMANA_RELATORIO[weekday - 1],
+          `${slot.hora_inicio} às ${slot.hora_fim}`,
+          nomesPacientes.length > 0 ? nomesPacientes.join("\n") : "Sem alunos/pacientes",
+          `${vagas} vaga(s) disponível(is)`,
+        ])
+      }
+    }
+
+    autoTable(doc, {
+      startY: 28,
+      head: [[
+        "Dia da semana",
+        "Horário",
+        "Alunos/Pacientes no horário",
+        "Vagas disponíveis",
+      ]],
+      body: linhas.length ? linhas : [["-", "-", "Nenhum dado", "-"]],
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+        overflow: "linebreak",
+        valign: "top",
+      },
+      headStyles: {
+        fillColor: [37, 99, 235],
+      },
+      columnStyles: {
+        0: { cellWidth: 35 },
+        1: { cellWidth: 35 },
+        2: { cellWidth: 140 },
+        3: { cellWidth: 40 },
+      },
+    })
+
+    doc.save("relatorio_horarios_vagas.pdf")
   }
-
-  autoTable(doc, {
-    startY: 28,
-    head: [[
-      "Dia da semana",
-      "Horário",
-      "Alunos/Pacientes no horário",
-      "Vagas disponíveis",
-    ]],
-    body: linhas.length ? linhas : [["-", "-", "Nenhum dado", "-"]],
-    styles: {
-      fontSize: 9,
-      cellPadding: 3,
-      overflow: "linebreak",
-      valign: "top",
-    },
-    headStyles: {
-      fillColor: [37, 99, 235],
-    },
-    columnStyles: {
-      0: { cellWidth: 35 },
-      1: { cellWidth: 35 },
-      2: { cellWidth: 140 },
-      3: { cellWidth: 40 },
-    },
-  })
-
-  doc.save("relatorio_horarios_vagas.pdf")
-}
-
 
   function limparFormulario() {
     setIdEdicao(null)
@@ -418,13 +494,22 @@ export default function PacientesPage() {
         ])
         .select("id")
         .single()
-
-      if (error || !data) {
+if (error || !data) {
         setMensagem(error?.message || "Erro ao cadastrar aluno/paciente.")
         return
       }
 
       patientIdFinal = data.id
+
+      await supabase.from("patient_status_history").insert([
+        {
+          user_id: user.id,
+          patient_id: data.id,
+          status: "ativo",
+          start_date: dataInicio,
+          end_date: null,
+        },
+      ])
     }
 
     if (!patientIdFinal) {
@@ -499,6 +584,7 @@ export default function PacientesPage() {
     }
 
     const novoStatus = !paciente.ativo
+    const hoje = new Date().toISOString().slice(0, 10)
 
     const { error } = await supabase
       .from("patients")
@@ -523,6 +609,23 @@ export default function PacientesPage() {
       setMensagem(error.message || "Erro ao alterar status.")
       return
     }
+
+    await supabase
+      .from("patient_status_history")
+      .update({ end_date: hoje })
+      .eq("patient_id", paciente.id)
+      .eq("user_id", user.id)
+      .is("end_date", null)
+
+    await supabase.from("patient_status_history").insert([
+      {
+        user_id: user.id,
+        patient_id: paciente.id,
+        status: novoStatus ? "ativo" : "inativo",
+        start_date: hoje,
+        end_date: null,
+      },
+    ])
 
     setMensagem(
       novoStatus ? "Aluno/Paciente reativado com sucesso." : "Aluno/Paciente inativado com sucesso."
@@ -581,7 +684,25 @@ export default function PacientesPage() {
       Cadastre alunos/pacientes, acompanhe status, data de entrada, retorno e próximo pagamento.
     </p>
 
-    <div style={{ marginBottom: 16 }}>
+    <div style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+      <div>
+        <label>Data inicial do relatório</label>
+        <input
+          type="date"
+          value={dataInicioRelatorio}
+          onChange={(e) => setDataInicioRelatorio(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label>Data final do relatório</label>
+        <input
+          type="date"
+          value={dataFimRelatorio}
+          onChange={(e) => setDataFimRelatorio(e.target.value)}
+        />
+      </div>
+
       <button
         type="button"
         className="btn btn-primary"
@@ -590,6 +711,7 @@ export default function PacientesPage() {
         Gerar relatório PDF de alunos e horários
       </button>
     </div>
+
 
     {mensagem && <p>{mensagem}</p>}
 
