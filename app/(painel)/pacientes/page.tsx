@@ -356,7 +356,6 @@ export default function PacientesPage() {
       })
     }
 
-
     const doc = new jsPDF("landscape")
     doc.setFontSize(16)
     doc.text("Relatório de horários e vagas", 14, 16)
@@ -411,7 +410,7 @@ export default function PacientesPage() {
         doc.text(`Semana: ${semanaInicioFormatada} até ${semanaFimFormatada}`, 14, currentY)
         currentY += 4
 
-        const linhasSemana: Array<[string, string, string, string]> = []
+        const linhasSemana: Array<[string, string, string, string, string]> = []
 
         for (let weekday = 1; weekday <= 6; weekday++) {
           for (const slot of SLOTS_PILATES) {
@@ -421,6 +420,8 @@ export default function PacientesPage() {
             const dataDaSemanaIso = `${dataDaSemana.getFullYear()}-${String(
               dataDaSemana.getMonth() + 1
             ).padStart(2, "0")}-${String(dataDaSemana.getDate()).padStart(2, "0")}`
+
+            const dataDaSemanaFormatada = dataDaSemana.toLocaleDateString("pt-BR")
 
             const foraDoPeriodo =
               dataDaSemana < inicioFiltro || dataDaSemana > fimFiltro
@@ -436,7 +437,6 @@ export default function PacientesPage() {
                     pacienteEstavaAtivoNaData(regra.patient_id, dataDaSemanaIso)
                   )
                 })
-
 
             const nomesPacientes = regrasDoHorario
               .map((regra) => {
@@ -454,6 +454,7 @@ export default function PacientesPage() {
             const vagas = Math.max(LIMITE_PILATES_POR_HORARIO - ocupados, 0)
 
             linhasSemana.push([
+              foraDoPeriodo ? "-" : dataDaSemanaFormatada,
               DIAS_SEMANA_RELATORIO[weekday - 1],
               `${slot.hora_inicio} às ${slot.hora_fim}`,
               foraDoPeriodo
@@ -469,12 +470,13 @@ export default function PacientesPage() {
         autoTable(doc, {
           startY: currentY,
           head: [[
+            "Data",
             "Dia da semana",
             "Horário",
             "Alunos/Pacientes no horário",
             "Vagas disponíveis",
           ]],
-          body: linhasSemana.length ? linhasSemana : [["-", "-", "Nenhum dado", "-"]],
+          body: linhasSemana.length ? linhasSemana : [["-", "-", "-", "Nenhum dado", "-"]],
           styles: {
             fontSize: 8,
             cellPadding: 2.5,
@@ -485,10 +487,11 @@ export default function PacientesPage() {
             fillColor: [37, 99, 235],
           },
           columnStyles: {
-            0: { cellWidth: 35 },
-            1: { cellWidth: 35 },
-            2: { cellWidth: 140 },
-            3: { cellWidth: 40 },
+            0: { cellWidth: 24 },
+            1: { cellWidth: 28 },
+            2: { cellWidth: 28 },
+            3: { cellWidth: 125 },
+            4: { cellWidth: 35 },
           },
         })
 
