@@ -254,7 +254,44 @@ export default function PacientesPage() {
     )
   }
 
-  function gerarRelatorioPacientesPdf() {
+  async function gerarRelatorioPacientesPdf() {
+  setMensagem("")
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
+  }
+
+  const { data: pacientesData, error: pacientesError } = await supabase
+    .from("patients")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("ativo", true)
+    .order("nome", { ascending: true })
+
+  if (pacientesError) {
+    setMensagem("Erro ao buscar pacientes para o relatório.")
+    return
+  }
+
+  const { data: regrasData, error: regrasError } = await supabase
+    .from("patient_schedule_rules")
+    .select("id, patient_id, weekday, servico, hora_inicio, hora_fim, ativo")
+    .eq("user_id", user.id)
+    .eq("ativo", true)
+
+  if (regrasError) {
+    setMensagem("Erro ao buscar horários para o relatório.")
+    return
+  }
+
+  const pacientesAtivos = (pacientesData ?? []) as Patient[]
+  const regrasAtivas = (regrasData ?? []) as ScheduleRule[]
+
   const doc = new jsPDF("landscape")
 
   doc.setFontSize(16)
@@ -263,23 +300,18 @@ export default function PacientesPage() {
   doc.setFontSize(10)
   doc.text(`Gerado em: ${new Date().toLocaleDateString("pt-BR")}`, 14, 22)
 
-  const pacientesAtivos = pacientes.filter((p) => p.ativo)
   const pacientesAtivosIds = new Set(pacientesAtivos.map((p) => p.id))
-
-  const regrasAtivas = todasRegras.filter((regra) => {
-    const servicoNormalizado = (regra.servico || "").trim()
-    return (
-      regra.ativo &&
+  const regrasValidas = regrasAtivas.filter(
+    (regra) =>
       !!regra.patient_id &&
       pacientesAtivosIds.has(regra.patient_id) &&
-      servicoNormalizado.length > 0
-    )
-  })
+      !!(regra.servico || "").trim()
+  )
 
   const linhas: Array<[string, string, string, string, string]> = []
 
-  // 1) PILATES - mostra todos os horários, inclusive vazios
-  const regrasPilatesAtivas = regrasAtivas.filter(
+  // PILATES - mostra todos os horários, inclusive vazios
+  const regrasPilatesAtivas = regrasValidas.filter(
     (regra) => (regra.servico || "").trim().toLowerCase() === "pilates"
   )
 
@@ -295,7 +327,7 @@ export default function PacientesPage() {
 
       const nomesPacientes = regrasDoHorario
         .map((regra) => {
-          const paciente = pacientes.find((p) => p.id === regra.patient_id)
+          const paciente = pacientesAtivos.find((p) => p.id === regra.patient_id)
           return paciente?.nome || "Paciente não encontrado"
         })
         .sort((a, b) => a.localeCompare(b))
@@ -313,8 +345,8 @@ export default function PacientesPage() {
     }
   }
 
-  // 2) OUTROS SERVIÇOS - mostra tudo que estiver cadastrado em regras
-  const outrasRegras = regrasAtivas
+  // OUTROS SERVIÇOS - mostra tudo que existir em regras
+  const outrasRegras = regrasValidas
     .filter((regra) => (regra.servico || "").trim().toLowerCase() !== "pilates")
     .sort((a, b) => {
       const servicoA = (a.servico || "").trim()
@@ -333,7 +365,7 @@ export default function PacientesPage() {
     const horario = `${normalizarHora(regra.hora_inicio)} às ${normalizarHora(regra.hora_fim)}`
     const chave = `${servico}::${dia}::${horario}`
 
-    const paciente = pacientes.find((p) => p.id === regra.patient_id)
+    const paciente = pacientesAtivos.find((p) => p.id === regra.patient_id)
     const nome = paciente?.nome || "Paciente não encontrado"
 
     if (!gruposOutros.has(chave)) {
@@ -357,9 +389,9 @@ export default function PacientesPage() {
       ])
     })
 
-  // 3) PACIENTES ATIVOS SEM HORÁRIO FIXO
+  // PACIENTES SEM HORÁRIO FIXO
   const pacientesComRegras = new Set(
-    regrasAtivas
+    regrasValidas
       .map((regra) => regra.patient_id)
       .filter((id): id is number => typeof id === "number")
   )
