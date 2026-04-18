@@ -276,8 +276,10 @@ export default function PacientesPage() {
 
   const linhas: Array<[string, string, string, string, string]> = []
 
-  // 1) Pilates: mostrar todos os horários, inclusive vazios
-  const regrasPilatesAtivas = regrasAtivas.filter((regra) => regra.servico === "Pilates")
+  // Pilates: mostra todos os horários, inclusive vazios
+  const regrasPilatesAtivas = regrasAtivas.filter(
+    (regra) => regra.servico === "Pilates"
+  )
 
   for (let weekday = 1; weekday <= 6; weekday++) {
     for (const slot of SLOTS_PILATES) {
@@ -309,8 +311,8 @@ export default function PacientesPage() {
     }
   }
 
-  // 2) Outros serviços: mostrar só os horários que existem
-  const outrosServicos = regrasAtivas
+  // Outros serviços: mostra só os horários realmente cadastrados
+  const outrasRegras = regrasAtivas
     .filter((regra) => regra.servico !== "Pilates")
     .sort((a, b) => {
       if (a.servico !== b.servico) return a.servico.localeCompare(b.servico)
@@ -320,7 +322,7 @@ export default function PacientesPage() {
 
   const gruposOutros = new Map<string, string[]>()
 
-  outrosServicos.forEach((regra) => {
+  outrasRegras.forEach((regra) => {
     const dia = DIAS_SEMANA_RELATORIO[Number(regra.weekday) - 1]
     const horario = `${normalizarHora(regra.hora_inicio)} às ${normalizarHora(regra.hora_fim)}`
     const chave = `${regra.servico}::${dia}::${horario}`
@@ -367,15 +369,14 @@ export default function PacientesPage() {
       fillColor: [37, 99, 235],
     },
     columnStyles: {
-      0: { cellWidth: 28 },
+      0: { cellWidth: 30 },
       1: { cellWidth: 32 },
-      2: { cellWidth: 34 },
+      2: { cellWidth: 36 },
       3: { cellWidth: 120 },
       4: { cellWidth: 35 },
     },
   })
 
-  
   doc.save("relatorio_horarios_vagas.pdf")
 }
 
