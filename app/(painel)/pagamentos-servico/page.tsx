@@ -351,8 +351,9 @@ const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
 
 useEffect(() => {
   const periodo = montarPeriodoDoMes(referenciaMesLote)
-  setDataInicioPeriodo(periodo.inicio)
-  setDataFimPeriodo(periodo.fim)
+
+  setDataInicioPeriodo((valorAtual) => valorAtual || periodo.inicio)
+  setDataFimPeriodo((valorAtual) => valorAtual || periodo.fim)
 }, [referenciaMesLote])
 
 useEffect(() => {
@@ -1442,7 +1443,7 @@ async function gerarCobrancasEmLote() {
   <input
     type="date"
     value={dataInicioPeriodo}
-    readOnly
+    onChange={(e) => setDataInicioPeriodo(e.target.value)}
   />
 </div>
 
@@ -1451,7 +1452,7 @@ async function gerarCobrancasEmLote() {
   <input
     type="date"
     value={dataFimPeriodo}
-    readOnly
+    onChange={(e) => setDataFimPeriodo(e.target.value)}
   />
 </div>
 
@@ -1574,12 +1575,12 @@ async function gerarCobrancasEmLote() {
         ))}
 
         {pacientesLote.length === 0 && (
-          <tr>
-            <td style={td} colSpan={8}>
-              Nenhum paciente encontrado para o mês de referência informado.
-            </td>
-          </tr>
-        )}
+  <tr>
+    <td style={td} colSpan={8}>
+      Nenhum paciente encontrado para o período de {formatarData(dataInicioPeriodo)} até {formatarData(dataFimPeriodo)}.
+    </td>
+  </tr>
+)}
       </tbody>
     </table>
   </div>
