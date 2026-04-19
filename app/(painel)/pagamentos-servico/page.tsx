@@ -74,6 +74,7 @@ type PacienteLote = {
   data_vencimento: string
   servico: string
   selecionado: boolean
+  elegivel: boolean
 }
 
 function hojeInputDate() {
@@ -353,9 +354,8 @@ const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
 
 useEffect(() => {
   const periodo = montarPeriodoDoMes(referenciaMesLote)
-
-  setDataInicioPeriodo((valorAtual) => valorAtual || periodo.inicio)
-  setDataFimPeriodo((valorAtual) => valorAtual || periodo.fim)
+  setDataInicioPeriodo(periodo.inicio)
+  setDataFimPeriodo(periodo.fim)
 }, [referenciaMesLote])
 
 useEffect(() => {
@@ -363,32 +363,31 @@ useEffect(() => {
 }, [])
 
 useEffect(() => {
-  const lista = pacientes
-    .map((p) => {
-      const elegivel = pacienteElegivelNoMesDeReferencia(
-        p,
-        referenciaMesLote,
-        historicoStatus
-      )
+  const lista = pacientes.map((p) => {
+    const elegivel = pacienteElegivelNoMesDeReferencia(
+      p,
+      referenciaMesLote,
+      historicoStatus
+    )
 
-      const automatico = montarCompetenciaDoPacienteNoMes(
-        referenciaMesLote,
-        p
-      )
+    const automatico = montarCompetenciaDoPacienteNoMes(
+      referenciaMesLote,
+      p
+    )
 
-      return {
-        patient_id: p.id,
-        nome: p.nome,
-        valor_mensal: Number(p.valor_mensal || 0),
-        dia_base_pagamento: p.dia_base_pagamento,
-        competencia_inicio: automatico.competenciaInicio,
-        competencia_fim: automatico.competenciaFim,
-        data_vencimento: automatico.dataVencimento,
-        servico: servicoLote,
-        selecionado: selecionarTodosLote ? elegivel : false,
-      }
-    })
-    .filter((item) => item.selecionado || !selecionarTodosLote)
+    return {
+      patient_id: p.id,
+      nome: p.nome,
+      valor_mensal: Number(p.valor_mensal || 0),
+      dia_base_pagamento: p.dia_base_pagamento,
+      competencia_inicio: automatico.competenciaInicio,
+      competencia_fim: automatico.competenciaFim,
+      data_vencimento: automatico.dataVencimento,
+      servico: servicoLote,
+      selecionado: selecionarTodosLote ? elegivel : false, 
+      elegivel,
+    }
+  })
 
   setPacientesLote(lista)
 }, [
@@ -397,7 +396,7 @@ useEffect(() => {
   referenciaMesLote,
   selecionarTodosLote,
   historicoStatus,
-]) 
+])
 
   async function carregarDados() {
     setMensagem("")
@@ -1482,7 +1481,7 @@ async function gerarCobrancasEmLote() {
   </div>
 
   <div style={{ marginTop: 16 }}>
-    <strong>Pacientes ativos do lote</strong>
+    <strong>Pacientes do lote</strong>
   </div>
 
   <div className="data-table-wrap" style={{ marginTop: 10 }}>
@@ -1497,6 +1496,7 @@ async function gerarCobrancasEmLote() {
   <th style={th}>Competência início</th>
   <th style={th}>Competência fim</th>
   <th style={th}>Vencimento sugerido</th>
+  <th style={th}>Elegível no mês</th>
 </tr>
       </thead>
       <tbody>
@@ -1524,6 +1524,7 @@ async function gerarCobrancasEmLote() {
                 <option value="Outro">Outro</option>
               </select>
             </td>
+            
             <td style={td}>
               <input
                 type="number"
@@ -1567,13 +1568,18 @@ async function gerarCobrancasEmLote() {
                 }
               />
             </td>
+
+            <td style={td}>
+  {item.elegivel ? "Sim" : "Não"}
+</td>
+
           </tr>
         ))}
 
         {pacientesLote.length === 0 && (
   <tr>
     <td style={td} colSpan={8}>
-      Nenhum paciente elegível foi encontrado para o mês de referência {formatarData(referenciaMesLote)}.
+      Nenhum paciente cadastrado foi encontrado.
     </td>
   </tr>
 )}
