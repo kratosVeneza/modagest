@@ -223,7 +223,7 @@ function formaPagamentoOuNull(valor: string) {
 }
 
 function pacienteEstavaAtivoNoPeriodo(
-  patientId: number,
+  paciente: Patient,
   inicio: string,
   fim: string,
   historicoStatus: PatientStatusHistory[]
@@ -233,15 +233,29 @@ function pacienteEstavaAtivoNoPeriodo(
   const inicioPeriodo = new Date(`${inicio}T00:00:00`)
   const fimPeriodo = new Date(`${fim}T23:59:59`)
 
-  return historicoStatus.some((h) => {
-    if (h.patient_id !== patientId) return false
-    if (h.status !== "ativo") return false
+  const historicoDoPaciente = historicoStatus.filter((h) => h.patient_id === paciente.id)
 
-    const inicioStatus = new Date(`${h.start_date}T00:00:00`)
-    const fimStatus = h.end_date ? new Date(`${h.end_date}T23:59:59`) : null
+  if (historicoDoPaciente.length > 0) {
+    return historicoDoPaciente.some((h) => {
+      if (h.status !== "ativo") return false
 
-    return inicioStatus <= fimPeriodo && (!fimStatus || fimStatus >= inicioPeriodo)
-  })
+      const inicioStatus = new Date(`${h.start_date}T00:00:00`)
+      const fimStatus = h.end_date ? new Date(`${h.end_date}T23:59:59`) : null
+
+      return inicioStatus <= fimPeriodo && (!fimStatus || fimStatus >= inicioPeriodo)
+    })
+  }
+
+  // fallback para pacientes antigos sem histórico
+  if (!paciente.data_inicio) return false
+
+  const dataInicioPaciente = new Date(`${paciente.data_inicio}T00:00:00`)
+
+  if (paciente.ativo) {
+    return dataInicioPaciente <= fimPeriodo
+  }
+
+  return false
 }
 
 
@@ -292,36 +306,44 @@ const [pacientesLote, setPacientesLote] = useState<PacienteLote[]>([])
 const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
 
   useEffect(() => {
-    const lista = pacientes
-      .filter((p) =>
-        pacienteEstavaAtivoNoPeriodo(
-          p.id,
-          dataInicioPeriodo,
-          dataFimPeriodo,
-          historicoStatus
-        )
+  const lista = pacientes
+    .filter((p) =>
+      pacienteEstavaAtivoNoPeriodo(
+        p,
+        dataInicioPeriodo,
+        dataFimPeriodo,
+        historicoStatus
       )
-      .map((p) => {
-        const automatico = montarCompetenciaAutomaticaPorDiaBase(
-          referenciaMesLote,
-          p.dia_base_pagamento
-        )
+    )
+    .map((p) => {
+      const automatico = montarCompetenciaAutomaticaPorDiaBase(
+        referenciaMesLote,
+        p.dia_base_pagamento
+      )
 
-        return {
-          patient_id: p.id,
-          nome: p.nome,
-          valor_mensal: Number(p.valor_mensal || 0),
-          dia_base_pagamento: p.dia_base_pagamento,
-          competencia_inicio: automatico.competenciaInicio,
-          competencia_fim: automatico.competenciaFim,
-          data_vencimento: automatico.dataVencimento,
-          servico: servicoLote,
-          selecionado: selecionarTodosLote,
-        }
-      })
+      return {
+        patient_id: p.id,
+        nome: p.nome,
+        valor_mensal: Number(p.valor_mensal || 0),
+        dia_base_pagamento: p.dia_base_pagamento,
+        competencia_inicio: automatico.competenciaInicio,
+        competencia_fim: automatico.competenciaFim,
+        data_vencimento: automatico.dataVencimento,
+        servico: servicoLote,
+        selecionado: selecionarTodosLote,
+      }
+    })
 
-    setPacientesLote(lista)
-  }, [pacientes, servicoLote, referenciaMesLote, selecionarTodosLote, dataInicioPeriodo, dataFimPeriodo, historicoStatus])
+  setPacientesLote(lista)
+}, [
+  pacientes,
+  servicoLote,
+  referenciaMesLote,
+  selecionarTodosLote,
+  dataInicioPeriodo,
+  dataFimPeriodo,
+  historicoStatus,
+])
 
   async function carregarDados() {
     setMensagem("")
@@ -942,14 +964,17 @@ async function gerarCobrancasEmLote() {
     return
   } 
 
-  const pacientesValidos = selecionados.filter((p) =>
-    pacienteEstavaAtivoNoPeriodo(
-      p.patient_id,
-      dataInicioPeriodo,
-      dataFimPeriodo,
-      historicoStatus
-    )
+  const pacientesValidos = selecionados.filter((item) => {
+  const paciente = pacientes.find((p) => p.id === item.patient_id)
+  if (!paciente) return false
+
+  return pacienteEstavaAtivoNoPeriodo(
+    paciente,
+    dataInicioPeriodo,
+    dataFimPeriodo,
+    historicoStatus
   )
+})
 
   if (pacientesValidos.length === 0) {
     setMensagem("Nenhum paciente válido foi encontrado no período informado.")
