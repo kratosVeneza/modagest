@@ -298,7 +298,11 @@ const [historicoStatus, setHistoricoStatus] = useState<PatientStatusHistory[]>([
 const [pacientesLote, setPacientesLote] = useState<PacienteLote[]>([])
 const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
 
-  useEffect(() => {
+useEffect(() => {
+  carregarDados()
+}, [])
+
+useEffect(() => {
   const listaBase =
     dataInicioPeriodo && dataFimPeriodo
       ? pacientes.filter((p) =>
