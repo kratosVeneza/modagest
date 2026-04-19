@@ -12,6 +12,14 @@ type Patient = {
   valor_mensal?: number | null
 }
 
+type PatientStatusHistory = {
+  id: number
+  patient_id: number
+  status: "ativo" | "inativo"
+  start_date: string
+  end_date: string | null
+}
+
 type Appointment = {
   id: number
   patient_id: number
@@ -81,6 +89,7 @@ export default function AgendaPage() {
   const [agendamentos, setAgendamentos] = useState<Appointment[]>([])
   const [regras, setRegras] = useState<ScheduleRule[]>([])
   const [reposicoes, setReposicoes] = useState<Replacement[]>([])
+  const [historicoStatus, setHistoricoStatus] = useState<PatientStatusHistory[]>([])
   const [mensagem, setMensagem] = useState("")
   const [busca, setBusca] = useState("")
 
@@ -184,10 +193,21 @@ export default function AgendaPage() {
       return
     }
 
+    const { data: historicoData, error: historicoError } = await supabase
+      .from("patient_status_history")
+      .select("id, patient_id, status, start_date, end_date")
+      .eq("user_id", user.id)
+
+    if (historicoError) {
+      setMensagem("Erro ao carregar histórico de status.")
+      return
+    }
+
     setPacientes((pacientesData ?? []) as Patient[])
     setRegras((regrasData ?? []) as ScheduleRule[])
     setAgendamentos((agendaData ?? []) as unknown as Appointment[])
     setReposicoes((reposicoesData ?? []) as unknown as Replacement[])
+    setHistoricoStatus((historicoData ?? []) as PatientStatusHistory[])
 
   }
 
@@ -537,6 +557,20 @@ export default function AgendaPage() {
     await carregarDados()
   }
 
+  function pacienteEstavaAtivoNaData(patientId: number, dataIso: string) {
+    const dataRef = new Date(`${dataIso}T12:00:00`)
+
+    return historicoStatus.some((item) => {
+      if (item.patient_id !== patientId) return false
+      if (item.status !== "ativo") return false
+
+      const inicio = new Date(`${item.start_date}T00:00:00`)
+      const fim = item.end_date ? new Date(`${item.end_date}T23:59:59`) : null
+
+      return dataRef >= inicio && (!fim || dataRef <= fim)
+    })
+  }
+
   const agendamentosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     if (!termo) return agendamentos
@@ -557,21 +591,16 @@ export default function AgendaPage() {
   const dataObj = new Date(`${dataFiltroDia}T12:00:00`)
   const weekday = dataObj.getDay()
 
-    const pacientesElegiveis = pacientes.filter((p) => {
-    if (!p.ativo) return false
-    if (!p.data_inicio) return false
-
-    const dataInicioPaciente = new Date(`${p.data_inicio}T00:00:00`)
-    const dataSelecionada = new Date(`${dataFiltroDia}T00:00:00`)
-
-    return dataSelecionada >= dataInicioPaciente
-  })
+    const pacientesElegiveis = pacientes.filter((p) =>
+    pacienteEstavaAtivoNaData(p.id, dataFiltroDia)
+  )
 
   const elegiveisIds = new Set(pacientesElegiveis.map((p) => p.id))
 
   const regrasDoDia = regras.filter(
     (r) => r.ativo && r.weekday === weekday && elegiveisIds.has(r.patient_id)
   )
+
 
   const agendamentosDoDia = agendamentos.filter(
     (a) => a.data_agendamento === dataFiltroDia
@@ -994,12 +1023,13 @@ export default function AgendaPage() {
             <tbody>
               {agendamentosFiltrados.map((a) => {
                 const paciente = pacientes.find((p) => p.id === a.patient_id)
+                const ativoNaData = pacienteEstavaAtivoNaData(a.patient_id, a.data_agendamento)
 
                 return (
                   <tr
                     key={a.id}
                     style={{
-                      background: paciente?.ativo ? "#f0fdf4" : "#f8fafc",
+                      background: ativoNaData ? "#f0fdf4" : "#f8fafc",
                     }}
                   >
                     <td style={td}>{a.patients?.nome || "-"}</td>
