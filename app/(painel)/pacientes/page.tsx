@@ -112,9 +112,9 @@ export default function PacientesPage() {
   const [dataInicioRelatorio, setDataInicioRelatorio] = useState("")
   const [dataFimRelatorio, setDataFimRelatorio] = useState("")
   const [dataInativacao, setDataInativacao] = useState("")
-  const [pacientePendenciaInativacao, setPacientePendenciaInativacao] = useState<number | null>(null)
-  const [dataReativacao, setDataReativacao] = useState("")
-  const [pacientePendenciaReativacao, setPacientePendenciaReativacao] = useState<number | null>(null)
+const [pacientePendenciaInativacao, setPacientePendenciaInativacao] = useState<number | null>(null)
+const [dataReativacao, setDataReativacao] = useState("")
+const [pacientePendenciaReativacao, setPacientePendenciaReativacao] = useState<number | null>(null)
   const [horarios, setHorarios] = useState<ScheduleRule[]>([
     { weekday: 1, servico: "Pilates", hora_inicio: "", hora_fim: "", ativo: true },
   ])
@@ -668,72 +668,72 @@ if (error || !data) {
   }
 
   async function confirmarAlteracaoStatusPaciente(paciente: Patient, novoStatus: boolean) {
-    setMensagem("")
+  setMensagem("")
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      setMensagem("Você precisa estar logado.")
-      return
-    }
-
-    const hoje = new Date().toISOString().slice(0, 10)
-    const dataNovoPeriodo = novoStatus
-      ? (dataReativacao || dataInicio || hoje)
-      : (dataInativacao || hoje)
-
-    const { error } = await supabase
-      .from("patients")
-      .update({
-        ativo: novoStatus,
-        data_inicio: novoStatus ? (dataInicio || paciente.data_inicio) : paciente.data_inicio,
-        dia_base_pagamento: novoStatus
-          ? diaBasePagamento
-            ? Number(diaBasePagamento)
-            : paciente.dia_base_pagamento
-          : paciente.dia_base_pagamento,
-        valor_mensal: novoStatus
-          ? valorMensal
-            ? Number(valorMensal)
-            : paciente.valor_mensal
-          : paciente.valor_mensal,
-      })
-      .eq("id", paciente.id)
-      .eq("user_id", user.id)
-
-    if (error) {
-      setMensagem(error.message || "Erro ao alterar status.")
-      return
-    }
-
-    await supabase
-      .from("patient_status_history")
-      .update({ end_date: dataNovoPeriodo })
-      .eq("patient_id", paciente.id)
-      .eq("user_id", user.id)
-      .is("end_date", null)
-
-    await supabase.from("patient_status_history").insert([
-      {
-        user_id: user.id,
-        patient_id: paciente.id,
-        status: novoStatus ? "ativo" : "inativo",
-        start_date: dataNovoPeriodo,
-        end_date: null,
-      },
-    ])
-
-    setPacientePendenciaInativacao(null)
-    setPacientePendenciaReativacao(null)
-    setDataInativacao("")
-    setDataReativacao("")
-    setMensagem(
-      novoStatus ? "Aluno/Paciente reativado com sucesso." : "Aluno/Paciente inativado com sucesso."
-    )
-    await carregarPacientes()
+  if (!user) {
+    setMensagem("Você precisa estar logado.")
+    return
   }
+
+  const hoje = new Date().toISOString().slice(0, 10)
+  const dataNovoPeriodo = novoStatus
+    ? (dataReativacao || dataInicio || hoje)
+    : (dataInativacao || hoje)
+
+  const { error } = await supabase
+    .from("patients")
+    .update({
+      ativo: novoStatus,
+      data_inicio: novoStatus ? (dataReativacao || dataInicio || paciente.data_inicio) : paciente.data_inicio,
+      dia_base_pagamento: novoStatus
+        ? diaBasePagamento
+          ? Number(diaBasePagamento)
+          : paciente.dia_base_pagamento
+        : paciente.dia_base_pagamento,
+      valor_mensal: novoStatus
+        ? valorMensal
+          ? Number(valorMensal)
+          : paciente.valor_mensal
+        : paciente.valor_mensal,
+    })
+    .eq("id", paciente.id)
+    .eq("user_id", user.id)
+
+  if (error) {
+    setMensagem(error.message || "Erro ao alterar status.")
+    return
+  }
+
+  await supabase
+    .from("patient_status_history")
+    .update({ end_date: dataNovoPeriodo })
+    .eq("patient_id", paciente.id)
+    .eq("user_id", user.id)
+    .is("end_date", null)
+
+  await supabase.from("patient_status_history").insert([
+    {
+      user_id: user.id,
+      patient_id: paciente.id,
+      status: novoStatus ? "ativo" : "inativo",
+      start_date: dataNovoPeriodo,
+      end_date: null,
+    },
+  ])
+
+  setPacientePendenciaInativacao(null)
+  setPacientePendenciaReativacao(null)
+  setDataInativacao("")
+  setDataReativacao("")
+  setMensagem(
+    novoStatus ? "Aluno/Paciente reativado com sucesso." : "Aluno/Paciente inativado com sucesso."
+  )
+  await carregarPacientes()
+}
 
   async function excluirPaciente(id: number) {
     setMensagem("")
@@ -1041,110 +1041,156 @@ if (error || !data) {
             </thead>
             <tbody>
               {pacientesFiltrados.map((p) => (
-                <tr
-                  key={p.id}
-                  style={{
-                    background: p.ativo ? "#f0fdf4" : "#f8fafc",
-                  }}
-                >
-                  <td style={td}>{p.nome}</td>
-                  <td style={td}>{p.telefone || "-"}</td>
-                  <td style={td}>
-                    {new Date(`${p.data_inicio}T12:00:00`).toLocaleDateString("pt-BR")}
-                  </td>
-                  <td style={td}>
-                    {p.ativo
-                      ? calcularProximoPagamento(p.data_inicio, p.dia_base_pagamento)
-                      : "-"}
-                  </td>
-                  <td style={td}>R$ {Number(p.valor_mensal || 0).toFixed(2)}</td>
-                  <td style={td}>
-                    <span className={p.ativo ? "status-pill status-green" : "status-pill status-gray"}>
-                      {p.ativo ? "Ativo" : "Inativo"}
-                    </span>
-                  </td>
-                  <td style={td}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => editarPaciente(p)}
-                      >
-                        Editar
-                      </button>
+  <tr
+    key={p.id}
+    style={{
+      background: p.ativo ? "#f0fdf4" : "#f8fafc",
+    }}
+  >
+    <td style={td}>{p.nome}</td>
+    <td style={td}>{p.telefone || "-"}</td>
+    <td style={td}>
+      {new Date(`${p.data_inicio}T12:00:00`).toLocaleDateString("pt-BR")}
+    </td>
+    <td style={td}>
+      {p.ativo
+        ? calcularProximoPagamento(p.data_inicio, p.dia_base_pagamento)
+        : "-"}
+    </td>
+    <td style={td}>R$ {Number(p.valor_mensal || 0).toFixed(2)}</td>
+    <td style={td}>
+      <span className={p.ativo ? "status-pill status-green" : "status-pill status-gray"}>
+        {p.ativo ? "Ativo" : "Inativo"}
+      </span>
+    </td>
 
-                      {p.ativo ? (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => {
-                            setPacientePendenciaInativacao(p.id)
-                            setPacientePendenciaReativacao(null)
-                            setDataInativacao("")
-                          }}
-                        >
-                          Inativar
-                        </button>
-                      ) : (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => {
-                            setPacientePendenciaReativacao(p.id)
-                            setPacientePendenciaInativacao(null)
-                            setDataReativacao("")
-                          }}
-                        >
-                          Reativar
-                        </button>
-                      )}
+    <td style={td}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => editarPaciente(p)}
+        >
+          Editar
+        </button>
 
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => excluirPaciente(p.id)}
-                      >
-                        Excluir
-                      </button>
-                    </div>
+        {p.ativo ? (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setPacientePendenciaInativacao(p.id)
+              setPacientePendenciaReativacao(null)
+              setDataInativacao("")
+            }}
+          >
+            Inativar
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setPacientePendenciaReativacao(p.id)
+              setPacientePendenciaInativacao(null)
+              setDataReativacao("")
+            }}
+          >
+            Reativar
+          </button>
+        )}
 
-                    {pacientePendenciaReativacao === p.id && (
-                      <div
-                        style={{
-                          marginTop: 10,
-                          display: "flex",
-                          gap: 8,
-                          flexWrap: "wrap",
-                          alignItems: "end",
-                        }}
-                      >
-                        <div>
-                          <label>Data da volta</label>
-                          <input
-                            type="date"
-                            value={dataReativacao}
-                            onChange={(e) => setDataReativacao(e.target.value)}
-                          />
-                        </div>
+        <button
+          type="button"
+          className="btn btn-danger btn-sm"
+          onClick={() => excluirPaciente(p.id)}
+        >
+          Excluir
+        </button>
+      </div>
 
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => confirmarAlteracaoStatusPaciente(p, true)}
-                        >
-                          Confirmar reativação
-                        </button>
+      {pacientePendenciaInativacao === p.id && (
+        <div
+          style={{
+            marginTop: 10,
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "end",
+          }}
+        >
+          <div>
+            <label>Data de inativação</label>
+            <input
+              type="date"
+              value={dataInativacao}
+              onChange={(e) => setDataInativacao(e.target.value)}
+            />
+          </div>
 
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => {
-                            setPacientePendenciaReativacao(null)
-                            setDataReativacao("")
-                          }}
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    )}
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            onClick={() => confirmarAlteracaoStatusPaciente(p, false)}
+          >
+            Confirmar inativação
+          </button>
 
-                  </td>
-                </tr>
-              ))}
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setPacientePendenciaInativacao(null)
+              setDataInativacao("")
+            }}
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {pacientePendenciaReativacao === p.id && (
+        <div
+          style={{
+            marginTop: 10,
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "end",
+          }}
+        >
+          <div>
+            <label>Data da volta</label>
+            <input
+              type="date"
+              value={dataReativacao}
+              onChange={(e) => setDataReativacao(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => confirmarAlteracaoStatusPaciente(p, true)}
+          >
+            Confirmar reativação
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setPacientePendenciaReativacao(null)
+              setDataReativacao("")
+            }}
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+    </td>
+  </tr>
+))}
 
               {pacientesFiltrados.length === 0 && (
                 <tr>
