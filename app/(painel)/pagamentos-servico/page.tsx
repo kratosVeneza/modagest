@@ -246,7 +246,6 @@ function pacienteEstavaAtivoNoPeriodo(
     })
   }
 
-  // fallback quando ainda não existe histórico
   if (!paciente.data_inicio) return false
 
   const dataInicioPaciente = new Date(`${paciente.data_inicio}T00:00:00`)
@@ -355,10 +354,10 @@ const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
     }
 
     const { data: pacientesData, error: pacientesError } = await supabase
-      .from("patients")
-      .select("id, nome, data_inicio, dia_base_pagamento, valor_mensal, ativo")
-      .eq("user_id", user.id)
-      .order("nome", { ascending: true })
+  .from("patients")
+  .select("id, nome, data_inicio, dia_base_pagamento, valor_mensal, ativo")
+  .eq("user_id", user.id)
+  .order("nome", { ascending: true })
 
     if (pacientesError) {
       setMensagem("Erro ao carregar pacientes.")
@@ -416,20 +415,20 @@ const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
     }
 
     const { data: historicoData, error: historicoError } = await supabase
-      .from("patient_status_history")
-      .select("id, patient_id, status, start_date, end_date")
-      .eq("user_id", user.id)
+  .from("patient_status_history")
+  .select("id, patient_id, status, start_date, end_date")
+  .eq("user_id", user.id)
 
-    setPacientes((pacientesData ?? []) as Patient[])
-    setCobrancas((cobrancasData ?? []) as unknown as ServiceBilling[])
-    setPagamentos((pagamentosData ?? []) as unknown as ServicePayment[])
+setPacientes((pacientesData ?? []) as Patient[])
+setCobrancas((cobrancasData ?? []) as unknown as ServiceBilling[])
+setPagamentos((pagamentosData ?? []) as unknown as ServicePayment[])
 
-    if (historicoError) {
-      setHistoricoStatus([])
-      setMensagem("Histórico de status não carregado. Os pacientes foram exibidos com base no cadastro atual.")
-    } else {
-      setHistoricoStatus((historicoData ?? []) as PatientStatusHistory[])
-    }
+if (historicoError) {
+  setHistoricoStatus([])
+  setMensagem("Histórico de status não carregado. Os pacientes foram exibidos com base no cadastro atual.")
+} else {
+  setHistoricoStatus((historicoData ?? []) as PatientStatusHistory[])
+}
 
   }
 
