@@ -192,6 +192,44 @@ function montarPeriodoDoMes(referenciaMes?: string | null) {
   return { inicio, fim }
 }
 
+function montarCompetenciaDoPacienteNoMes(
+  referenciaMes: string,
+  paciente: Patient
+) {
+  const dataRef = new Date(`${referenciaMes}T12:00:00`)
+  const anoAtual = dataRef.getFullYear()
+  const mesAtual = dataRef.getMonth()
+
+  const diaBase = Number(
+    paciente.dia_base_pagamento ||
+      (paciente.data_inicio ? new Date(`${paciente.data_inicio}T12:00:00`).getDate() : 1)
+  )
+
+  const dataVencimento = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
+
+  const dataAnterior = new Date(anoAtual, mesAtual - 1, 1, 12, 0, 0)
+  const anoAnterior = dataAnterior.getFullYear()
+  const mesAnterior = dataAnterior.getMonth()
+
+  let competenciaInicio = montarDataBaseNoMes(anoAnterior, mesAnterior, diaBase)
+  let competenciaFim = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
+
+  if (paciente.data_inicio) {
+    const entrada = new Date(`${paciente.data_inicio}T12:00:00`)
+    const entradaIso = `${entrada.getFullYear()}-${String(entrada.getMonth() + 1).padStart(2, "0")}-${String(entrada.getDate()).padStart(2, "0")}`
+
+    if (entradaIso > competenciaInicio) {
+      competenciaInicio = entradaIso
+    }
+  }
+
+  return {
+    competenciaInicio,
+    competenciaFim,
+    dataVencimento,
+  }
+}
+
 function statusVisualDaCobranca(
   cobranca: ServiceBilling,
   valorPago: number,
@@ -259,14 +297,9 @@ function pacienteEstavaAtivoNoPeriodo(
     })
   }
 
-  // fallback só para pacientes sem histórico antigo
   if (!paciente.data_inicio) return false
 
   const dataInicioPaciente = new Date(`${paciente.data_inicio}T00:00:00`)
-
-  // se está inativo hoje e não tem histórico, melhor não assumir que estava ativo no mês
-  if (!paciente.ativo) return false
-
   return dataInicioPaciente <= fimPeriodo
 }
 
@@ -340,9 +373,9 @@ useEffect(() => {
       : pacientes
 
   const lista = listaBase.map((p) => {
-    const automatico = montarCompetenciaAutomaticaPorDiaBase(
+    const automatico = montarCompetenciaDoPacienteNoMes(
       referenciaMesLote,
-      p.dia_base_pagamento
+      p
     )
 
     return {
@@ -1543,7 +1576,7 @@ async function gerarCobrancasEmLote() {
         {pacientesLote.length === 0 && (
           <tr>
             <td style={td} colSpan={8}>
-              Nenhum paciente ativo encontrado.
+              Nenhum paciente encontrado para o mês de referência informado.
             </td>
           </tr>
         )}
