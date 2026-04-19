@@ -12,6 +12,14 @@ type Patient = {
   ativo: boolean
 }
 
+type PatientStatusHistory = {
+  id: number
+  patient_id: number
+  status: "ativo" | "inativo"
+  start_date: string
+  end_date: string | null
+}
+
 type ServiceBilling = {
   id: number
   patient_id: number
@@ -214,6 +222,29 @@ function formaPagamentoOuNull(valor: string) {
   return limpo ? limpo : null
 }
 
+function pacienteEstavaAtivoNoPeriodo(
+  patientId: number,
+  inicio: string,
+  fim: string,
+  historicoStatus: PatientStatusHistory[]
+) {
+  if (!inicio || !fim) return true
+
+  const inicioPeriodo = new Date(`${inicio}T00:00:00`)
+  const fimPeriodo = new Date(`${fim}T23:59:59`)
+
+  return historicoStatus.some((h) => {
+    if (h.patient_id !== patientId) return false
+    if (h.status !== "ativo") return false
+
+    const inicioStatus = new Date(`${h.start_date}T00:00:00`)
+    const fimStatus = h.end_date ? new Date(`${h.end_date}T23:59:59`) : null
+
+    return inicioStatus <= fimPeriodo && (!fimStatus || fimStatus >= inicioPeriodo)
+  })
+}
+
+
 export default function PagamentosServicoPage() {
   const [pacientes, setPacientes] = useState<Patient[]>([])
   const [cobrancas, setCobrancas] = useState<ServiceBilling[]>([])
@@ -254,35 +285,43 @@ export default function PagamentosServicoPage() {
 
  const [servicoLote, setServicoLote] = useState("Pilates")
 const [referenciaMesLote, setReferenciaMesLote] = useState(hojeInputDate())
+const [dataInicioPeriodo, setDataInicioPeriodo] = useState("")
+const [dataFimPeriodo, setDataFimPeriodo] = useState("")
+const [historicoStatus, setHistoricoStatus] = useState<PatientStatusHistory[]>([])
 const [pacientesLote, setPacientesLote] = useState<PacienteLote[]>([])
 const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
 
   useEffect(() => {
-    carregarDados()
-  }, [])
+    const lista = pacientes
+      .filter((p) =>
+        pacienteEstavaAtivoNoPeriodo(
+          p.id,
+          dataInicioPeriodo,
+          dataFimPeriodo,
+          historicoStatus
+        )
+      )
+      .map((p) => {
+        const automatico = montarCompetenciaAutomaticaPorDiaBase(
+          referenciaMesLote,
+          p.dia_base_pagamento
+        )
 
-  useEffect(() => {
-  const lista = pacientes.map((p) => {
-    const automatico = montarCompetenciaAutomaticaPorDiaBase(
-      referenciaMesLote,
-      p.dia_base_pagamento
-    )
+        return {
+          patient_id: p.id,
+          nome: p.nome,
+          valor_mensal: Number(p.valor_mensal || 0),
+          dia_base_pagamento: p.dia_base_pagamento,
+          competencia_inicio: automatico.competenciaInicio,
+          competencia_fim: automatico.competenciaFim,
+          data_vencimento: automatico.dataVencimento,
+          servico: servicoLote,
+          selecionado: selecionarTodosLote,
+        }
+      })
 
-    return {
-      patient_id: p.id,
-      nome: p.nome,
-      valor_mensal: Number(p.valor_mensal || 0),
-      dia_base_pagamento: p.dia_base_pagamento,
-      competencia_inicio: automatico.competenciaInicio,
-      competencia_fim: automatico.competenciaFim,
-      data_vencimento: automatico.dataVencimento,
-      servico: servicoLote,
-      selecionado: selecionarTodosLote,
-    }
-  })
-
-  setPacientesLote(lista)
-}, [pacientes, servicoLote, referenciaMesLote, selecionarTodosLote])
+    setPacientesLote(lista)
+  }, [pacientes, servicoLote, referenciaMesLote, selecionarTodosLote, dataInicioPeriodo, dataFimPeriodo, historicoStatus])
 
   async function carregarDados() {
     setMensagem("")
@@ -300,7 +339,6 @@ const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
       .from("patients")
       .select("id, nome, data_inicio, dia_base_pagamento, valor_mensal, ativo")
       .eq("user_id", user.id)
-      .eq("ativo", true)
       .order("nome", { ascending: true })
 
     if (pacientesError) {
@@ -358,9 +396,20 @@ const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
       return
     }
 
+    const { data: historicoData, error: historicoError } = await supabase
+      .from("patient_status_history")
+      .select("id, patient_id, status, start_date, end_date")
+      .eq("user_id", user.id)
+
+    if (historicoError) {
+      setMensagem("Erro ao carregar histórico de status.")
+      return
+    }
+
     setPacientes((pacientesData ?? []) as Patient[])
     setCobrancas((cobrancasData ?? []) as unknown as ServiceBilling[])
     setPagamentos((pagamentosData ?? []) as unknown as ServicePayment[])
+    setHistoricoStatus((historicoData ?? []) as PatientStatusHistory[])
   }
 
   const valorOriginalNumero = Number(valorOriginal || 0)
@@ -884,29 +933,30 @@ async function gerarCobrancasEmLote() {
   }
 
   if (!referenciaMesLote) {
-  setMensagem("Informe o mês de referência do lote.")
-  return
-}
-
-  const pacientesIds = selecionados.map((p) => p.patient_id)
-
-  const { data: pacientesAtivosBanco, error: pacientesAtivosError } = await supabase
-    .from("patients")
-    .select("id, ativo")
-    .eq("user_id", user.id)
-    .in("id", pacientesIds)
-    .eq("ativo", true)
-
-  if (pacientesAtivosError) {
-    setMensagem("Erro ao validar pacientes ativos do lote.")
+    setMensagem("Informe o mês de referência do lote.")
     return
   }
 
-  const idsAtivos = new Set((pacientesAtivosBanco || []).map((p: any) => Number(p.id)))
+  if (!dataInicioPeriodo || !dataFimPeriodo) {
+    setMensagem("Informe a data inicial e final do período para localizar os pacientes válidos.")
+    return
+  } 
 
-  const cobrancasParaInserir = selecionados
-    .filter((p) => idsAtivos.has(Number(p.patient_id)))
-    .map((p) => ({
+  const pacientesValidos = selecionados.filter((p) =>
+    pacienteEstavaAtivoNoPeriodo(
+      p.patient_id,
+      dataInicioPeriodo,
+      dataFimPeriodo,
+      historicoStatus
+    )
+  )
+
+  if (pacientesValidos.length === 0) {
+    setMensagem("Nenhum paciente válido foi encontrado no período informado.")
+    return
+  }
+
+  const cobrancasParaInserir = pacientesValidos.map((p) => ({ 
       user_id: user.id,
       patient_id: p.patient_id,
       servico: p.servico,
@@ -1293,7 +1343,7 @@ async function gerarCobrancasEmLote() {
     </div>
 
     <div>
-      <label>Selecionar todos os ativos</label>
+      <label>Selecionar todos os listados</label>
       <select
         value={selecionarTodosLote ? "sim" : "nao"}
         onChange={(e) => setSelecionarTodosLote(e.target.value === "sim")}
@@ -1304,32 +1354,50 @@ async function gerarCobrancasEmLote() {
     </div>
 
     <div>
-  <label>Mês de referência do lote</label>
-  <input
-    type="date"
-    value={referenciaMesLote}
-    onChange={(e) => setReferenciaMesLote(e.target.value)}
-  />
-</div>
+      <label>Data inicial do período</label>
+      <input
+        type="date"
+        value={dataInicioPeriodo}
+        onChange={(e) => setDataInicioPeriodo(e.target.value)}
+      />
+    </div>
 
-<div>
-  <label>Regra automática</label>
-  <div
-    style={{
-      minHeight: 42,
-      display: "flex",
-      alignItems: "center",
-      padding: "10px 12px",
-      border: "1px solid #d1d5db",
-      borderRadius: 8,
-      background: "#f8fafc",
-      color: "#475569",
-      fontSize: 14,
-    }}
-  >
-    Competência: dia base do mês anterior até o mesmo dia base do mês atual
-  </div>
-</div>
+    <div>
+      <label>Data final do período</label>
+      <input
+        type="date"
+        value={dataFimPeriodo}
+        onChange={(e) => setDataFimPeriodo(e.target.value)}
+      />
+    </div>
+
+    <div>
+      <label>Mês de referência do lote</label>
+      <input
+        type="date"
+        value={referenciaMesLote}
+        onChange={(e) => setReferenciaMesLote(e.target.value)}
+      />
+    </div>
+
+    <div>
+      <label>Regra automática</label>
+      <div
+        style={{
+          minHeight: 42,
+          display: "flex",
+          alignItems: "center",
+          padding: "10px 12px",
+          border: "1px solid #d1d5db",
+          borderRadius: 8,
+          background: "#f8fafc",
+          color: "#475569",
+          fontSize: 14,
+        }}
+      >
+        Serão listados os pacientes que estavam ativos no período informado
+      </div>
+    </div>
   </div>
 
   <div style={{ marginTop: 16 }}>
