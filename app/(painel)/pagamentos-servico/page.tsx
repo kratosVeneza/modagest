@@ -212,13 +212,13 @@ function montarCompetenciaDoPacienteNoMes(
   const mesAnterior = dataAnterior.getMonth()
 
   let competenciaInicio = montarDataBaseNoMes(anoAnterior, mesAnterior, diaBase)
-  let competenciaFim = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
+  const competenciaFim = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
 
   if (paciente.data_inicio) {
     const entrada = new Date(`${paciente.data_inicio}T12:00:00`)
     const entradaIso = `${entrada.getFullYear()}-${String(entrada.getMonth() + 1).padStart(2, "0")}-${String(entrada.getDate()).padStart(2, "0")}`
 
-    if (entradaIso > competenciaInicio) {
+    if (entradaIso > competenciaInicio && entradaIso <= competenciaFim) {
       competenciaInicio = entradaIso
     }
   }
@@ -273,18 +273,20 @@ function formaPagamentoOuNull(valor: string) {
   return limpo ? limpo : null
 }
 
-function pacienteEstavaAtivoNoPeriodo(
+function pacienteElegivelNoMesDeReferencia(
   paciente: Patient,
-  inicio: string,
-  fim: string,
+  referenciaMes: string,
   historicoStatus: PatientStatusHistory[]
 ) {
-  if (!inicio || !fim) return true
+  if (!referenciaMes) return true
 
+  const { inicio, fim } = montarPeriodoDoMes(referenciaMes)
   const inicioPeriodo = new Date(`${inicio}T00:00:00`)
   const fimPeriodo = new Date(`${fim}T23:59:59`)
 
-  const historicoDoPaciente = historicoStatus.filter((h) => h.patient_id === paciente.id)
+  const historicoDoPaciente = historicoStatus
+    .filter((h) => h.patient_id === paciente.id)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
 
   if (historicoDoPaciente.length > 0) {
     return historicoDoPaciente.some((h) => {
@@ -361,36 +363,32 @@ useEffect(() => {
 }, [])
 
 useEffect(() => {
-  const listaBase =
-    dataInicioPeriodo && dataFimPeriodo
-      ? pacientes.filter((p) =>
-          pacienteEstavaAtivoNoPeriodo(
-            p,
-            dataInicioPeriodo,
-            dataFimPeriodo,
-            historicoStatus
-          )
-        )
-      : pacientes
+  const lista = pacientes
+    .map((p) => {
+      const elegivel = pacienteElegivelNoMesDeReferencia(
+        p,
+        referenciaMesLote,
+        historicoStatus
+      )
 
-  const lista = listaBase.map((p) => {
-    const automatico = montarCompetenciaDoPacienteNoMes(
-      referenciaMesLote,
-      p
-    )
+      const automatico = montarCompetenciaDoPacienteNoMes(
+        referenciaMesLote,
+        p
+      )
 
-    return {
-      patient_id: p.id,
-      nome: p.nome,
-      valor_mensal: Number(p.valor_mensal || 0),
-      dia_base_pagamento: p.dia_base_pagamento,
-      competencia_inicio: automatico.competenciaInicio,
-      competencia_fim: automatico.competenciaFim,
-      data_vencimento: automatico.dataVencimento,
-      servico: servicoLote,
-      selecionado: selecionarTodosLote,
-    }
-  })
+      return {
+        patient_id: p.id,
+        nome: p.nome,
+        valor_mensal: Number(p.valor_mensal || 0),
+        dia_base_pagamento: p.dia_base_pagamento,
+        competencia_inicio: automatico.competenciaInicio,
+        competencia_fim: automatico.competenciaFim,
+        data_vencimento: automatico.dataVencimento,
+        servico: servicoLote,
+        selecionado: selecionarTodosLote ? elegivel : false,
+      }
+    })
+    .filter((item) => item.selecionado || !selecionarTodosLote)
 
   setPacientesLote(lista)
 }, [
@@ -398,10 +396,8 @@ useEffect(() => {
   servicoLote,
   referenciaMesLote,
   selecionarTodosLote,
-  dataInicioPeriodo,
-  dataFimPeriodo,
   historicoStatus,
-])
+]) 
 
   async function carregarDados() {
     setMensagem("")
@@ -1028,10 +1024,9 @@ async function gerarCobrancasEmLote() {
   const paciente = pacientes.find((p) => p.id === item.patient_id)
   if (!paciente) return false
 
-  return pacienteEstavaAtivoNoPeriodo(
+  return pacienteElegivelNoMesDeReferencia(
     paciente,
-    dataInicioPeriodo,
-    dataFimPeriodo,
+    referenciaMesLote,
     historicoStatus
   )
 })
@@ -1412,7 +1407,8 @@ async function gerarCobrancasEmLote() {
       <div className="section-card" style={{ marginBottom: 20 }}>
   <h3 style={{ marginBottom: 12 }}>Gerar cobranças em lote</h3>
   <p style={{ marginTop: 0, color: "#64748b", fontSize: 14 }}>
-    Gere cobranças para pacientes ativos com competência e vencimento sugerido pelo dia base de pagamento.
+    Gere cobranças do mês de referência com competência e vencimento sugeridos automaticamente para cada paciente elegível.
+
   </p>
 
   <div className="grid-2">
@@ -1480,7 +1476,7 @@ async function gerarCobrancasEmLote() {
           fontSize: 14,
         }}
       >
-        Serão listados apenas os pacientes que estavam ativos no mês de referência
+        Serão listados os pacientes elegíveis no mês de referência, respeitando ativação, inativação, data de entrada e dia base de pagamento.
       </div>
     </div>
   </div>
@@ -1577,7 +1573,7 @@ async function gerarCobrancasEmLote() {
         {pacientesLote.length === 0 && (
   <tr>
     <td style={td} colSpan={8}>
-      Nenhum paciente encontrado para o período de {formatarData(dataInicioPeriodo)} até {formatarData(dataFimPeriodo)}.
+      Nenhum paciente elegível foi encontrado para o mês de referência {formatarData(referenciaMesLote)}.
     </td>
   </tr>
 )}
