@@ -113,6 +113,8 @@ export default function PacientesPage() {
   const [dataFimRelatorio, setDataFimRelatorio] = useState("")
   const [dataInativacao, setDataInativacao] = useState("")
   const [pacientePendenciaInativacao, setPacientePendenciaInativacao] = useState<number | null>(null)
+  const [dataReativacao, setDataReativacao] = useState("")
+  const [pacientePendenciaReativacao, setPacientePendenciaReativacao] = useState<number | null>(null)
   const [horarios, setHorarios] = useState<ScheduleRule[]>([
     { weekday: 1, servico: "Pilates", hora_inicio: "", hora_fim: "", ativo: true },
   ])
@@ -679,7 +681,7 @@ if (error || !data) {
 
     const hoje = new Date().toISOString().slice(0, 10)
     const dataNovoPeriodo = novoStatus
-      ? (dataInicio || hoje)
+      ? (dataReativacao || dataInicio || hoje)
       : (dataInativacao || hoje)
 
     const { error } = await supabase
@@ -724,7 +726,9 @@ if (error || !data) {
     ])
 
     setPacientePendenciaInativacao(null)
+    setPacientePendenciaReativacao(null)
     setDataInativacao("")
+    setDataReativacao("")
     setMensagem(
       novoStatus ? "Aluno/Paciente reativado com sucesso." : "Aluno/Paciente inativado com sucesso."
     )
@@ -1073,6 +1077,7 @@ if (error || !data) {
                           className="btn btn-secondary btn-sm"
                           onClick={() => {
                             setPacientePendenciaInativacao(p.id)
+                            setPacientePendenciaReativacao(null)
                             setDataInativacao("")
                           }}
                         >
@@ -1081,7 +1086,11 @@ if (error || !data) {
                       ) : (
                         <button
                           className="btn btn-secondary btn-sm"
-                          onClick={() => confirmarAlteracaoStatusPaciente(p, true)}
+                          onClick={() => {
+                            setPacientePendenciaReativacao(p.id)
+                            setPacientePendenciaInativacao(null)
+                            setDataReativacao("")
+                          }}
                         >
                           Reativar
                         </button>
@@ -1095,7 +1104,7 @@ if (error || !data) {
                       </button>
                     </div>
 
-                    {pacientePendenciaInativacao === p.id && (
+                    {pacientePendenciaReativacao === p.id && (
                       <div
                         style={{
                           marginTop: 10,
@@ -1106,32 +1115,33 @@ if (error || !data) {
                         }}
                       >
                         <div>
-                          <label>Data de inativação</label>
+                          <label>Data da volta</label>
                           <input
                             type="date"
-                            value={dataInativacao}
-                            onChange={(e) => setDataInativacao(e.target.value)}
+                            value={dataReativacao}
+                            onChange={(e) => setDataReativacao(e.target.value)}
                           />
                         </div>
 
                         <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => confirmarAlteracaoStatusPaciente(p, false)}
+                          className="btn btn-primary btn-sm"
+                          onClick={() => confirmarAlteracaoStatusPaciente(p, true)}
                         >
-                          Confirmar inativação
+                          Confirmar reativação
                         </button>
 
                         <button
                           className="btn btn-secondary btn-sm"
                           onClick={() => {
-                            setPacientePendenciaInativacao(null)
-                            setDataInativacao("")
+                            setPacientePendenciaReativacao(null)
+                            setDataReativacao("")
                           }}
                         >
                           Cancelar
                         </button>
                       </div>
                     )}
+
                   </td>
                 </tr>
               ))}
