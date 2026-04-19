@@ -246,18 +246,12 @@ function pacienteEstavaAtivoNoPeriodo(
     })
   }
 
-  // fallback para pacientes antigos sem histórico
+  // fallback quando ainda não existe histórico
   if (!paciente.data_inicio) return false
 
   const dataInicioPaciente = new Date(`${paciente.data_inicio}T00:00:00`)
-
-  if (paciente.ativo) {
-    return dataInicioPaciente <= fimPeriodo
-  }
-
-  return false
+  return dataInicioPaciente <= fimPeriodo
 }
-
 
 export default function PagamentosServicoPage() {
   const [pacientes, setPacientes] = useState<Patient[]>([])
@@ -306,33 +300,36 @@ const [pacientesLote, setPacientesLote] = useState<PacienteLote[]>([])
 const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
 
   useEffect(() => {
-  const lista = pacientes
-    .filter((p) =>
-      pacienteEstavaAtivoNoPeriodo(
-        p,
-        dataInicioPeriodo,
-        dataFimPeriodo,
-        historicoStatus
-      )
-    )
-    .map((p) => {
-      const automatico = montarCompetenciaAutomaticaPorDiaBase(
-        referenciaMesLote,
-        p.dia_base_pagamento
-      )
+  const listaBase =
+    dataInicioPeriodo && dataFimPeriodo
+      ? pacientes.filter((p) =>
+          pacienteEstavaAtivoNoPeriodo(
+            p,
+            dataInicioPeriodo,
+            dataFimPeriodo,
+            historicoStatus
+          )
+        )
+      : pacientes
 
-      return {
-        patient_id: p.id,
-        nome: p.nome,
-        valor_mensal: Number(p.valor_mensal || 0),
-        dia_base_pagamento: p.dia_base_pagamento,
-        competencia_inicio: automatico.competenciaInicio,
-        competencia_fim: automatico.competenciaFim,
-        data_vencimento: automatico.dataVencimento,
-        servico: servicoLote,
-        selecionado: selecionarTodosLote,
-      }
-    })
+  const lista = listaBase.map((p) => {
+    const automatico = montarCompetenciaAutomaticaPorDiaBase(
+      referenciaMesLote,
+      p.dia_base_pagamento
+    )
+
+    return {
+      patient_id: p.id,
+      nome: p.nome,
+      valor_mensal: Number(p.valor_mensal || 0),
+      dia_base_pagamento: p.dia_base_pagamento,
+      competencia_inicio: automatico.competenciaInicio,
+      competencia_fim: automatico.competenciaFim,
+      data_vencimento: automatico.dataVencimento,
+      servico: servicoLote,
+      selecionado: selecionarTodosLote,
+    }
+  })
 
   setPacientesLote(lista)
 }, [
@@ -423,15 +420,17 @@ const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
       .select("id, patient_id, status, start_date, end_date")
       .eq("user_id", user.id)
 
-    if (historicoError) {
-      setMensagem("Erro ao carregar histórico de status.")
-      return
-    }
-
     setPacientes((pacientesData ?? []) as Patient[])
     setCobrancas((cobrancasData ?? []) as unknown as ServiceBilling[])
     setPagamentos((pagamentosData ?? []) as unknown as ServicePayment[])
-    setHistoricoStatus((historicoData ?? []) as PatientStatusHistory[])
+
+    if (historicoError) {
+      setHistoricoStatus([])
+      setMensagem("Histórico de status não carregado. Os pacientes foram exibidos com base no cadastro atual.")
+    } else {
+      setHistoricoStatus((historicoData ?? []) as PatientStatusHistory[])
+    }
+
   }
 
   const valorOriginalNumero = Number(valorOriginal || 0)
