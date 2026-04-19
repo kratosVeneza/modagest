@@ -179,6 +179,19 @@ function montarCompetenciaAutomaticaPorDiaBase(
   }
 }
 
+function montarPeriodoDoMes(referenciaMes?: string | null) {
+  const referencia = referenciaMes || hojeInputDate()
+  const dataRef = new Date(`${referencia}T12:00:00`)
+
+  const ano = dataRef.getFullYear()
+  const mes = dataRef.getMonth()
+
+  const inicio = `${ano}-${String(mes + 1).padStart(2, "0")}-01`
+  const fim = `${ano}-${String(ultimoDiaDoMes(ano, mes)).padStart(2, "0")}`
+
+  return { inicio, fim }
+}
+
 function statusVisualDaCobranca(
   cobranca: ServiceBilling,
   valorPago: number,
@@ -246,9 +259,14 @@ function pacienteEstavaAtivoNoPeriodo(
     })
   }
 
+  // fallback só para pacientes sem histórico antigo
   if (!paciente.data_inicio) return false
 
   const dataInicioPaciente = new Date(`${paciente.data_inicio}T00:00:00`)
+
+  // se está inativo hoje e não tem histórico, melhor não assumir que estava ativo no mês
+  if (!paciente.ativo) return false
+
   return dataInicioPaciente <= fimPeriodo
 }
 
@@ -297,6 +315,12 @@ const [dataFimPeriodo, setDataFimPeriodo] = useState("")
 const [historicoStatus, setHistoricoStatus] = useState<PatientStatusHistory[]>([])
 const [pacientesLote, setPacientesLote] = useState<PacienteLote[]>([])
 const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
+
+useEffect(() => {
+  const periodo = montarPeriodoDoMes(referenciaMesLote)
+  setDataInicioPeriodo(periodo.inicio)
+  setDataFimPeriodo(periodo.fim)
+}, [referenciaMesLote])
 
 useEffect(() => {
   carregarDados()
@@ -1381,22 +1405,22 @@ async function gerarCobrancasEmLote() {
     </div>
 
     <div>
-      <label>Data inicial do período</label>
-      <input
-        type="date"
-        value={dataInicioPeriodo}
-        onChange={(e) => setDataInicioPeriodo(e.target.value)}
-      />
-    </div>
+  <label>Data inicial do período</label>
+  <input
+    type="date"
+    value={dataInicioPeriodo}
+    readOnly
+  />
+</div>
 
-    <div>
-      <label>Data final do período</label>
-      <input
-        type="date"
-        value={dataFimPeriodo}
-        onChange={(e) => setDataFimPeriodo(e.target.value)}
-      />
-    </div>
+<div>
+  <label>Data final do período</label>
+  <input
+    type="date"
+    value={dataFimPeriodo}
+    readOnly
+  />
+</div>
 
     <div>
       <label>Mês de referência do lote</label>
@@ -1422,7 +1446,7 @@ async function gerarCobrancasEmLote() {
           fontSize: 14,
         }}
       >
-        Serão listados os pacientes que estavam ativos no período informado
+        Serão listados apenas os pacientes que estavam ativos no mês de referência
       </div>
     </div>
   </div>
