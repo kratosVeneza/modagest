@@ -64,19 +64,6 @@ type CobrancaComResumo = ServiceBilling & {
   pagamentosDaCobranca: ServicePayment[]
 }
 
-type PacienteLote = {
-  patient_id: number
-  nome: string
-  valor_mensal: number
-  dia_base_pagamento: number | null
-  competencia_inicio: string | null
-  competencia_fim: string | null
-  data_vencimento: string
-  servico: string
-  selecionado: boolean
-  elegivel: boolean
-}
-
 function hojeInputDate() {
   const hoje = new Date()
   const ano = hoje.getFullYear()
@@ -152,85 +139,6 @@ function montarDataBaseNoMes(ano: number, mesIndex: number, diaBase: number) {
   return `${ano}-${mes}-${dia}`
 }
 
-function montarCompetenciaAutomaticaPorDiaBase(
-  referenciaMes?: string | null,
-  diaBasePagamento?: number | null
-) {
-  const referencia = referenciaMes || hojeInputDate()
-  const dataRef = new Date(`${referencia}T12:00:00`)
-
-  const anoAtual = dataRef.getFullYear()
-  const mesAtual = dataRef.getMonth()
-
-  const diaBase = Number(diaBasePagamento || dataRef.getDate() || 1)
-
-  const dataVencimento = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
-
-  const dataAnterior = new Date(anoAtual, mesAtual - 1, 1, 12, 0, 0)
-  const anoAnterior = dataAnterior.getFullYear()
-  const mesAnterior = dataAnterior.getMonth()
-
-  const competenciaInicio = montarDataBaseNoMes(anoAnterior, mesAnterior, diaBase)
-  const competenciaFim = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
-
-  return {
-    competenciaInicio,
-    competenciaFim,
-    dataVencimento,
-  }
-}
-
-function montarPeriodoDoMes(referenciaMes?: string | null) {
-  const referencia = referenciaMes || hojeInputDate()
-  const dataRef = new Date(`${referencia}T12:00:00`)
-
-  const ano = dataRef.getFullYear()
-  const mes = dataRef.getMonth()
-
-  const inicio = `${ano}-${String(mes + 1).padStart(2, "0")}-01`
-  const fim = `${ano}-${String(ultimoDiaDoMes(ano, mes)).padStart(2, "0")}`
-
-  return { inicio, fim }
-}
-
-function montarCompetenciaDoPacienteNoMes(
-  referenciaMes: string,
-  paciente: Patient
-) {
-  const dataRef = new Date(`${referenciaMes}T12:00:00`)
-  const anoAtual = dataRef.getFullYear()
-  const mesAtual = dataRef.getMonth()
-
-  const diaBase = Number(
-    paciente.dia_base_pagamento ||
-      (paciente.data_inicio ? new Date(`${paciente.data_inicio}T12:00:00`).getDate() : 1)
-  )
-
-  const dataVencimento = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
-
-  const dataAnterior = new Date(anoAtual, mesAtual - 1, 1, 12, 0, 0)
-  const anoAnterior = dataAnterior.getFullYear()
-  const mesAnterior = dataAnterior.getMonth()
-
-  let competenciaInicio = montarDataBaseNoMes(anoAnterior, mesAnterior, diaBase)
-  const competenciaFim = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
-
-  if (paciente.data_inicio) {
-    const entrada = new Date(`${paciente.data_inicio}T12:00:00`)
-    const entradaIso = `${entrada.getFullYear()}-${String(entrada.getMonth() + 1).padStart(2, "0")}-${String(entrada.getDate()).padStart(2, "0")}`
-
-    if (entradaIso > competenciaInicio && entradaIso <= competenciaFim) {
-      competenciaInicio = entradaIso
-    }
-  }
-
-  return {
-    competenciaInicio,
-    competenciaFim,
-    dataVencimento,
-  }
-}
-
 function statusVisualDaCobranca(
   cobranca: ServiceBilling,
   valorPago: number,
@@ -274,36 +182,49 @@ function formaPagamentoOuNull(valor: string) {
   return limpo ? limpo : null
 }
 
-function pacienteElegivelNoMesDeReferencia(
-  paciente: Patient,
-  referenciaMes: string,
-  historicoStatus: PatientStatusHistory[]
+function montarCompetenciaAutomaticaPaciente(
+  paciente?: Patient | null,
+  referencia?: string | null
 ) {
-  if (!referenciaMes) return true
-
-  const { inicio, fim } = montarPeriodoDoMes(referenciaMes)
-  const inicioPeriodo = new Date(`${inicio}T00:00:00`)
-  const fimPeriodo = new Date(`${fim}T23:59:59`)
-
-  const historicoDoPaciente = historicoStatus
-    .filter((h) => h.patient_id === paciente.id)
-    .sort((a, b) => a.start_date.localeCompare(b.start_date))
-
-  if (historicoDoPaciente.length > 0) {
-    return historicoDoPaciente.some((h) => {
-      if (h.status !== "ativo") return false
-
-      const inicioStatus = new Date(`${h.start_date}T00:00:00`)
-      const fimStatus = h.end_date ? new Date(`${h.end_date}T23:59:59`) : null
-
-      return inicioStatus <= fimPeriodo && (!fimStatus || fimStatus >= inicioPeriodo)
-    })
+  if (!paciente) {
+    return {
+      competenciaInicio: "",
+      competenciaFim: "",
+      dataVencimento: hojeInputDate(),
+      valorMensal: "",
+    }
   }
 
-  if (!paciente.data_inicio) return false
+  const referenciaBase = referencia || hojeInputDate()
+  const dataRef = new Date(`${referenciaBase}T12:00:00`)
 
-  const dataInicioPaciente = new Date(`${paciente.data_inicio}T00:00:00`)
-  return dataInicioPaciente <= fimPeriodo
+  const anoAtual = dataRef.getFullYear()
+  const mesAtual = dataRef.getMonth()
+
+  const diaBase = Number(
+    paciente.dia_base_pagamento ||
+      (paciente.data_inicio ? new Date(`${paciente.data_inicio}T12:00:00`).getDate() : 1)
+  )
+
+  const dataVencimento = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
+
+  const anterior = new Date(anoAtual, mesAtual - 1, 1, 12, 0, 0)
+  const competenciaInicio = montarDataBaseNoMes(
+    anterior.getFullYear(),
+    anterior.getMonth(),
+    diaBase
+  )
+  const competenciaFim = montarDataBaseNoMes(anoAtual, mesAtual, diaBase)
+
+  return {
+    competenciaInicio,
+    competenciaFim,
+    dataVencimento,
+    valorMensal:
+      paciente.valor_mensal !== null && paciente.valor_mensal !== undefined
+        ? String(Number(paciente.valor_mensal))
+        : "",
+  }
 }
 
 export default function PagamentosServicoPage() {
@@ -344,59 +265,37 @@ export default function PagamentosServicoPage() {
   const [observacaoPagamentoInicial, setObservacaoPagamentoInicial] = useState("")
   const [dataRestanteSugerida, setDataRestanteSugerida] = useState(hojeInputDate())
 
- const [servicoLote, setServicoLote] = useState("Pilates")
-const [referenciaMesLote, setReferenciaMesLote] = useState(hojeInputDate())
-const [dataInicioPeriodo, setDataInicioPeriodo] = useState("")
-const [dataFimPeriodo, setDataFimPeriodo] = useState("")
-const [historicoStatus, setHistoricoStatus] = useState<PatientStatusHistory[]>([])
-const [pacientesLote, setPacientesLote] = useState<PacienteLote[]>([])
-const [selecionarTodosLote, setSelecionarTodosLote] = useState(true)
+  const [historicoStatus, setHistoricoStatus] = useState<PatientStatusHistory[]>([])
 
-useEffect(() => {
-  const periodo = montarPeriodoDoMes(referenciaMesLote)
-  setDataInicioPeriodo(periodo.inicio)
-  setDataFimPeriodo(periodo.fim)
-}, [referenciaMesLote])
+  useEffect(() => {
+    if (!patientId) return
 
-useEffect(() => {
-  carregarDados()
-}, [])
+    const paciente = pacientes.find((p) => p.id === Number(patientId))
+    if (!paciente) return
 
-useEffect(() => {
-  const lista = pacientes.map((p) => {
-    const elegivel = pacienteElegivelNoMesDeReferencia(
-      p,
-      referenciaMesLote,
-      historicoStatus
-    )
+    const automatico = montarCompetenciaAutomaticaPaciente(paciente, dataVencimento)
 
-    const automatico = montarCompetenciaDoPacienteNoMes(
-      referenciaMesLote,
-      p
-    )
-
-    return {
-      patient_id: p.id,
-      nome: p.nome,
-      valor_mensal: Number(p.valor_mensal || 0),
-      dia_base_pagamento: p.dia_base_pagamento,
-      competencia_inicio: automatico.competenciaInicio,
-      competencia_fim: automatico.competenciaFim,
-      data_vencimento: automatico.dataVencimento,
-      servico: servicoLote,
-      selecionado: selecionarTodosLote ? elegivel : false, 
-      elegivel,
+    if (!valorOriginal) {
+      setValorOriginal(automatico.valorMensal)
     }
-  })
 
-  setPacientesLote(lista)
-}, [
-  pacientes,
-  servicoLote,
-  referenciaMesLote,
-  selecionarTodosLote,
-  historicoStatus,
-])
+    if (!competenciaInicio) {
+      setCompetenciaInicio(automatico.competenciaInicio)
+    }
+
+    if (!competenciaFim) {
+      setCompetenciaFim(automatico.competenciaFim)
+    }
+
+    if (!dataVencimento || dataVencimento === hojeInputDate()) {
+      setDataVencimento(automatico.dataVencimento)
+      setDataRestanteSugerida(automatico.dataVencimento)
+    }
+  }, [patientId, pacientes])
+
+  useEffect(() => {
+    carregarDados()
+  }, [])
 
   async function carregarDados() {
     setMensagem("")
@@ -411,10 +310,10 @@ useEffect(() => {
     }
 
     const { data: pacientesData, error: pacientesError } = await supabase
-  .from("patients")
-  .select("id, nome, data_inicio, dia_base_pagamento, valor_mensal, ativo")
-  .eq("user_id", user.id)
-  .order("nome", { ascending: true })
+      .from("patients")
+      .select("id, nome, data_inicio, dia_base_pagamento, valor_mensal, ativo")
+      .eq("user_id", user.id)
+      .order("nome", { ascending: true })
 
     if (pacientesError) {
       setMensagem("Erro ao carregar pacientes.")
@@ -472,21 +371,20 @@ useEffect(() => {
     }
 
     const { data: historicoData, error: historicoError } = await supabase
-  .from("patient_status_history")
-  .select("id, patient_id, status, start_date, end_date")
-  .eq("user_id", user.id)
+      .from("patient_status_history")
+      .select("id, patient_id, status, start_date, end_date")
+      .eq("user_id", user.id)
 
-setPacientes((pacientesData ?? []) as Patient[])
-setCobrancas((cobrancasData ?? []) as unknown as ServiceBilling[])
-setPagamentos((pagamentosData ?? []) as unknown as ServicePayment[])
+    setPacientes((pacientesData ?? []) as Patient[])
+    setCobrancas((cobrancasData ?? []) as unknown as ServiceBilling[])
+    setPagamentos((pagamentosData ?? []) as unknown as ServicePayment[])
 
-if (historicoError) {
-  setHistoricoStatus([])
-  setMensagem("Histórico de status não carregado. Os pacientes foram exibidos com base no cadastro atual.")
-} else {
-  setHistoricoStatus((historicoData ?? []) as PatientStatusHistory[])
-}
-
+    if (historicoError) {
+      setHistoricoStatus([])
+      setMensagem("Histórico de status não carregado. Os pacientes foram exibidos com base no cadastro atual.")
+    } else {
+      setHistoricoStatus((historicoData ?? []) as PatientStatusHistory[])
+    }
   }
 
   const valorOriginalNumero = Number(valorOriginal || 0)
@@ -954,120 +852,15 @@ if (historicoError) {
   }
 
   function editarPagamentoExistente(cobrancaId: number, pagamento: ServicePayment) {
-  setBillingIdExpandido(cobrancaId)
-  setBillingIdPagamento(cobrancaId)
-  setPaymentIdEdicao(pagamento.id)
-  setValorPagamento(String(Number(pagamento.valor)))
-  setDataPagamento(pagamento.data_pagamento || hojeInputDate())
-  setFormaPagamento(pagamento.forma_pagamento || "Pix")
-  setObservacaoPagamento(pagamento.observacao || "")
-
-  setMensagem(`Editando pagamento de R$ ${Number(pagamento.valor).toFixed(2)}.`)
-}
-
-function alternarPacienteLote(patientId: number, checked: boolean) {
-  setPacientesLote((atual) =>
-    atual.map((item) =>
-      item.patient_id === patientId ? { ...item, selecionado: checked } : item
-    )
-  )
-}
-
-function atualizarCampoPacienteLote(
-  patientId: number,
-  campo: keyof PacienteLote,
-  valor: string | boolean | number | null
-) {
-  setPacientesLote((atual) =>
-    atual.map((item) =>
-      item.patient_id === patientId
-        ? {
-            ...item,
-            [campo]: valor,
-          }
-        : item
-    )
-  )
-}
-
-async function gerarCobrancasEmLote() {
-  setMensagem("")
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    setMensagem("Você precisa estar logado.")
-    return
+    setBillingIdExpandido(cobrancaId)
+    setBillingIdPagamento(cobrancaId)
+    setPaymentIdEdicao(pagamento.id)
+    setValorPagamento(String(Number(pagamento.valor)))
+    setDataPagamento(pagamento.data_pagamento || hojeInputDate())
+    setFormaPagamento(pagamento.forma_pagamento || "Pix")
+    setObservacaoPagamento(pagamento.observacao || "")
+    setMensagem(`Editando pagamento de R$ ${Number(pagamento.valor).toFixed(2)}.`)
   }
-
-  const selecionados = pacientesLote.filter((p) => p.selecionado)
-
-  if (selecionados.length === 0) {
-    setMensagem("Selecione pelo menos um paciente ativo.")
-    return
-  }
-
-  if (!referenciaMesLote) {
-    setMensagem("Informe o mês de referência do lote.")
-    return
-  }
-
-  if (!dataInicioPeriodo || !dataFimPeriodo) {
-    setMensagem("Informe a data inicial e final do período para localizar os pacientes válidos.")
-    return
-  } 
-
-  const pacientesValidos = selecionados.filter((item) => {
-  const paciente = pacientes.find((p) => p.id === item.patient_id)
-  if (!paciente) return false
-
-  return pacienteElegivelNoMesDeReferencia(
-    paciente,
-    referenciaMesLote,
-    historicoStatus
-  )
-})
-
-  if (pacientesValidos.length === 0) {
-    setMensagem("Nenhum paciente válido foi encontrado no período informado.")
-    return
-  }
-
-  const cobrancasParaInserir = pacientesValidos.map((p) => ({ 
-      user_id: user.id,
-      patient_id: p.patient_id,
-      servico: p.servico,
-      competencia_inicio: p.competencia_inicio || null,
-      competencia_fim: p.competencia_fim || null,
-      data_vencimento: p.data_vencimento,
-      data_restante_sugerida: null,
-      valor_original: Number(p.valor_mensal || 0),
-      desconto_percentual: 0,
-      desconto_valor: 0,
-      valor_total: Number(p.valor_mensal || 0),
-      status: "ativa",
-      observacao: "Cobrança gerada em lote",
-    }))
-
-  if (cobrancasParaInserir.length === 0) {
-    setMensagem("Nenhum paciente ativo válido encontrado para gerar cobranças.")
-    return
-  }
-
-  const { error: insertError } = await supabase
-    .from("service_billings")
-    .insert(cobrancasParaInserir)
-
-  if (insertError) {
-    setMensagem(insertError.message || "Erro ao gerar cobranças em lote.")
-    return
-  }
-
-  setMensagem(`${cobrancasParaInserir.length} cobrança(s) gerada(s) com sucesso.`)
-  await carregarDados()
-}
 
   function abrirFormularioPagamento(cobranca: CobrancaComResumo) {
     setBillingIdExpandido((atual) => (atual === cobranca.id ? null : cobranca.id))
@@ -1222,6 +1015,21 @@ async function gerarCobrancasEmLote() {
     }
   }, [cobrancasFiltradas])
 
+  const totaisPorCompetenciaSelecionada = useMemo(() => {
+    const lista = filtroCompetencia
+      ? cobrancasFiltradas.filter((c) => {
+          const mes = competenciaMes(c.competencia_inicio || c.data_vencimento)
+          return mes === filtroCompetencia
+        })
+      : cobrancasFiltradas
+
+    return {
+      totalCobrado: lista.reduce((soma, c) => soma + Number(c.valor_total || 0), 0),
+      totalPago: lista.reduce((soma, c) => soma + Number(c.valorPago || 0), 0),
+      totalEmAberto: lista.reduce((soma, c) => soma + Number(c.valorEmAberto || 0), 0),
+    }
+  }, [cobrancasFiltradas, filtroCompetencia])
+
   const leituraRapida = useMemo(() => {
     if (cobrancasFiltradas.length === 0) {
       return "Nenhuma cobrança encontrada com os filtros atuais."
@@ -1232,7 +1040,7 @@ async function gerarCobrancasEmLote() {
     }
 
     if (totais.parciais > 0) {
-      return `Há ${totais.parciais} cobrança(s) com pagamento parcial. Use o botão \"Restante\" para acelerar a baixa.`
+      return `Há ${totais.parciais} cobrança(s) com pagamento parcial. Use o botão "Restante" para acelerar a baixa.`
     }
 
     if (totais.totalEmAberto <= 0) {
@@ -1257,7 +1065,22 @@ async function gerarCobrancasEmLote() {
         <div className="grid-2">
           <div>
             <label>Paciente</label>
-            <select value={patientId} onChange={(e) => setPatientId(e.target.value)}>
+            <select
+              value={patientId}
+              onChange={(e) => {
+                const novoId = e.target.value
+                setPatientId(novoId)
+
+                const paciente = pacientes.find((p) => p.id === Number(novoId))
+                const automatico = montarCompetenciaAutomaticaPaciente(paciente || null, hojeInputDate())
+
+                setValorOriginal(automatico.valorMensal)
+                setCompetenciaInicio(automatico.competenciaInicio)
+                setCompetenciaFim(automatico.competenciaFim)
+                setDataVencimento(automatico.dataVencimento)
+                setDataRestanteSugerida(automatico.dataVencimento)
+              }}
+            >
               <option value="">Selecione</option>
               {pacientes.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -1309,11 +1132,29 @@ async function gerarCobrancasEmLote() {
           </div>
 
           <div>
-            <label>Data de vencimento</label>
+            <label>Data de vencimento / referência</label>
             <input
               type="date"
               value={dataVencimento}
               onChange={(e) => setDataVencimento(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label>Competência início</label>
+            <input
+              type="date"
+              value={competenciaInicio}
+              onChange={(e) => setCompetenciaInicio(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label>Competência fim</label>
+            <input
+              type="date"
+              value={competenciaFim}
+              onChange={(e) => setCompetenciaFim(e.target.value)}
             />
           </div>
 
@@ -1402,197 +1243,6 @@ async function gerarCobrancasEmLote() {
           </button>
         </div>
       </div>
-
-      <div className="section-card" style={{ marginBottom: 20 }}>
-  <h3 style={{ marginBottom: 12 }}>Gerar cobranças em lote</h3>
-  <p style={{ marginTop: 0, color: "#64748b", fontSize: 14 }}>
-    Gere cobranças do mês de referência com competência e vencimento sugeridos automaticamente para cada paciente elegível.
-
-  </p>
-
-  <div className="grid-2">
-    <div>
-      <label>Serviço do lote</label>
-      <select value={servicoLote} onChange={(e) => setServicoLote(e.target.value)}>
-        <option value="Pilates">Pilates</option>
-        <option value="Fisioterapia">Fisioterapia</option>
-        <option value="Academia">Academia</option>
-        <option value="Avaliação">Avaliação</option>
-        <option value="Outro">Outro</option>
-      </select>
-    </div>
-
-    <div>
-      <label>Selecionar todos os listados</label>
-      <select
-        value={selecionarTodosLote ? "sim" : "nao"}
-        onChange={(e) => setSelecionarTodosLote(e.target.value === "sim")}
-      >
-        <option value="sim">Sim</option>
-        <option value="nao">Não</option>
-      </select>
-    </div>
-
-    <div>
-  <label>Data inicial do período</label>
-  <input
-    type="date"
-    value={dataInicioPeriodo}
-    onChange={(e) => setDataInicioPeriodo(e.target.value)}
-  />
-</div>
-
-<div>
-  <label>Data final do período</label>
-  <input
-    type="date"
-    value={dataFimPeriodo}
-    onChange={(e) => setDataFimPeriodo(e.target.value)}
-  />
-</div>
-
-    <div>
-      <label>Mês de referência do lote</label>
-      <input
-        type="date"
-        value={referenciaMesLote}
-        onChange={(e) => setReferenciaMesLote(e.target.value)}
-      />
-    </div>
-
-    <div>
-      <label>Regra automática</label>
-      <div
-        style={{
-          minHeight: 42,
-          display: "flex",
-          alignItems: "center",
-          padding: "10px 12px",
-          border: "1px solid #d1d5db",
-          borderRadius: 8,
-          background: "#f8fafc",
-          color: "#475569",
-          fontSize: 14,
-        }}
-      >
-        Serão listados os pacientes elegíveis no mês de referência, respeitando ativação, inativação, data de entrada e dia base de pagamento.
-      </div>
-    </div>
-  </div>
-
-  <div style={{ marginTop: 16 }}>
-    <strong>Pacientes do lote</strong>
-  </div>
-
-  <div className="data-table-wrap" style={{ marginTop: 10 }}>
-    <table style={{ width: "100%", borderCollapse: "collapse" }}>
-      <thead>
-        <tr>
-  <th style={th}>Sel.</th>
-  <th style={th}>Paciente</th>
-  <th style={th}>Serviço</th>
-  <th style={th}>Valor</th>
-  <th style={th}>Dia base</th>
-  <th style={th}>Competência início</th>
-  <th style={th}>Competência fim</th>
-  <th style={th}>Vencimento sugerido</th>
-  <th style={th}>Elegível no mês</th>
-</tr>
-      </thead>
-      <tbody>
-        {pacientesLote.map((item) => (
-          <tr key={item.patient_id}>
-            <td style={td}>
-              <input
-                type="checkbox"
-                checked={item.selecionado}
-                onChange={(e) => alternarPacienteLote(item.patient_id, e.target.checked)}
-              />
-            </td>
-            <td style={td}>{item.nome}</td>
-            <td style={td}>
-              <select
-                value={item.servico}
-                onChange={(e) =>
-                  atualizarCampoPacienteLote(item.patient_id, "servico", e.target.value)
-                }
-              >
-                <option value="Pilates">Pilates</option>
-                <option value="Fisioterapia">Fisioterapia</option>
-                <option value="Academia">Academia</option>
-                <option value="Avaliação">Avaliação</option>
-                <option value="Outro">Outro</option>
-              </select>
-            </td>
-            
-            <td style={td}>
-              <input
-                type="number"
-                step="0.01"
-                value={item.valor_mensal}
-                onChange={(e) =>
-                  atualizarCampoPacienteLote(
-                    item.patient_id,
-                    "valor_mensal",
-                    Number(e.target.value || 0)
-                  )
-                }
-              />
-            </td>
-            <td style={td}>{item.dia_base_pagamento || "-"}</td>
-            <td style={td}>
-  <input
-    type="date"
-    value={item.competencia_inicio || ""}
-    onChange={(e) =>
-      atualizarCampoPacienteLote(item.patient_id, "competencia_inicio", e.target.value)
-    }
-  />
-</td>
-
-<td style={td}>
-  <input
-    type="date"
-    value={item.competencia_fim || ""}
-    onChange={(e) =>
-      atualizarCampoPacienteLote(item.patient_id, "competencia_fim", e.target.value)
-    }
-  />
-</td>
-            <td style={td}>
-              <input
-                type="date"
-                value={item.data_vencimento}
-                onChange={(e) =>
-                  atualizarCampoPacienteLote(item.patient_id, "data_vencimento", e.target.value)
-                }
-              />
-            </td>
-
-            <td style={td}>
-  {item.elegivel ? "Sim" : "Não"}
-</td>
-
-          </tr>
-        ))}
-
-        {pacientesLote.length === 0 && (
-  <tr>
-    <td style={td} colSpan={8}>
-      Nenhum paciente cadastrado foi encontrado.
-    </td>
-  </tr>
-)}
-      </tbody>
-    </table>
-  </div>
-
-  <div style={{ marginTop: 14 }}>
-    <button className="btn btn-primary" onClick={gerarCobrancasEmLote}>
-      Gerar cobranças em lote
-    </button>
-  </div>
-</div>
 
       <div className="section-card" style={{ marginBottom: 20 }}>
         <div style={toolbarGrid}>
@@ -1713,6 +1363,17 @@ async function gerarCobrancasEmLote() {
         <div style={leituraRapidaBox}>
           <strong>Leitura rápida:</strong> {leituraRapida}
         </div>
+
+        {filtroCompetencia && (
+          <div style={leituraRapidaBox}>
+            <strong>
+              Resumo da competência {filtroCompetencia.split("-").reverse().join("/")}:
+            </strong>{" "}
+            Cobrado: R$ {totaisPorCompetenciaSelecionada.totalCobrado.toFixed(2)} | Pago: R${" "}
+            {totaisPorCompetenciaSelecionada.totalPago.toFixed(2)} | Em aberto: R${" "}
+            {totaisPorCompetenciaSelecionada.totalEmAberto.toFixed(2)}
+          </div>
+        )}
       </div>
 
       <div className="section-card">
@@ -1735,7 +1396,7 @@ async function gerarCobrancasEmLote() {
             <tbody>
               {cobrancasFiltradas.map((c) => {
                 const expandido =
-  billingIdExpandido === c.id || billingIdPagamento === c.id
+                  billingIdExpandido === c.id || billingIdPagamento === c.id
 
                 return (
                   <Fragment key={c.id}>
@@ -1744,8 +1405,8 @@ async function gerarCobrancasEmLote() {
                         c.statusVisual === "vencida"
                           ? linhaVencida
                           : c.statusVisual === "parcial"
-                          ? linhaParcial
-                          : undefined
+                            ? linhaParcial
+                            : undefined
                       }
                     >
                       <td style={td}>
@@ -1785,68 +1446,71 @@ async function gerarCobrancasEmLote() {
                       <td style={td}>
                         <div style={acoesGridCompacta}>
                           {c.statusVisual !== "cancelada" && (
-  <>
-    {c.valorEmAberto > 0 && (
-      <>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => abrirFormularioPagamento(c)}
-        >
-          {billingIdExpandido === c.id && billingIdPagamento === c.id && !paymentIdEdicao
-            ? "Fechar"
-            : "Receber"}
-        </button>
+                            <>
+                              {c.valorEmAberto > 0 && (
+                                <>
+                                  <button
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => abrirFormularioPagamento(c)}
+                                  >
+                                    {billingIdExpandido === c.id &&
+                                    billingIdPagamento === c.id &&
+                                    !paymentIdEdicao
+                                      ? "Fechar"
+                                      : "Receber"}
+                                  </button>
 
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => preencherValorRestante(c)}
-        >
-          Restante
-        </button>
-      </>
-    )}
+                                  <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => preencherValorRestante(c)}
+                                  >
+                                    Restante
+                                  </button>
+                                </>
+                              )}
 
-    {billingIdExpandido === c.id && (
-      <button
-        type="button"
-        className="btn btn-secondary btn-sm"
-        onClick={() => {
-          if (billingIdExpandido === c.id) {
-            setBillingIdExpandido(null)
-            limparFormularioPagamento()
-          }
-        }}
-      >
-        Minimizar
-      </button>
-    )}
-  </>
-)}
-{c.pagamentosDaCobranca.length > 0 && (
-  <button
-    type="button"
-    className="btn btn-secondary btn-sm"
-    onClick={() => {
-      if (billingIdExpandido === c.id) {
-        setBillingIdExpandido(null)
-        limparFormularioPagamento()
-      } else {
-        setBillingIdExpandido(c.id)
-      }
-    }}
-  >
-    {billingIdExpandido === c.id ? "Ocultar pagamentos" : "Ver pagamentos"}
-  </button>
-)}
+                              {billingIdExpandido === c.id && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => {
+                                    if (billingIdExpandido === c.id) {
+                                      setBillingIdExpandido(null)
+                                      limparFormularioPagamento()
+                                    }
+                                  }}
+                                >
+                                  Minimizar
+                                </button>
+                              )}
+                            </>
+                          )}
 
-{c.statusVisual !== "cancelada" && (
-  <button
-    className="btn btn-danger btn-sm"
-    onClick={() => cancelarCobranca(c.id)}
-  >
-    Cancelar
-  </button>
-)}
+                          {c.pagamentosDaCobranca.length > 0 && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => {
+                                if (billingIdExpandido === c.id) {
+                                  setBillingIdExpandido(null)
+                                  limparFormularioPagamento()
+                                } else {
+                                  setBillingIdExpandido(c.id)
+                                }
+                              }}
+                            >
+                              {billingIdExpandido === c.id ? "Ocultar pagamentos" : "Ver pagamentos"}
+                            </button>
+                          )}
+
+                          {c.statusVisual !== "cancelada" && (
+                            <button
+                              className="btn btn-danger btn-sm"
+                              onClick={() => cancelarCobranca(c.id)}
+                            >
+                              Cancelar
+                            </button>
+                          )}
 
                           <button
                             className="btn btn-danger btn-sm"
@@ -1863,75 +1527,75 @@ async function gerarCobrancasEmLote() {
                         <td style={{ ...td, background: "#f8fafc" }} colSpan={10}>
                           <div style={blocoDetalhes}>
                             {c.statusVisual !== "cancelada" &&
-  (c.valorEmAberto > 0 || (billingIdPagamento === c.id && !!paymentIdEdicao)) && (
-    <div style={painelPagamento}>
-                                <strong style={{ marginBottom: 8 }}>
-  {billingIdPagamento === c.id && paymentIdEdicao
-    ? "Editar pagamento"
-    : "Registrar pagamento"}
-</strong>
+                              (c.valorEmAberto > 0 || (billingIdPagamento === c.id && !!paymentIdEdicao)) && (
+                                <div style={painelPagamento}>
+                                  <strong style={{ marginBottom: 8 }}>
+                                    {billingIdPagamento === c.id && paymentIdEdicao
+                                      ? "Editar pagamento"
+                                      : "Registrar pagamento"}
+                                  </strong>
 
-                                <div style={formPagamentoGrid}>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="Valor do pagamento"
-                                    value={billingIdPagamento === c.id ? valorPagamento : ""}
-                                    onChange={(e) => {
-                                      setBillingIdPagamento(c.id)
-                                      setValorPagamento(e.target.value)
-                                    }}
-                                  />
-                                  <input
-                                    type="date"
-                                    value={billingIdPagamento === c.id ? dataPagamento : hojeInputDate()}
-                                    onChange={(e) => {
-                                      setBillingIdPagamento(c.id)
-                                      setDataPagamento(e.target.value)
-                                    }}
-                                  />
-                                  <select
-                                    value={billingIdPagamento === c.id ? formaPagamento : "Pix"}
-                                    onChange={(e) => {
-                                      setBillingIdPagamento(c.id)
-                                      setFormaPagamento(e.target.value)
-                                    }}
-                                  >
-                                    <option value="Pix">Pix</option>
-                                    <option value="Dinheiro">Dinheiro</option>
-                                    <option value="Cartão de débito">Cartão de débito</option>
-                                    <option value="Cartão de crédito">Cartão de crédito</option>
-                                    <option value="Transferência">Transferência</option>
-                                    <option value="Outro">Outro</option>
-                                  </select>
-                                  <input
-                                    type="text"
-                                    placeholder="Observação"
-                                    value={billingIdPagamento === c.id ? observacaoPagamento : ""}
-                                    onChange={(e) => {
-                                      setBillingIdPagamento(c.id)
-                                      setObservacaoPagamento(e.target.value)
-                                    }}
-                                  />
-                                </div>
+                                  <div style={formPagamentoGrid}>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      placeholder="Valor do pagamento"
+                                      value={billingIdPagamento === c.id ? valorPagamento : ""}
+                                      onChange={(e) => {
+                                        setBillingIdPagamento(c.id)
+                                        setValorPagamento(e.target.value)
+                                      }}
+                                    />
+                                    <input
+                                      type="date"
+                                      value={billingIdPagamento === c.id ? dataPagamento : hojeInputDate()}
+                                      onChange={(e) => {
+                                        setBillingIdPagamento(c.id)
+                                        setDataPagamento(e.target.value)
+                                      }}
+                                    />
+                                    <select
+                                      value={billingIdPagamento === c.id ? formaPagamento : "Pix"}
+                                      onChange={(e) => {
+                                        setBillingIdPagamento(c.id)
+                                        setFormaPagamento(e.target.value)
+                                      }}
+                                    >
+                                      <option value="Pix">Pix</option>
+                                      <option value="Dinheiro">Dinheiro</option>
+                                      <option value="Cartão de débito">Cartão de débito</option>
+                                      <option value="Cartão de crédito">Cartão de crédito</option>
+                                      <option value="Transferência">Transferência</option>
+                                      <option value="Outro">Outro</option>
+                                    </select>
+                                    <input
+                                      type="text"
+                                      placeholder="Observação"
+                                      value={billingIdPagamento === c.id ? observacaoPagamento : ""}
+                                      onChange={(e) => {
+                                        setBillingIdPagamento(c.id)
+                                        setObservacaoPagamento(e.target.value)
+                                      }}
+                                    />
+                                  </div>
 
-                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                                  <button className="btn btn-primary btn-sm" onClick={() => adicionarPagamento(c)}>
-                                    {paymentIdEdicao ? "Salvar edição" : "Adicionar pagamento"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn btn-secondary btn-sm"
-                                    onClick={() => {
-                                      limparFormularioPagamento()
-                                      setBillingIdExpandido(null)
-                                    }}
-                                  >
-                                    Fechar painel
-                                  </button>
+                                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                                    <button className="btn btn-primary btn-sm" onClick={() => adicionarPagamento(c)}>
+                                      {paymentIdEdicao ? "Salvar edição" : "Adicionar pagamento"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary btn-sm"
+                                      onClick={() => {
+                                        limparFormularioPagamento()
+                                        setBillingIdExpandido(null)
+                                      }}
+                                    >
+                                      Fechar painel
+                                    </button>
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
 
                             <div style={painelHistorico}>
                               <strong style={{ marginBottom: 8 }}>Pagamentos da cobrança</strong>
