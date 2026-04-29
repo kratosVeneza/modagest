@@ -1,11 +1,13 @@
 name: Keep Supabase alive
-   on:
-     schedule:
-       - cron: '0 12 */3 * *'  # a cada 3 dias
 
-   jobs:
-     ping:
-       runs-on: ubuntu-latest
-       steps:
-         - name: Ping Supabase
-           run: curl https://nnzyxcoijtesmaevzcha.supabase.co
+on:
+  schedule:
+    - cron: "0 12 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: curl https://nnzyxcoijtesmaevzcha.supabase.co
